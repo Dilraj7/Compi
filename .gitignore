@@ -24,3 +24,6 @@ coverage/
 # Vidéos rendues (trop lourdes : à joindre au README ou à une Release)
 *.mp4
 *.webm
+
+# Notes et sauvegardes personnelles (jamais publiées)
+perso/
