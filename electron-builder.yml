@@ -1,0 +1,33 @@
+appId: com.compi.app
+productName: Compi
+copyright: Compi — MIT
+directories:
+  buildResources: resources
+  output: dist
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: resources
+    to: resources
+    filter:
+      - '*.png'
+# Le moteur de l'agent (claude.exe) doit rester exécutable : hors de l'archive asar.
+asarUnpack:
+  - node_modules/@anthropic-ai/claude-agent-sdk-*/**
+npmRebuild: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.png
+  artifactName: Compi-Setup-${version}.${ext}
+nsis:
+  oneClick: true
+  perMachine: false
+  runAfterFinish: true
+  createDesktopShortcut: false
+  createStartMenuShortcut: true
+  shortcutName: Compi
+  uninstallDisplayName: Compi
+  deleteAppDataOnUninstall: false

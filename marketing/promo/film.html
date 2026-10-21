@@ -1,0 +1,2112 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Compi — film promo</title>
+    <!--
+      Film promotionnel d’environ 50 s, rendu image par image par render.cjs.
+      Tout est fonction du temps : window.__seek(t) affiche l'image à l'instant t (secondes).
+      Données entièrement fictives. Ouvrir avec ?t=4.5 pour voir une image précise.
+    -->
+    <style>
+      @font-face {
+        font-family: 'Onest';
+        src: url('../../node_modules/@fontsource-variable/onest/files/onest-latin-wght-normal.woff2') format('woff2-variations');
+        font-weight: 100 900;
+      }
+      @font-face {
+        font-family: 'Doto';
+        src: url('../../node_modules/@fontsource-variable/doto/files/doto-latin-wght-normal.woff2') format('woff2-variations');
+        font-weight: 100 900;
+      }
+      @font-face {
+        font-family: 'JetBrains Mono';
+        src: url('../../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2') format('woff2-variations');
+        font-weight: 100 800;
+      }
+
+      :root {
+        --cyan: #38e1ff;
+        --violet: #a78bfa;
+        --amber: #fbbf24;
+        --green: #4ade80;
+        --fog1: #ededf3;
+        --fog3: #b9b9c6;
+        --fog5: #868695;
+        --fog7: #575766;
+        --ink95: #050507;
+        --ink9: #0b0b0f;
+        --ink85: #101016;
+        --ink8: #15151d;
+        --ink7: #1d1d27;
+        --ink6: #2a2a37;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #000;
+      }
+      body {
+        font-family: 'Onest', system-ui, sans-serif;
+        color: var(--fog1);
+        -webkit-font-smoothing: antialiased;
+        font-feature-settings: 'ss01', 'cv11';
+      }
+      svg.i {
+        width: 1em;
+        height: 1em;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: none;
+      }
+      #stage {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        background: #000;
+      }
+      #world {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1920px;
+        height: 1080px;
+        transform-origin: 0 0;
+      }
+      .wall {
+        position: absolute;
+        inset: -40px;
+        background:
+          radial-gradient(1400px 800px at 25% 115%, #2b3a67 0%, transparent 60%), radial-gradient(1000px 640px at 88% -6%, #4b2b5e 0%, transparent 58%),
+          linear-gradient(160deg, #1b2336, #0f1320);
+      }
+      .blob {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(80px);
+        opacity: 0.55;
+      }
+      .led-text {
+        font-family: 'Doto', monospace;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      /* ── Îlot ─────────────────────────────────────────────── */
+      #island {
+        position: absolute;
+        top: 0;
+        left: 960px;
+        transform: translateX(-50%);
+      }
+      #islandBody {
+        position: relative;
+        overflow: hidden;
+        background: #000;
+      }
+      .shoulder {
+        position: absolute;
+        top: 0;
+        width: 14px;
+        height: 14px;
+      }
+      .shoulder.l {
+        left: -14px;
+        background: radial-gradient(circle at 0 100%, transparent 13.5px, #000 14px);
+      }
+      .shoulder.r {
+        right: -14px;
+        background: radial-gradient(circle at 100% 100%, transparent 13.5px, #000 14px);
+      }
+      .layer {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+      }
+      .center {
+        display: grid;
+        place-items: center;
+      }
+      .dot-grid {
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(circle at center, rgb(255 255 255 / 0.045) 1px, transparent 1.4px);
+        background-size: 14px 14px;
+      }
+
+      /* Panneau : en-tête commun */
+      .phead {
+        position: relative;
+        height: 46px;
+        display: flex;
+        align-items: center;
+        padding: 0 16px 0 20px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 210px;
+      }
+      .brand .led-text {
+        font-size: 13px;
+        color: var(--fog1);
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11.5px;
+        color: var(--fog5);
+      }
+      .sdot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 8px var(--cyan);
+      }
+      .peyes {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+      }
+      .nav {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 15px;
+        color: var(--fog5);
+      }
+      .nav span {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border-radius: 9px;
+      }
+      .nav span.on {
+        color: var(--fog1);
+        background: rgb(255 255 255 / 0.08);
+      }
+      .nav i.sep {
+        width: 1px;
+        height: 16px;
+        background: rgb(255 255 255 / 0.1);
+        margin: 0 4px;
+      }
+
+      /* Discussion */
+      .chat {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 46px;
+        bottom: 74px;
+        padding: 18px 28px;
+      }
+      .msg.user {
+        margin-left: auto;
+        width: max-content;
+        max-width: 70%;
+        background: var(--ink7);
+        border: 1px solid rgb(255 255 255 / 0.06);
+        border-radius: 18px 18px 6px 18px;
+        padding: 9px 15px;
+        font-size: 15px;
+      }
+      .tool {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-top: 16px;
+        font-size: 12.5px;
+        color: var(--fog5);
+      }
+      .ledots {
+        display: inline-flex;
+        gap: 3px;
+      }
+      .ledots i {
+        width: 4px;
+        height: 4px;
+        border-radius: 1px;
+        background: var(--violet);
+        box-shadow: 0 0 6px var(--violet);
+      }
+      .tool .ok {
+        color: var(--green);
+        font-size: 14px;
+      }
+      .prose {
+        font-size: 15px;
+        line-height: 1.62;
+        color: var(--fog1);
+        margin-top: 10px;
+      }
+      .prose strong {
+        color: #fff;
+        font-weight: 640;
+      }
+      .prose ul {
+        list-style: none;
+        padding-left: 18px;
+        margin: 4px 0;
+      }
+      .prose li {
+        position: relative;
+      }
+      .prose li::before {
+        content: '';
+        position: absolute;
+        left: -14px;
+        top: 0.68em;
+        width: 5px;
+        height: 5px;
+        border-radius: 1px;
+        background: var(--cyan);
+        box-shadow: 0 0 6px var(--cyan);
+        opacity: var(--bo, 0);
+      }
+      .prose .tm {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13.5px;
+        color: var(--cyan);
+        margin-right: 6px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 12px;
+        padding: 5px 11px 5px 9px;
+        border-radius: 99px;
+        border: 1px solid rgb(74 222 128 / 0.25);
+        background: rgb(74 222 128 / 0.07);
+        font-size: 12px;
+        color: #bff5d2;
+      }
+      .chip svg {
+        color: var(--green);
+        font-size: 13px;
+      }
+      .composer {
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        height: 50px;
+        border-radius: 18px;
+        background: var(--ink85);
+        border: 1px solid rgb(255 255 255 / 0.08);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 9px 0 16px;
+        font-size: 15px;
+        color: var(--fog5);
+      }
+      .brainpill {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--fog3);
+        padding: 4px 9px;
+        border-radius: 99px;
+        background: rgb(255 255 255 / 0.05);
+      }
+      .brainpill svg:first-child {
+        color: var(--green);
+      }
+      .inputText {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .inputText .typed {
+        color: var(--fog1);
+      }
+      .caret {
+        display: inline-block;
+        width: 2px;
+        height: 18px;
+        vertical-align: -3px;
+        margin-left: 1px;
+        background: var(--cyan);
+        box-shadow: 0 0 8px var(--cyan);
+      }
+      .send {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: rgb(255 255 255 / 0.06);
+        color: var(--fog5);
+        font-size: 17px;
+      }
+
+      /* Actions rapides */
+      .qsrc {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 22px;
+        font-size: 12px;
+        color: var(--fog5);
+      }
+      .qsrc b {
+        color: var(--fog3);
+        font-weight: 500;
+      }
+      .qbox {
+        position: relative;
+        margin: 10px 18px 0;
+        height: 74px;
+        border-radius: 14px;
+        background: var(--ink85);
+        border: 1px solid rgb(255 255 255 / 0.06);
+        padding: 10px 14px;
+        font-size: 13.5px;
+        line-height: 1.5;
+        overflow: hidden;
+      }
+      .qbox .txt {
+        position: absolute;
+        left: 14px;
+        right: 14px;
+        top: 10px;
+      }
+      .qgrid {
+        position: absolute;
+        left: 18px;
+        right: 18px;
+        top: 168px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .qbtn {
+        height: 40px;
+        border-radius: 12px;
+        background: var(--ink85);
+        border: 1px solid rgb(255 255 255 / 0.06);
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 12px;
+        font-size: 13.5px;
+        color: var(--fog1);
+      }
+      .qbtn svg {
+        color: var(--fog5);
+        font-size: 15px;
+      }
+      .qbtn .n {
+        margin-left: auto;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: var(--fog7);
+      }
+      .qacts {
+        position: absolute;
+        left: 18px;
+        right: 18px;
+        top: 168px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .btn {
+        height: 38px;
+        padding: 0 16px;
+        border-radius: 99px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13.5px;
+        font-weight: 550;
+      }
+      .btn.primary {
+        background: var(--cyan);
+        color: var(--ink95);
+        box-shadow: 0 0 18px rgb(56 225 255 / 0.4);
+      }
+      .btn.ghost {
+        border: 1px solid rgb(255 255 255 / 0.12);
+        color: var(--fog3);
+      }
+
+      /* Carte d'autorisation */
+      .ap {
+        padding: 18px 22px;
+      }
+      .ap-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .ap-kick {
+        font-size: 12px;
+        color: var(--amber);
+        text-shadow: 0 0 10px rgb(251 191 36 / 0.55);
+      }
+      .ap-title {
+        font-size: 17px;
+        font-weight: 620;
+        color: #fff;
+        margin-top: 2px;
+      }
+      .ap-detail {
+        margin-top: 10px;
+        font-size: 13px;
+        color: var(--fog3);
+      }
+      .ap-actions {
+        position: absolute;
+        right: 20px;
+        bottom: 16px;
+        display: flex;
+        gap: 10px;
+      }
+      .ap-actions .primary {
+        background: var(--amber);
+        box-shadow: 0 0 18px rgb(251 191 36 / 0.4);
+      }
+      .scan {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, transparent, rgb(251 191 36 / 0.13), transparent);
+      }
+      .succ {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 64px;
+        padding: 0 22px;
+      }
+      .succ .led-text {
+        font-size: 12px;
+        color: var(--green);
+        text-shadow: 0 0 10px rgb(74 222 128 / 0.6);
+      }
+      .succ .sub {
+        font-size: 12.5px;
+        color: var(--fog3);
+        margin-top: 1px;
+      }
+      .succ .undo {
+        margin-left: auto;
+        font-size: 12.5px;
+        color: var(--fog1);
+        border-bottom: 1px solid rgb(255 255 255 / 0.3);
+      }
+
+      /* ── Bureau : fenêtre d'e-mail et icônes ───────────────── */
+      .mail {
+        position: absolute;
+        left: 600px;
+        top: 300px;
+        width: 720px;
+        height: 330px;
+        border-radius: 14px;
+        background: #12131b;
+        border: 1px solid rgb(255 255 255 / 0.08);
+        box-shadow: 0 40px 90px -30px rgb(0 0 0 / 0.8);
+        overflow: hidden;
+        opacity: 0;
+      }
+      .mbar {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        background: #0d0e14;
+        font-size: 13px;
+        color: var(--fog3);
+        gap: 10px;
+      }
+      .mbar .win {
+        margin-left: auto;
+        display: flex;
+        gap: 22px;
+        color: var(--fog5);
+        font-size: 13px;
+      }
+      .mfield {
+        display: flex;
+        gap: 10px;
+        padding: 9px 22px;
+        font-size: 13.5px;
+        border-bottom: 1px solid rgb(255 255 255 / 0.05);
+        color: var(--fog5);
+      }
+      .mfield b {
+        color: var(--fog1);
+        font-weight: 500;
+      }
+      .mbody {
+        position: relative;
+        padding: 18px 22px;
+        font-size: 16px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+      .mbody .ch.sel {
+        background: rgb(56 225 255 / 0.3);
+      }
+      .mbody .layerTxt {
+        position: absolute;
+        left: 22px;
+        right: 22px;
+        top: 18px;
+      }
+      .file {
+        position: absolute;
+        width: 96px;
+        text-align: center;
+        opacity: 0;
+      }
+      .file .doc {
+        position: relative;
+        width: 50px;
+        height: 62px;
+        margin: 0 auto;
+        border-radius: 6px 14px 6px 6px;
+        background: linear-gradient(180deg, #f3f4f8, #d9dbe5);
+        box-shadow: 0 6px 14px -6px rgb(0 0 0 / 0.6);
+      }
+      .file .doc::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 0;
+        width: 14px;
+        height: 14px;
+        border-radius: 0 14px 0 6px;
+        background: linear-gradient(225deg, transparent 50%, #b9bccb 50%);
+      }
+      .file .ext {
+        position: absolute;
+        left: 6px;
+        bottom: 8px;
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-size: 9.5px;
+        font-weight: 700;
+        color: #fff;
+        letter-spacing: 0.02em;
+      }
+      .file .nm,
+      .folder .nm {
+        margin-top: 6px;
+        font-size: 12px;
+        line-height: 1.25;
+        color: #fff;
+        text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
+      }
+      .folder {
+        position: absolute;
+        width: 110px;
+        text-align: center;
+        opacity: 0;
+      }
+      .folder .fico {
+        position: relative;
+        width: 74px;
+        height: 58px;
+        margin: 0 auto;
+      }
+      .folder .badge {
+        position: absolute;
+        right: -6px;
+        top: -6px;
+        min-width: 22px;
+        height: 22px;
+        border-radius: 11px;
+        padding: 0 6px;
+        background: var(--green);
+        color: #052e14;
+        font-size: 12px;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+        box-shadow: 0 0 12px rgb(74 222 128 / 0.6);
+      }
+
+      /* ── Aperçus de l'îlot (voix, musique, minuteur, réunion, Claude Code) ── */
+      .peek {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 100%;
+        padding: 0 22px;
+      }
+      .ptxt {
+        flex: 1;
+        min-width: 0;
+      }
+      .ptitle {
+        font-size: 12px;
+        line-height: 1.25;
+      }
+      .ptitle.green {
+        color: var(--green);
+        text-shadow: 0 0 10px rgb(74 222 128 / 0.6);
+      }
+      .psub {
+        margin-top: 3px;
+        font-size: 12.5px;
+        color: var(--fog3);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .psub b {
+        font-weight: 500;
+        color: var(--fog1);
+      }
+      .mono {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+      }
+      .stack {
+        position: relative;
+        height: 36px;
+      }
+      .stack .sl {
+        position: absolute;
+        inset: 0;
+      }
+      .rslot {
+        position: relative;
+        width: 30px;
+        height: 22px;
+        display: grid;
+        place-items: center;
+      }
+      .rslot > * {
+        position: absolute;
+      }
+      .picon {
+        font-size: 17px;
+        display: grid;
+      }
+      .eq {
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 19px;
+      }
+      .eq i {
+        width: 3px;
+        height: 3px;
+        background: repeating-linear-gradient(to top, var(--eqc) 0 3px, transparent 3px 4px);
+        filter: drop-shadow(0 0 3px var(--eqc));
+      }
+      .wchip {
+        position: absolute;
+        top: 82px;
+        left: 960px;
+        margin: 0;
+        white-space: nowrap;
+        opacity: 0;
+      }
+      .art {
+        position: relative;
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+        background: linear-gradient(135deg, #ff9a5b, #d6387f 55%, #5b2a86);
+        flex: none;
+      }
+      .art::after {
+        content: '';
+        position: absolute;
+        inset: 28%;
+        border-radius: 50%;
+        background: rgb(255 255 255 / 0.32);
+      }
+      .art.big {
+        width: 46px;
+        height: 46px;
+        border-radius: 11px;
+        box-shadow: 0 6px 18px -6px rgb(214 56 127 / 0.6);
+      }
+      .cslot {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+      }
+      .mtitle {
+        font-size: 14px;
+        font-weight: 600;
+        color: #fff;
+      }
+      .bar {
+        margin-top: 7px;
+        height: 3px;
+        border-radius: 2px;
+        background: rgb(255 255 255 / 0.1);
+        overflow: hidden;
+      }
+      .bar i {
+        display: block;
+        height: 100%;
+        background: var(--green);
+        box-shadow: 0 0 6px var(--green);
+      }
+      .mctl {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 15px;
+        color: var(--fog3);
+      }
+      .mctl .pp {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: rgb(255 255 255 / 0.08);
+        display: grid;
+        place-items: center;
+        color: #fff;
+      }
+      .tbig {
+        margin-top: 1px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 22px;
+        font-weight: 600;
+        color: #fff;
+        letter-spacing: 0.02em;
+      }
+      .tdots {
+        display: flex;
+        gap: 5px;
+      }
+      .tdots i {
+        width: 7px;
+        height: 7px;
+        border-radius: 2px;
+        background: rgb(255 255 255 / 0.12);
+      }
+      .tdots i.on {
+        background: #f472b6;
+        box-shadow: 0 0 8px #f472b6;
+      }
+      .btn.meet {
+        height: 34px;
+        font-size: 13px;
+        background: #34d399;
+        color: #03140c;
+        box-shadow: 0 0 16px rgb(52 211 153 / 0.45);
+      }
+      .ctimer {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        font-weight: 600;
+        color: #f472b6;
+        text-shadow: 0 0 8px rgb(244 114 182 / 0.6);
+      }
+      .code {
+        margin-top: 12px;
+        width: max-content;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13.5px;
+        color: var(--fog1);
+        background: var(--ink85);
+        border: 1px solid rgb(255 255 255 / 0.07);
+        border-radius: 10px;
+        padding: 7px 12px;
+      }
+      .ap-hint {
+        position: absolute;
+        left: 22px;
+        bottom: 27px;
+        font-size: 11.5px;
+        color: var(--fog5);
+      }
+
+      /* ── Choix du cerveau ───────────────────────────────── */
+      .bbody {
+        position: relative;
+        padding: 2px 22px 0;
+      }
+      .btitle {
+        font-size: 17px;
+        font-weight: 620;
+        color: #fff;
+        margin: 2px 0 12px;
+      }
+      .bcards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      .bcard {
+        height: 142px;
+        border-radius: 18px;
+        background: var(--ink85);
+        border: 1px solid rgb(255 255 255 / 0.07);
+        padding: 15px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        opacity: 0;
+      }
+      .bico {
+        width: 36px;
+        height: 36px;
+        border-radius: 11px;
+        display: grid;
+        place-items: center;
+        font-size: 18px;
+        margin-bottom: 8px;
+      }
+      .bcard b {
+        font-size: 15px;
+        font-weight: 620;
+        color: #fff;
+      }
+      .bcard .d {
+        font-size: 12.5px;
+        color: var(--fog3);
+      }
+      .bcard em {
+        margin-top: auto;
+        font-style: normal;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: var(--fog5);
+      }
+      .brec {
+        margin-top: 12px;
+        height: 82px;
+        border-radius: 18px;
+        border: 1px solid rgb(74 222 128 / 0.3);
+        background: rgb(74 222 128 / 0.06);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 18px;
+        opacity: 0;
+      }
+      .brec .k {
+        font-size: 11px;
+        color: var(--green);
+        text-shadow: 0 0 8px rgb(74 222 128 / 0.5);
+      }
+      .brec b {
+        display: block;
+        margin-top: 2px;
+        font-size: 16px;
+        font-weight: 620;
+        color: #fff;
+      }
+      .tags {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .tags span {
+        font-size: 11px;
+        color: var(--fog3);
+        padding: 2px 8px;
+        border-radius: 99px;
+        background: rgb(255 255 255 / 0.06);
+      }
+      .btn.green {
+        margin-left: auto;
+        background: var(--green);
+        color: #03140a;
+        box-shadow: 0 0 18px rgb(74 222 128 / 0.4);
+      }
+      .btest {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        margin-top: 12px;
+        font-size: 12.5px;
+        color: var(--fog3);
+      }
+      .btest > span {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        opacity: 0;
+      }
+      .btest svg {
+        color: var(--green);
+      }
+      .btest .ready {
+        margin-left: auto;
+        color: #bff5d2;
+      }
+
+      /* ── Garde-fou de confidentialité ───────────────────── */
+      .iban {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13.5px;
+      }
+      .excerpt {
+        margin-top: 12px;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 14px;
+        border-radius: 12px;
+        border: 1px dashed rgb(167 139 250 / 0.35);
+        background: rgb(167 139 250 / 0.06);
+        font-size: 13px;
+        color: var(--fog3);
+        white-space: nowrap;
+        opacity: 0;
+      }
+      .excerpt > * {
+        flex: none;
+      }
+      .exk {
+        font-size: 10.5px;
+        color: var(--violet);
+        text-shadow: 0 0 8px rgb(167 139 250 / 0.5);
+      }
+      .ibanBox {
+        display: inline-grid;
+        align-items: center;
+      }
+      .ibanBox > * {
+        grid-area: 1 / 1;
+      }
+      .iban {
+        color: var(--fog1);
+      }
+      .ibanMask {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        width: max-content;
+        padding: 3px 10px 3px 8px;
+        border-radius: 7px;
+        background: rgb(167 139 250 / 0.16);
+        border: 1px solid rgb(167 139 250 / 0.4);
+        color: #ddd6fe;
+        font-size: 12.5px;
+        opacity: 0;
+      }
+      .ibanMask svg {
+        color: var(--violet);
+      }
+      .chip.violet {
+        border-color: rgb(167 139 250 / 0.3);
+        background: rgb(167 139 250 / 0.08);
+        color: #ddd6fe;
+        opacity: 0;
+      }
+      .chip.violet svg {
+        color: var(--violet);
+      }
+      .brainpill.violet svg:first-child {
+        color: var(--violet);
+      }
+
+      /* ── Connecteurs ────────────────────────────────────── */
+      .cbody {
+        padding: 2px 18px 0;
+      }
+      .csearch {
+        height: 40px;
+        border-radius: 12px;
+        background: var(--ink85);
+        border: 1px solid rgb(255 255 255 / 0.07);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 14px;
+        font-size: 13.5px;
+        color: var(--fog5);
+      }
+      .cgrid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .ctile {
+        height: 74px;
+        border-radius: 16px;
+        background: var(--ink85);
+        border: 1px solid rgb(255 255 255 / 0.07);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 14px;
+        opacity: 0;
+      }
+      .cbadge {
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
+        display: grid;
+        place-items: center;
+        font-size: 17px;
+        font-weight: 700;
+        color: #fff;
+        flex: none;
+      }
+      .ctile b {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+        color: #fff;
+      }
+      .ctile .st {
+        margin-top: 3px;
+        font-size: 11.5px;
+        color: var(--fog5);
+        white-space: nowrap;
+      }
+      .ctile .st > span {
+        display: none;
+        align-items: center;
+        gap: 5px;
+      }
+      .ctile .st .s1 {
+        color: var(--cyan);
+      }
+      .ctile .st .s2 {
+        color: var(--green);
+      }
+
+      /* ── Agenda (scène « agenda ») ─────────────────────────── */
+      .agenda {
+        position: absolute;
+        left: 600px;
+        top: 300px;
+        width: 720px;
+        height: 330px;
+        border-radius: 14px;
+        background: #0e0f15;
+        border: 1px solid rgb(255 255 255 / 0.08);
+        box-shadow: 0 40px 90px -30px rgb(0 0 0 / 0.8);
+        overflow: hidden;
+        opacity: 0;
+      }
+      .agbody {
+        position: relative;
+        display: flex;
+        height: 292px;
+      }
+      .aghours {
+        position: relative;
+        width: 74px;
+        flex: none;
+      }
+      .aghours span {
+        position: absolute;
+        right: 14px;
+        font-size: 12px;
+        color: var(--fog5);
+        transform: translateY(-50%);
+      }
+      .aghours span:nth-child(1) {
+        top: 14px;
+      }
+      .aghours span:nth-child(2) {
+        top: 72px;
+      }
+      .aghours span:nth-child(3) {
+        top: 130px;
+      }
+      .aghours span:nth-child(4) {
+        top: 188px;
+      }
+      .aghours span:nth-child(5) {
+        top: 246px;
+      }
+      .agcol {
+        position: relative;
+        flex: 1;
+        margin-right: 22px;
+        border-left: 1px solid rgb(255 255 255 / 0.06);
+      }
+      .agcol > i {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: rgb(255 255 255 / 0.06);
+      }
+      .agev {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        border-radius: 10px;
+        padding: 7px 12px 7px 16px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        overflow: hidden;
+      }
+      .agev::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+      }
+      .agev b {
+        font-size: 14px;
+        font-weight: 620;
+        color: #fff;
+      }
+      .agev span {
+        font-size: 12px;
+        color: var(--fog3);
+      }
+      .agev.blue {
+        background: rgb(96 165 250 / 0.16);
+      }
+      .agev.blue::before {
+        background: #60a5fa;
+      }
+      .agev.pink {
+        background: rgb(244 114 182 / 0.18);
+      }
+      .agev.pink::before {
+        background: #f472b6;
+      }
+      .agghost {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        border-radius: 10px;
+        border: 1.5px dashed rgb(244 114 182 / 0.45);
+        opacity: 0;
+      }
+      .ag-detail div + div {
+        margin-top: 3px;
+      }
+      .ag-detail b {
+        color: #fff;
+        font-weight: 600;
+      }
+
+      /* ── Éditeur de code (scène Claude Code) ─────────────── */
+      .editor {
+        position: absolute;
+        left: 600px;
+        top: 300px;
+        width: 720px;
+        height: 330px;
+        border-radius: 14px;
+        background: #0e0f15;
+        border: 1px solid rgb(255 255 255 / 0.08);
+        box-shadow: 0 40px 90px -30px rgb(0 0 0 / 0.8);
+        overflow: hidden;
+        opacity: 0;
+      }
+      .ebar {
+        height: 38px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 14px;
+        background: #0a0b10;
+        font-size: 12.5px;
+        color: var(--fog5);
+      }
+      .ebar .tab {
+        padding: 4px 10px;
+        border-radius: 8px;
+        background: rgb(255 255 255 / 0.06);
+        color: var(--fog1);
+      }
+      .ecode {
+        padding: 12px 0;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13.5px;
+        line-height: 25px;
+        color: #e6e6ef;
+      }
+      .eline {
+        position: relative;
+        display: flex;
+        white-space: pre;
+      }
+      .eline .ln {
+        width: 50px;
+        padding-right: 18px;
+        text-align: right;
+        color: #3d3f52;
+        flex: none;
+      }
+      .eline .mk {
+        position: absolute;
+        left: 8px;
+        color: var(--green);
+      }
+      .kw {
+        color: #c792ea;
+      }
+      .fn {
+        color: #82aaff;
+      }
+      .str {
+        color: #c3e88d;
+      }
+      .khint {
+        margin-left: 6px;
+        font-size: 21px;
+        color: var(--fog5);
+      }
+
+      /* ── Superpositions à l'écran ──────────────────────────── */
+      #overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .headline {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 470px;
+        text-align: center;
+      }
+      .headline .l1 {
+        font-size: 108px;
+        font-weight: 680;
+        letter-spacing: -0.035em;
+        color: #fff;
+        line-height: 1.05;
+      }
+      .headline .l2 {
+        margin-top: 22px;
+        font-size: 46px;
+        font-weight: 450;
+        color: var(--fog3);
+        letter-spacing: -0.01em;
+      }
+      .glow {
+        color: var(--cyan);
+        text-shadow: 0 0 24px rgb(56 225 255 / 0.55);
+      }
+      .w {
+        display: inline-block;
+        white-space: pre;
+      }
+      .cap {
+        position: absolute;
+        left: 76px;
+        top: 540px;
+        width: 320px;
+        transform: translateY(-50%);
+        opacity: 0;
+      }
+      .kicker {
+        font-family: 'Doto', monospace;
+        font-weight: 850;
+        font-size: 23px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--cyan);
+        text-shadow: 0 0 14px rgb(56 225 255 / 0.6);
+      }
+      .cap h2 {
+        margin-top: 18px;
+        font-size: 52px;
+        line-height: 1.04;
+        font-weight: 660;
+        letter-spacing: -0.03em;
+        color: #fff;
+        text-shadow: 0 2px 30px rgb(0 0 0 / 0.5);
+      }
+      .cap p {
+        margin-top: 20px;
+        font-size: 24px;
+        line-height: 1.38;
+        color: var(--fog3);
+      }
+      .keys {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 900px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 16px;
+        opacity: 0;
+      }
+      .key {
+        min-width: 76px;
+        height: 70px;
+        padding: 0 22px;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(180deg, #23232f, #121219);
+        border: 1px solid rgb(255 255 255 / 0.12);
+        box-shadow:
+          0 7px 0 #050507,
+          0 18px 30px -10px rgb(0 0 0 / 0.8);
+        font-size: 27px;
+        font-weight: 560;
+        color: var(--fog1);
+      }
+      .plus {
+        font-size: 30px;
+        color: var(--fog5);
+      }
+      #cursor {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 40px;
+        height: 40px;
+        opacity: 0;
+      }
+      #features {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+      }
+      #features .title {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 190px;
+        text-align: center;
+        font-size: 72px;
+        font-weight: 680;
+        letter-spacing: -0.035em;
+        color: #fff;
+      }
+      .grid {
+        position: absolute;
+        left: 50%;
+        top: 330px;
+        width: 1680px;
+        transform: translateX(-50%);
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+      }
+      .tile {
+        height: 126px;
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgb(21 21 29 / 0.92), rgb(11 11 15 / 0.92));
+        border: 1px solid rgb(255 255 255 / 0.08);
+        box-shadow: 0 30px 60px -30px rgb(0 0 0 / 0.9);
+        padding: 20px 22px;
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        opacity: 0;
+      }
+      .tile .ico {
+        width: 58px;
+        height: 58px;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        font-size: 28px;
+        flex: none;
+      }
+      .tile h3 {
+        font-size: 24px;
+        font-weight: 640;
+        letter-spacing: -0.02em;
+        color: #fff;
+        line-height: 1.1;
+      }
+      .tile p {
+        margin-top: 6px;
+        font-size: 16.5px;
+        color: var(--fog5);
+      }
+      #end {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        background: radial-gradient(900px 600px at 50% 36%, rgb(56 225 255 / 0.14), transparent 70%), #050507;
+      }
+      #end .dot-grid {
+        background-size: 22px 22px;
+        background-image: radial-gradient(circle at center, rgb(255 255 255 / 0.05) 1.4px, transparent 2px);
+      }
+      #robot {
+        position: absolute;
+        left: 50%;
+        top: 150px;
+        width: 300px;
+        margin-left: -150px;
+      }
+      .word {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 445px;
+        text-align: center;
+        font-family: 'Doto', monospace;
+        font-weight: 900;
+        font-size: 150px;
+        letter-spacing: 0.16em;
+        padding-left: 0.16em;
+        color: var(--cyan);
+      }
+      .word span {
+        display: inline-block;
+        text-shadow:
+          0 0 30px rgb(56 225 255 / 0.65),
+          0 0 80px rgb(56 225 255 / 0.25);
+      }
+      .tagline {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 650px;
+        text-align: center;
+        font-size: 40px;
+        font-weight: 480;
+        color: var(--fog1);
+        letter-spacing: -0.01em;
+      }
+      .pills {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 735px;
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+      }
+      .pill {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 20px;
+        border-radius: 99px;
+        border: 1px solid rgb(255 255 255 / 0.1);
+        background: rgb(255 255 255 / 0.04);
+        font-size: 23px;
+        color: var(--fog3);
+        opacity: 0;
+      }
+      .pill i {
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+      }
+      .credit {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 930px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 14px;
+        font-size: 22px;
+        color: var(--fog5);
+        opacity: 0;
+      }
+      .credit .gh {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 25px;
+        color: var(--fog1);
+        padding: 9px 18px;
+        border-radius: 14px;
+        background: rgb(255 255 255 / 0.05);
+        border: 1px solid rgb(255 255 255 / 0.09);
+      }
+      #vignette {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(1400px 900px at 50% 45%, transparent 55%, rgb(0 0 0 / 0.45));
+      }
+      #fade {
+        position: absolute;
+        inset: 0;
+        background: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="world">
+        <div class="wall"></div>
+        <div class="blob" id="blob1" style="width: 700px; height: 500px; background: #3b2a7a"></div>
+        <div class="blob" id="blob2" style="width: 600px; height: 420px; background: #14506b"></div>
+
+        <!-- Icônes du Bureau (scène « tu gardes la main ») -->
+        <div id="desk"></div>
+
+        <!-- Fenêtre d'e-mail (scène « actions rapides ») -->
+        <div class="mail" id="mail">
+          <div class="mbar">
+            <span data-i="mail"></span>Re: Point projet<span class="win"><span>—</span><span>▢</span><span>✕</span></span>
+          </div>
+          <div class="mfield">À <b>Claire Martin</b></div>
+          <div class="mfield">Objet <b>Re: Point projet</b></div>
+          <div class="mbody">
+            <div class="layerTxt" id="mOld"></div>
+            <div class="layerTxt" id="mNew"></div>
+          </div>
+        </div>
+
+        <div class="chip wchip" id="vChip"><span data-i="lock"></span>Transcrit sur ton PC · ta voix n’est jamais envoyée</div>
+
+        <div class="editor" id="editor">
+          <div class="ebar">
+            <span data-i="square-terminal"></span><span class="tab">main.ts</span><span>server.ts</span><span style="margin-left: auto">mon-app</span>
+          </div>
+          <div class="ecode" id="ecode"></div>
+        </div>
+
+        <!-- Agenda (scène « agenda ») : données fictives, le déjeuner du matin -->
+        <div class="agenda" id="agenda">
+          <div class="ebar">
+            <span data-i="calendar"></span><span class="tab">mardi 20 octobre</span><span>Semaine</span><span style="margin-left: auto">Agenda</span>
+          </div>
+          <div class="agbody">
+            <div class="aghours"><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span></div>
+            <div class="agcol">
+              <i style="top: 14px"></i><i style="top: 72px"></i><i style="top: 130px"></i><i style="top: 188px"></i><i style="top: 246px"></i>
+              <div class="agev blue" style="top: 14px; height: 43px"><b>Point d’équipe</b><span>10:00 – 10:45 · Meet</span></div>
+              <div class="agghost" id="agGhost" style="top: 159px; height: 58px"></div>
+              <div class="agev pink" id="agEv" style="top: 159px; height: 58px"><b>Déjeuner avec Léa</b><span id="agEvTime">12:30 – 13:30</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="island">
+          <div id="islandBody">
+            <div class="layer center" id="lHidden" style="width: 140px; height: 6px">
+              <span style="display: block; width: 40px; height: 2px; border-radius: 2px; background: var(--cyan); box-shadow: 0 0 8px var(--cyan)"></span>
+            </div>
+            <div class="layer center" id="lCompact" style="width: 200px; height: 36px">
+              <div id="eyesCompact"></div>
+              <div class="cslot" id="cLeft" style="left: 12px"><span class="art"></span></div>
+              <div class="cslot" id="cRight" style="right: 14px">
+                <div class="eq" id="cEq" style="--eqc: var(--green)"><i></i><i></i><i></i><i></i></div>
+                <span class="ctimer" id="cTimer" style="position: absolute; right: 0">24:58</span>
+              </div>
+            </div>
+
+            <div class="layer" id="lPanel" style="width: 680px; height: 476px">
+              <div class="dot-grid"></div>
+              <div class="phead">
+                <div class="brand">
+                  <span class="led-text">Compi</span><span class="status"><i class="sdot" id="pDot"></i><span id="pStatus">prêt</span></span>
+                </div>
+                <div class="peyes" id="eyesPanel"></div>
+                <div class="nav">
+                  <span class="on" data-i="message-circle"></span><span data-i="sun"></span><span data-i="activity"></span><span data-i="history"></span
+                  ><span data-i="brain"></span><span data-i="plug"></span><span data-i="settings-2"></span><i class="sep"></i><span data-i="x"></span>
+                </div>
+              </div>
+              <div class="chat">
+                <div class="msg user" id="uMsg">Qu’est-ce que j’ai aujourd’hui ?</div>
+                <div class="tool" id="tool">
+                  <span class="ledots" id="ledots"><i></i><i></i><i></i></span><span class="ok" id="toolOk" data-i="check"></span
+                  ><span id="toolText">Lecture de ton agenda…</span>
+                </div>
+                <div class="prose" id="answer"></div>
+                <div class="chip" id="privacy"><span data-i="lock"></span>100 % sur ton PC · rien n’est parti en ligne</div>
+              </div>
+              <div class="composer">
+                <span data-i="paperclip"></span>
+                <span class="brainpill"><span data-i="cpu"></span>Gemma 4 · sur ce PC<span data-i="chevron-down"></span></span>
+                <span class="inputText" id="inputText"></span>
+                <span data-i="mic"></span>
+                <span class="send" id="send"><span data-i="arrow-up"></span></span>
+              </div>
+            </div>
+
+            <div class="layer" id="lQuick" style="width: 680px; height: 268px">
+              <div class="phead">
+                <div class="brand">
+                  <span class="led-text">Compi</span><span class="status"><i class="sdot"></i><span>actions rapides</span></span>
+                </div>
+                <div class="peyes" id="eyesQuick"></div>
+                <div class="nav"><span data-i="x"></span></div>
+              </div>
+              <div class="qsrc">
+                Dans : <b>Re: Point projet</b><span style="color: var(--fog7)">·</span><span data-i="cpu" style="color: var(--green)"></span
+                ><b>Gemma 4 · sur ton PC</b>
+              </div>
+              <div class="qbox">
+                <div class="txt" id="qOld" style="color: var(--fog3)">
+                  bonjour claire, merci pour ton message. je te confirme notre rdv de jeudi a 14h. bonne journée
+                </div>
+                <div class="txt" id="qNew" style="color: #fff">
+                  Bonjour Claire, merci pour ton message. Je te confirme notre rendez-vous de jeudi à 14 h. Bonne journée,
+                </div>
+              </div>
+              <div class="qgrid" id="qGrid">
+                <div class="qbtn" id="qCorr"><span data-i="spell-check"></span>Corriger<span class="n">1</span></div>
+                <div class="qbtn"><span data-i="wand-sparkles"></span>Reformuler<span class="n">2</span></div>
+                <div class="qbtn"><span data-i="languages"></span>Traduire<span class="n">3</span></div>
+                <div class="qbtn"><span data-i="list-collapse"></span>Résumer<span class="n">4</span></div>
+                <div class="qbtn"><span data-i="lightbulb"></span>Expliquer<span class="n">5</span></div>
+                <div class="qbtn"><span data-i="reply"></span>Répondre<span class="n">6</span></div>
+              </div>
+              <div class="qacts" id="qActs">
+                <span class="btn primary" id="qReplace"><span data-i="arrow-right-left"></span>Remplacer</span>
+                <span class="btn ghost"><span data-i="copy"></span>Copier</span>
+                <span style="margin-left: auto; font-size: 12.5px; color: var(--green); display: flex; gap: 6px; align-items: center"
+                  ><span data-i="check"></span>Corrigé : 6 fautes</span
+                >
+              </div>
+            </div>
+
+            <div class="layer" id="lApproval" style="width: 540px; height: 172px">
+              <div class="scan" id="scan"></div>
+              <div class="ap">
+                <div class="ap-head">
+                  <div id="eyesAp"></div>
+                  <div>
+                    <div class="led-text ap-kick">Validation requise</div>
+                    <div class="ap-title">Compi veut ranger ton Bureau</div>
+                  </div>
+                </div>
+                <div class="ap-detail">Déplacer 14 éléments dans 4 dossiers · rien n’est supprimé</div>
+              </div>
+              <div class="ap-actions">
+                <span class="btn ghost">Refuser</span><span class="btn primary" id="apOk"><span data-i="check"></span>Autoriser</span>
+              </div>
+            </div>
+
+            <div class="layer" id="lSuccess" style="width: 420px; height: 64px">
+              <div class="succ">
+                <div id="eyesSucc"></div>
+                <div>
+                  <div class="led-text">Bureau rangé</div>
+                  <div class="sub">14 éléments · 4 dossiers</div>
+                </div>
+                <span class="undo">Annuler</span>
+              </div>
+            </div>
+
+            <div class="layer" id="lVoice" style="width: 460px; height: 64px">
+              <div class="peek">
+                <div id="eyesVoice"></div>
+                <div class="ptxt stack">
+                  <div class="sl" id="vA">
+                    <div class="led-text ptitle" style="color: var(--cyan); text-shadow: 0 0 10px rgb(56 225 255 / 0.6)">Je t’écoute</div>
+                    <div class="psub" id="vWords"></div>
+                  </div>
+                  <div class="sl" id="vB">
+                    <div class="led-text ptitle" style="color: var(--violet); text-shadow: 0 0 10px rgb(167 139 250 / 0.6)">Je réfléchis</div>
+                    <div class="psub">Rappelle-moi d’appeler Paul demain à 9 h</div>
+                  </div>
+                  <div class="sl" id="vC">
+                    <div class="led-text ptitle" style="color: #60a5fa; text-shadow: 0 0 10px rgb(96 165 250 / 0.6)">Rappel créé</div>
+                    <div class="psub">Appeler Paul · <b>demain à 09:00</b></div>
+                  </div>
+                </div>
+                <div class="rslot">
+                  <div class="eq" id="vEq" style="--eqc: var(--cyan)"><i></i><i></i><i></i><i></i><i></i></div>
+                  <span class="picon" id="vIcon" data-i="bell-ring" style="color: #60a5fa"></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="layer" id="lAgAsk" style="width: 540px; height: 64px">
+              <div class="peek">
+                <div id="eyesAgAsk"></div>
+                <div class="ptxt stack">
+                  <div class="sl" id="agA">
+                    <div class="led-text ptitle" style="color: var(--cyan); text-shadow: 0 0 10px rgb(56 225 255 / 0.6)">Toi</div>
+                    <div class="psub" id="agWords"></div>
+                  </div>
+                  <div class="sl" id="agB">
+                    <div class="led-text ptitle" style="color: var(--violet); text-shadow: 0 0 10px rgb(167 139 250 / 0.6)">Je regarde</div>
+                    <div class="psub">
+                      <span class="ledots" id="agDots" style="margin-right: 8px"><i></i><i></i><i></i></span>Coup d’œil à ton agenda
+                    </div>
+                  </div>
+                </div>
+                <span class="picon" data-i="calendar" style="color: var(--cyan)"></span>
+              </div>
+            </div>
+
+            <div class="layer" id="lAgCard" style="width: 600px; height: 214px">
+              <div class="scan" id="scan3"></div>
+              <div class="ap">
+                <div class="ap-head">
+                  <div id="eyesAgCard"></div>
+                  <div>
+                    <div class="led-text ap-kick">Validation requise</div>
+                    <div class="ap-title">Compi veut déplacer « Déjeuner avec Léa »</div>
+                  </div>
+                </div>
+                <div class="ap-detail ag-detail">
+                  <div>Avant : mardi 20 octobre à 12:30 → 13:30</div>
+                  <div>Après : <b>mardi 20 octobre à 13:30 → 14:30</b></div>
+                  <div>Le même événement, sans doublon. Personne ne sera prévenu.</div>
+                </div>
+              </div>
+              <div class="ap-actions">
+                <span class="btn ghost">Refuser</span><span class="btn primary" id="agOkBtn"><span data-i="check"></span>Autoriser</span>
+              </div>
+            </div>
+
+            <div class="layer" id="lAgOk" style="width: 480px; height: 64px">
+              <div class="peek">
+                <div id="eyesAgOk"></div>
+                <div class="ptxt">
+                  <div class="led-text ptitle green">Rendez-vous déplacé</div>
+                  <div class="psub">Déjeuner avec Léa · <b>13:30 → 14:30</b></div>
+                </div>
+                <span class="picon" data-i="calendar-check" style="color: var(--green)"></span>
+              </div>
+            </div>
+
+            <div class="layer" id="lBrain" style="width: 680px; height: 384px">
+              <div class="dot-grid"></div>
+              <div class="phead">
+                <div class="brand">
+                  <span class="led-text">Compi</span><span class="status"><i class="sdot"></i><span id="bStatus">réglages</span></span>
+                </div>
+                <div class="peyes" id="eyesBrain"></div>
+                <div class="nav">
+                  <span data-i="message-circle"></span><span data-i="sun"></span><span data-i="activity"></span><span data-i="history"></span
+                  ><span data-i="brain"></span><span data-i="plug"></span><span class="on" data-i="settings-2"></span><i class="sep"></i
+                  ><span data-i="x"></span>
+                </div>
+              </div>
+              <div class="bbody">
+                <div class="btitle">Choisis ton cerveau</div>
+                <div class="bcards">
+                  <div class="bcard" id="bc0">
+                    <span class="bico" style="color: #c084fc; background: rgb(192 132 252 / 0.14)" data-i="sparkles"></span><b>Claude</b
+                    ><span class="d">La meilleure qualité</span><em>Opus 5.5 · en ligne</em>
+                  </div>
+                  <div class="bcard" id="bc1">
+                    <span class="bico" style="color: var(--green); background: rgb(74 222 128 / 0.14)" data-i="cpu"></span><b>Sur ce PC</b
+                    ><span class="d">Gratuit, privé, hors ligne</span><em>Ollama · LM Studio</em>
+                  </div>
+                  <div class="bcard" id="bc2">
+                    <span class="bico" style="color: #60a5fa; background: rgb(96 165 250 / 0.14)" data-i="globe"></span><b>Autre service</b
+                    ><span class="d">OpenRouter, DeepSeek…</span><em>Avec ta clé</em>
+                  </div>
+                </div>
+                <div class="brec" id="bRec">
+                  <div>
+                    <div class="led-text k">Conseillé pour ton PC</div>
+                    <b>Gemma 4 12B</b>
+                    <div class="tags"><span>Tient dans ta carte graphique</span><span>Sait utiliser les outils</span><span>Français</span></div>
+                  </div>
+                  <span class="btn green" id="bUse">Utiliser</span>
+                </div>
+                <div class="btest" id="bTest">
+                  <span><span data-i="check"></span>Répond</span><span><span data-i="check"></span>Utilise les outils</span
+                  ><span><span data-i="check"></span>42 jetons/s</span><span class="ready"><span data-i="lock"></span>Prêt · rien ne quitte ton PC</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="layer" id="lPriv" style="width: 680px; height: 380px">
+              <div class="dot-grid"></div>
+              <div class="phead">
+                <div class="brand">
+                  <span class="led-text">Compi</span><span class="status"><i class="sdot" id="prDot"></i><span id="prStatus">prêt</span></span>
+                </div>
+                <div class="peyes" id="eyesPriv"></div>
+                <div class="nav">
+                  <span class="on" data-i="message-circle"></span><span data-i="sun"></span><span data-i="activity"></span><span data-i="history"></span
+                  ><span data-i="brain"></span><span data-i="plug"></span><span data-i="settings-2"></span><i class="sep"></i><span data-i="x"></span>
+                </div>
+              </div>
+              <div class="chat">
+                <div class="msg user" id="pMsg">Résume le bail que j’ai scanné</div>
+                <div class="tool" id="pTool">
+                  <span class="ledots" id="pDots"><i></i><i></i><i></i></span><span class="ok" id="pToolOk" data-i="check"></span
+                  ><span id="pToolText">Lecture de bail-appartement.pdf…</span>
+                </div>
+                <div class="excerpt" id="pEx">
+                  <span class="led-text exk">Part vers Claude</span><span>IBAN du bailleur :</span
+                  ><span class="ibanBox"
+                    ><span class="iban" id="pIban">FR76 1234 5678 9012 3456 7890 123</span
+                    ><span class="ibanMask" id="pMask"><span data-i="shield-check"></span>IBAN masqué …0123</span></span
+                  >
+                </div>
+                <div class="prose" id="pAnswer"></div>
+                <div class="chip violet" id="pChip"><span data-i="cloud"></span>Envoyé à Claude (Anthropic) : ta question · fichiers · 1 secret masqué</div>
+              </div>
+              <div class="composer">
+                <span data-i="paperclip"></span>
+                <span class="brainpill violet"><span data-i="sparkles"></span>Opus 5.5 · en ligne<span data-i="chevron-down"></span></span>
+                <span class="inputText"><span>Demande à Compi…</span></span>
+                <span data-i="mic"></span>
+                <span class="send"><span data-i="arrow-up"></span></span>
+              </div>
+            </div>
+
+            <div class="layer" id="lMusic" style="width: 460px; height: 72px">
+              <div class="peek">
+                <span class="art big"></span>
+                <div class="ptxt">
+                  <div class="mtitle">Lumière du matin</div>
+                  <div class="psub">Studio Fictif · <span id="mTime">1:12</span> / 3:05</div>
+                  <div class="bar"><i id="mBar"></i></div>
+                </div>
+                <div class="mctl"><span data-i="skip-back"></span><span class="pp" data-i="pause"></span><span data-i="skip-forward"></span></div>
+                <div class="eq" id="mEq" style="--eqc: var(--green)"><i></i><i></i><i></i><i></i></div>
+              </div>
+            </div>
+
+            <div class="layer" id="lTimer" style="width: 400px; height: 72px">
+              <div class="peek">
+                <svg width="44" height="44" viewBox="0 0 44 44" style="flex: none">
+                  <circle cx="22" cy="22" r="18" stroke="rgb(255 255 255 / 0.1)" stroke-width="4" fill="none" />
+                  <circle
+                    id="tRing"
+                    cx="22"
+                    cy="22"
+                    r="18"
+                    stroke="#f472b6"
+                    stroke-width="4"
+                    fill="none"
+                    stroke-linecap="round"
+                    stroke-dasharray="113.1"
+                    transform="rotate(-90 22 22)"
+                    style="filter: drop-shadow(0 0 4px #f472b6)"
+                  />
+                </svg>
+                <div class="ptxt">
+                  <div class="led-text ptitle" style="color: #f472b6; text-shadow: 0 0 10px rgb(244 114 182 / 0.6)">Pomodoro · concentration</div>
+                  <div class="tbig" id="tBig">25:00</div>
+                </div>
+                <div class="tdots"><i class="on"></i><i></i><i></i><i></i></div>
+              </div>
+            </div>
+
+            <div class="layer" id="lMeeting" style="width: 480px; height: 64px">
+              <div class="peek">
+                <div id="eyesMeet"></div>
+                <div class="ptxt">
+                  <div class="led-text ptitle" style="color: #34d399; text-shadow: 0 0 10px rgb(52 211 153 / 0.6)">Réunion dans 5 min</div>
+                  <div class="psub">Point d’équipe · 10:00 · Meet</div>
+                </div>
+                <span class="btn meet" id="meetBtn"><span data-i="video"></span>Rejoindre</span>
+              </div>
+            </div>
+
+            <div class="layer" id="lCc" style="width: 460px; height: 64px">
+              <div class="peek">
+                <div id="eyesCc"></div>
+                <div class="ptxt">
+                  <div class="led-text ptitle" style="color: #f59e7b; text-shadow: 0 0 10px rgb(245 158 123 / 0.55)">Claude Code</div>
+                  <div class="psub">
+                    mon-app · Modifie <b class="mono">main.ts</b> <span style="color: var(--green)">+12</span> <span style="color: #f87171">−3</span>
+                  </div>
+                </div>
+                <span class="picon" data-i="square-terminal" style="color: #f59e7b"></span>
+              </div>
+            </div>
+
+            <div class="layer" id="lCcCard" style="width: 560px; height: 196px">
+              <div class="scan" id="scan2"></div>
+              <div class="ap">
+                <div class="ap-head">
+                  <div id="eyesCcCard"></div>
+                  <div>
+                    <div class="led-text ap-kick">Claude Code · validation</div>
+                    <div class="ap-title">Claude veut exécuter une commande</div>
+                  </div>
+                </div>
+                <div class="code">$ npm test</div>
+              </div>
+              <div class="ap-hint">Alt + Maj + O pour autoriser</div>
+              <div class="ap-actions">
+                <span class="btn ghost">Refuser</span><span class="btn ghost">Toujours</span
+                ><span class="btn primary" id="ccOkBtn"><span data-i="check"></span>Autoriser</span>
+              </div>
+            </div>
+
+            <div class="layer" id="lCcOk" style="width: 460px; height: 64px">
+              <div class="peek">
+                <div id="eyesCcOk"></div>
+                <div class="ptxt stack">
+                  <div class="sl" id="ccA">
+                    <div class="led-text ptitle green">Autorisé</div>
+                    <div class="psub"><b class="mono">npm test</b> · Claude Code reprend</div>
+                  </div>
+                  <div class="sl" id="ccB">
+                    <div class="led-text ptitle green">Terminé</div>
+                    <div class="psub">42 tests réussis · mon-app</div>
+                  </div>
+                </div>
+                <span class="picon" data-i="circle-check" style="color: var(--green)"></span>
+              </div>
+            </div>
+
+            <div class="layer" id="lConn" style="width: 680px; height: 372px">
+              <div class="dot-grid"></div>
+              <div class="phead">
+                <div class="brand">
+                  <span class="led-text">Compi</span><span class="status"><i class="sdot"></i><span>extensions</span></span>
+                </div>
+                <div class="peyes" id="eyesConn"></div>
+                <div class="nav">
+                  <span data-i="message-circle"></span><span data-i="sun"></span><span data-i="activity"></span><span data-i="history"></span
+                  ><span data-i="brain"></span><span class="on" data-i="plug"></span><span data-i="settings-2"></span><i class="sep"></i
+                  ><span data-i="x"></span>
+                </div>
+              </div>
+              <div class="cbody">
+                <div class="csearch"><span data-i="search"></span>Rechercher un service…</div>
+                <div class="cgrid" id="cGrid"></div>
+              </div>
+            </div>
+          </div>
+          <span class="shoulder l"></span><span class="shoulder r"></span>
+        </div>
+      </div>
+
+      <div id="overlay">
+        <div class="headline" id="headline">
+          <div class="l1" id="h1"></div>
+          <div class="l2" id="h2"></div>
+        </div>
+
+        <div class="cap" id="cap2">
+          <div class="kicker">Discuter</div>
+          <h2>Ta journée, en une question.</h2>
+          <p>Agenda, e-mails, météo. Sans quitter ce que tu fais.</p>
+        </div>
+        <div class="cap" id="cap3">
+          <div class="kicker">Actions rapides</div>
+          <h2>Corrige n’importe quel texte.</h2>
+          <p>Traduis, reformule, résume. Dans toutes tes applis.</p>
+        </div>
+        <div class="cap" id="capA">
+          <div class="kicker" style="color: #f472b6; text-shadow: 0 0 14px rgb(244 114 182 / 0.6)">Agenda</div>
+          <h2>Décalé en une phrase.</h2>
+          <p>Ajoute, déplace ou supprime un rendez-vous. Avec ton OK à chaque fois, sans doublon.</p>
+        </div>
+        <div class="cap" id="cap4">
+          <div class="kicker" style="color: var(--amber); text-shadow: 0 0 14px rgb(251 191 36 / 0.6)">Tu gardes la main</div>
+          <h2>Rien ne bouge sans ton accord.</h2>
+          <p>Une carte avant chaque action. Et tout s’annule.</p>
+        </div>
+
+        <div class="cap" id="capV">
+          <div class="kicker">Parler</div>
+          <h2>Dis-le. C’est noté.</h2>
+          <p>Maintiens Alt + Maj + V. Ta voix est transcrite sur ton PC, jamais envoyée.</p>
+        </div>
+        <div class="cap" id="capB">
+          <div class="kicker" style="color: var(--green); text-shadow: 0 0 14px rgb(74 222 128 / 0.6)">Ton cerveau</div>
+          <h2>Claude, ou 100 % local.</h2>
+          <p>Un modèle sur ton PC&nbsp;: gratuit, privé, hors ligne. Tu changes quand tu veux.</p>
+        </div>
+        <div class="cap" id="capP">
+          <div class="kicker" style="color: var(--violet); text-shadow: 0 0 14px rgb(167 139 250 / 0.6)">Confidentialité</div>
+          <h2>Tes secrets restent secrets.</h2>
+          <p>IBAN, cartes et mots de passe sont masqués avant l’envoi. Tu vois ce qui part.</p>
+        </div>
+        <div class="cap" id="capL">
+          <div class="kicker" style="color: #f472b6; text-shadow: 0 0 14px rgb(244 114 182 / 0.6)">Un îlot vivant</div>
+          <h2>Musique, minuteur, réunions.</h2>
+          <p>Tout s’affiche en haut de l’écran, sans fenêtre de plus.</p>
+        </div>
+        <div class="cap" id="capC">
+          <div class="kicker" style="color: #f59e7b; text-shadow: 0 0 14px rgb(245 158 123 / 0.6)">Développeurs</div>
+          <h2>Claude Code, piloté depuis l’îlot.</h2>
+          <p>Autorise ou refuse sans quitter ton éditeur.</p>
+        </div>
+        <div class="cap" id="capN">
+          <div class="kicker" style="color: var(--violet); text-shadow: 0 0 14px rgb(167 139 250 / 0.6)">Connecteurs</div>
+          <h2>Tes outils, en un clic.</h2>
+          <p>Notion, Todoist, Linear, Jira… Sans clé à copier.</p>
+        </div>
+
+        <div class="keys" id="keys1">
+          <span class="key">Alt</span><span class="plus">+</span><span class="key">Maj</span><span class="plus">+</span><span class="key">Espace</span>
+        </div>
+        <div class="keys" id="keys2">
+          <span class="key">Alt</span><span class="plus">+</span><span class="key">Maj</span><span class="plus">+</span><span class="key">C</span>
+        </div>
+        <div class="keys" id="keysV">
+          <span class="key">Alt</span><span class="plus">+</span><span class="key">Maj</span><span class="plus">+</span><span class="key">V</span
+          ><span class="khint">maintenu</span>
+        </div>
+        <div class="keys" id="keysO">
+          <span class="key">Alt</span><span class="plus">+</span><span class="key">Maj</span><span class="plus">+</span><span class="key">O</span>
+        </div>
+
+        <svg id="cursor" viewBox="0 0 24 24">
+          <path
+            d="M4 2.5 L4 19.5 L8.6 15.3 L11.6 21.8 L14.6 20.4 L11.7 14.1 L17.8 13.9 Z"
+            fill="#fff"
+            stroke="#000"
+            stroke-width="1.3"
+            stroke-linejoin="round"
+          />
+        </svg>
+
+        <div id="features">
+          <div class="title" id="fTitle">Et bien plus encore.</div>
+          <div class="grid" id="fGrid"></div>
+        </div>
+
+        <div id="end">
+          <div class="dot-grid"></div>
+          <div id="robot"></div>
+          <div class="word" id="word"></div>
+          <div class="tagline" id="tagline">Ton compagnon IA, en haut de l’écran Windows.</div>
+          <div class="pills" id="pills">
+            <span class="pill"><i style="background: var(--cyan); box-shadow: 0 0 8px var(--cyan)"></i>Open source</span>
+            <span class="pill"><i style="background: var(--green); box-shadow: 0 0 8px var(--green)"></i>Claude ou 100 % local</span>
+            <span class="pill"><i style="background: var(--violet); box-shadow: 0 0 8px var(--violet)"></i>Windows 10 et 11</span>
+          </div>
+          <div class="credit" id="credit">
+            Disponible sur
+            <span class="gh"
+              ><svg width="28" height="28" viewBox="0 0 16 16" fill="#ededf3">
+                <path
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+                /></svg
+              >github.com/Dilraj7/Compi</span
+            >
+          </div>
+        </div>
+
+        <div id="vignette"></div>
+        <div id="fade"></div>
+      </div>
+    </div>
+
+    <script src="timeline.js"></script>
+    <script src="icons.js"></script>
+    <script src="film.js"></script>
+  </body>
+</html>

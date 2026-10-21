@@ -1,0 +1,26 @@
+node_modules/
+out/
+dist/
+*.log
+.DS_Store
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Réglages locaux de l'éditeur ou de l'assistant
+.claude/
+.vscode/
+.idea/
+
+# Secrets et certificats : jamais dans le dépôt
+.env
+.env.*
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+
+# Vidéos rendues (trop lourdes : à joindre au README ou à une Release)
+*.mp4
+*.webm
