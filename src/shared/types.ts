@@ -29,6 +29,8 @@ export interface LocalBrainSettings {
   effort: Effort
   /** Temps pendant lequel le modèle reste chargé après la dernière question. */
   keepAlive: KeepAlive
+  /** Fenêtre de 64 000 jetons (longs documents, grosses extensions) si la carte graphique a la place ; sinon 32 000. */
+  longContext?: boolean
 }
 
 export type KeepAlive = '30m' | '2h' | '8h'
@@ -323,6 +325,8 @@ export interface ConversationMeta {
 
 export interface Conversation extends ConversationMeta {
   sessionId?: string
+  /** Empreinte des réglages déjà donnés au modèle dans cette session (prénom, Google, dossiers…). */
+  settingsKey?: string
   messages: ChatMessage[]
   /**
    * Un contenu écrit par d'autres (e-mail, invitation) est entré dans la discussion :

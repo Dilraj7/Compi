@@ -219,6 +219,9 @@ export function SemanticCard() {
                   {status.current ? ` · ${status.current}` : ''}
                 </span>
               </div>
+              <div className="text-[11px] leading-snug text-fog-700">
+                Doucement pendant que tu utilises le PC, à fond quand il est au repos, en pause sur batterie.
+              </div>
             </div>
           )}
 

@@ -6,7 +6,7 @@
 
 import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { app } from 'electron'
+import { app, powerMonitor } from 'electron'
 import { IPC } from '../../shared/ipc'
 import type { SemanticStatus } from '../../shared/types'
 import { listDocuments } from '../agent/docSearch'
@@ -17,7 +17,7 @@ import { embedTexts, hasModel, ollamaInstalled, ollamaVersion, startOllama } fro
 import { emit } from '../bus'
 import { log } from '../log'
 import { OLLAMA_URL, settings } from '../store/settings'
-import { chunkText, dot, embedPrefix, toUnit, topK } from './vectors'
+import { chunkText, dot, embedPrefix, GENTLE_PAUSE_MS, indexPace, toUnit, topK } from './vectors'
 
 /** Composantes gardées par vecteur : assez pour bien chercher, 2 Ko par passage. */
 const DIMS = 512
@@ -96,6 +96,36 @@ function whenFree(signal: AbortSignal): Promise<void> {
     freeWaiters.push(resolve)
     signal.addEventListener('abort', () => resolve(), { once: true })
   })
+}
+
+const pause = (ms: number, signal: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    const t = setTimeout(resolve, ms)
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(t)
+        resolve()
+      },
+      { once: true }
+    )
+  })
+
+/** Sur batterie : vérifié de nouveau toutes les minutes. */
+const BATTERY_RECHECK_MS = 60_000
+
+/**
+ * Attend le tour du prochain document ou lot : aucune réponse en cours, sur secteur, et
+ * une pause entre deux lots tant que l'utilisateur se sert du PC (indexPace).
+ */
+async function pace(signal: AbortSignal): Promise<void> {
+  while (!signal.aborted) {
+    await whenFree(signal)
+    const p = indexPace({ idleSec: powerMonitor.getSystemIdleTime(), onBattery: powerMonitor.isOnBatteryPower() })
+    if (p === 'full' || signal.aborted) return
+    await pause(p === 'wait' ? BATTERY_RECHECK_MS : GENTLE_PAUSE_MS, signal)
+    if (p === 'gentle' && !holds) return
+  }
 }
 
 function setStatus(patch: Partial<SemanticStatus>, force = true): void {
@@ -180,7 +210,7 @@ async function indexFile(model: string, file: string, meta: FileMeta, signal: Ab
   }
   const fresh: Entry[] = []
   for (let i = 0; i < passages.length; i += BATCH) {
-    await whenFree(signal)
+    await pace(signal)
     if (signal.aborted) return
     const batch = passages.slice(i, i + BATCH)
     const vecs = await embed(
@@ -223,7 +253,8 @@ async function runSync(budgetMs = Infinity): Promise<void> {
     }
     setStatus({ state: todo.length ? 'indexing' : 'ready', model: s.model, files: list.length, indexed: list.length - todo.length, error: undefined })
     for (const { file, meta } of todo) {
-      await whenFree(controller.signal)
+      // Lire un document (PDF, OCR…) prend aussi du processeur : même rythme que les lots.
+      await pace(controller.signal)
       if (controller.signal.aborted || Date.now() - started > budgetMs) break
       setStatus({ current: file.split(/[\\/]/).pop() }, false)
       await indexFile(s.model, file, meta, controller.signal)

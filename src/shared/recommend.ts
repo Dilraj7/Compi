@@ -107,7 +107,12 @@ export function recommend(a: BrainQuizAnswers, hw: HardwareInfo, catalog: Catalo
   return { provider: 'local', pick: best.m, alternatives, fit: best.fit, reasons, cloudHelp, effort }
 }
 
-/** Taille de contexte à demander au moteur local (en jetons). */
-export function contextFor(modelSizeGb: number, hw: HardwareInfo): number {
-  return usableVram(hw) - modelSizeGb >= 6 ? 65_536 : 32_768
+/**
+ * Taille de contexte à demander au moteur local (en jetons). 32 000 par défaut : assez
+ * pour discuter, lire un document par parties et charger une extension, avec moins de
+ * mémoire vidéo réservée (le PC reste fluide). 64 000 seulement si l'utilisateur le
+ * demande (`long`) et que la carte graphique garde 6 Go de marge.
+ */
+export function contextFor(modelSizeGb: number, hw: HardwareInfo, long = false): number {
+  return long && usableVram(hw) - modelSizeGb >= 6 ? 65_536 : 32_768
 }

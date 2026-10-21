@@ -11,7 +11,15 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { app, net } from 'electron'
-import { localToolsNote, selectLocalTools, splitServerInstructions, withServerInstructions, type ToolDef, type ToolServer } from '../../shared/localTools'
+import {
+  localToolsNote,
+  presentGroups,
+  selectLocalTools,
+  splitServerInstructions,
+  withServerInstructions,
+  type ToolDef,
+  type ToolServer
+} from '../../shared/localTools'
 import type { Effort, RunStats } from '../../shared/types'
 import { log } from '../log'
 
@@ -95,8 +103,8 @@ const textBlocks = (c: unknown): { type: 'text'; text: string }[] =>
       : []
 
 /**
- * Modèle local : outils de Compi, plus ceux des connecteurs que la discussion
- * demande, dans la place de sa fenêtre (sinon Ollama coupe le début de la requête,
+ * Modèle local : outils essentiels de Compi, plus ceux des groupes de Compi et des
+ * connecteurs que la discussion demande, dans la place de sa fenêtre (sinon Ollama coupe le début de la requête,
  * consignes comprises). Les instructions des connecteurs quittent les consignes et
  * accompagnent leurs outils ; la liste des extensions branchées les remplace.
  * `allowed` (routine) : seuls ces outils de connecteur peuvent passer.
@@ -117,8 +125,8 @@ export function fitLocalTools(
     Object.assign(sections, split.sections)
     return { type: 'text' as const, text: split.text }
   })
-  const sel = selectLocalTools({ tools: all, system, messages, contextTokens, servers, allowed })
-  const note = localToolsNote({ servers, omitted: sel.omitted })
+  const sel = selectLocalTools({ tools: all, system, messages, contextTokens, servers, allowed, groups: true })
+  const note = localToolsNote({ servers, omitted: sel.omitted, groups: presentGroups(all) })
   const out: Body = {
     ...body,
     system: note ? [...system, { type: 'text', text: note }] : system,
@@ -142,6 +150,48 @@ export function applyDataPolicy(body: Body, target: string, deny: boolean | unde
 /** Le service refuse le réglage de réflexion : on réessaie sans. */
 export function rejectsThinking(status: number, text: string): boolean {
   return status === 400 && /thinking|reasoning|budget_tokens/i.test(text)
+}
+
+/** Début d'une requête que le modèle local garde en cache : consignes, outils, style. */
+export interface PromptPrefix {
+  system: string[]
+  tools: { name?: string }[]
+  thinking: string
+}
+
+export function promptPrefix(body: Body): PromptPrefix {
+  return {
+    system: textBlocks(body.system).map((b) => b.text),
+    tools: Array.isArray(body.tools) ? (body.tools as { name?: string }[]) : [],
+    thinking: JSON.stringify(body.thinking ?? null)
+  }
+}
+
+/**
+ * Premier endroit où deux débuts de requête diffèrent (là où le modèle local doit
+ * tout relire), sans rien citer du contenu : il peut contenir la mémoire ou des chemins.
+ */
+export function prefixGap(before: PromptPrefix, now: PromptPrefix): string | null {
+  if (before.thinking !== now.thinking) return 'réglage de réflexion'
+  for (let i = 0; i < Math.max(before.system.length, now.system.length); i++) {
+    const a = before.system[i] ?? ''
+    const b = now.system[i] ?? ''
+    if (a === b) continue
+    let at = 0
+    while (at < a.length && at < b.length && a[at] === b[at]) at++
+    return `consignes, bloc ${i + 1}, caractère ${at}`
+  }
+  for (let i = 0; i < Math.max(before.tools.length, now.tools.length); i++) {
+    if (JSON.stringify(before.tools[i]) === JSON.stringify(now.tools[i])) continue
+    return `outil n° ${i + 1} (${now.tools[i]?.name ?? before.tools[i]?.name ?? '?'})`
+  }
+  return null
+}
+
+/** Première requête d'une discussion : une seule demande, encore aucune réponse. */
+export function isFirstTurn(body: Body): boolean {
+  const messages = Array.isArray(body.messages) ? (body.messages as { role?: string }[]) : []
+  return messages.length > 0 && !messages.some((m) => m.role === 'assistant')
 }
 
 // ─── Mesures ─────────────────────────────────────────────────────────────────
@@ -299,6 +349,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
 
   try {
     const styled = body && !route.noThinking ? applyStyle(body, route) : body
+    if (route.provider === 'local' && styled) noteLocalPrefix(route.target, styled)
     if (route.provider === 'local' && styled && route.remember !== false && !wanted && route.memoryVersion === memoryVersion)
       rememberPrompt(route.target, styled)
     let upstream = await send(styled ? JSON.stringify(styled) : raw)
@@ -350,8 +401,29 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
  * Version 3 : sans les outils ni les instructions des connecteurs, chargés à la
  * demande (une version 2 en contenait jusqu'à ~26 000 jetons : on ne la rejoue pas).
  * Version 4 : use_extension accepte `tools` (outils précis d'une extension chargée en partie).
+ * Version 5 : les réglages (prénom, Google, dossiers…) quittent les consignes pour le message.
+ * Version 6 : une partie des outils de Compi passe en groupes chargés à la demande.
  */
-const WARM_VERSION = 4
+const WARM_VERSION = 6
+
+/** Début de la dernière requête lue par le modèle local : c'est ce qu'il a en cache. */
+let lastPrefix: (PromptPrefix & { key: string }) | null = null
+let lastGapLogged = ''
+
+/**
+ * Une nouvelle discussion qui ne reprend pas le début de la précédente oblige le modèle
+ * local à tout relire (~45 s sur une carte graphique moyenne). Le journal dit où.
+ */
+function noteLocalPrefix(target: string, body: Body): void {
+  const key = `${target}|${String(body.model)}`
+  const now = { ...promptPrefix(body), key }
+  if (lastPrefix?.key === key && isFirstTurn(body)) {
+    const gap = prefixGap(lastPrefix, now)
+    if (gap && gap !== lastGapLogged) log('info', `cache du modèle local : nouvelle discussion différente de la requête précédente (${gap}), le début est relu`)
+    lastGapLogged = gap ?? ''
+  }
+  lastPrefix = now
+}
 /**
  * Lire d'avance ~12 000 jetons prend 2 à 3 min sur un PC sans grosse carte
  * graphique. Coupée avant la fin (3 min auparavant), la lecture était perdue et
@@ -435,19 +507,21 @@ export async function primeLocalCache(target: string, model: string): Promise<bo
   const p = loadWarmPrompt()
   if (!p || p.model !== model || p.target !== target.replace(/\/+$/, '')) return false
   const started = Date.now()
+  const primeBody: Body = {
+    model,
+    system: p.system,
+    tools: p.tools,
+    thinking: p.thinking,
+    output_config: p.output_config,
+    messages: [{ role: 'user', content: [{ type: 'text', text: '.' }] }],
+    max_tokens: 1,
+    stream: false
+  }
+  lastPrefix = { ...promptPrefix(primeBody), key: `${p.target}|${model}` }
   const r = await net.fetch(`${p.target}/v1/messages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({
-      model,
-      system: p.system,
-      tools: p.tools,
-      thinking: p.thinking,
-      output_config: p.output_config,
-      messages: [{ role: 'user', content: [{ type: 'text', text: '.' }] }],
-      max_tokens: 1,
-      stream: false
-    }),
+    body: JSON.stringify(primeBody),
     signal: AbortSignal.timeout(PRIME_TIMEOUT_MS)
   })
   const body = await r.text()
@@ -480,10 +554,12 @@ export interface OpenRoute {
   /** Adresse à donner au moteur (ANTHROPIC_BASE_URL). */
   url: string
   stats: () => RunStats
+  /** Nouvelle réponse sur la même adresse (moteur gardé ouvert) : les mesures repartent de zéro. */
+  restart: () => void
   close: () => void
 }
 
-/** Ouvre une adresse de passerelle pour une réponse. */
+/** Ouvre une adresse de passerelle pour une réponse (ou pour la vie d'un moteur gardé ouvert). */
 export async function openRoute(o: RouteOptions): Promise<OpenRoute> {
   const port = await ensureServer()
   const id = randomBytes(16).toString('hex')
@@ -492,6 +568,10 @@ export async function openRoute(o: RouteOptions): Promise<OpenRoute> {
   return {
     url: `http://127.0.0.1:${port}/r/${id}`,
     stats: () => summarize(route.startedAt, route.meters),
+    restart: () => {
+      route.startedAt = Date.now()
+      route.meters = []
+    },
     close: () => routes.delete(id)
   }
 }

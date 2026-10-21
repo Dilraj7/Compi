@@ -31,7 +31,7 @@ import { describeImage, transcribePdf, VISION_MAX_BYTES, VISION_MAX_PAGES } from
 import { redact } from '../privacy/redact'
 import { semanticSearch } from '../semantic'
 import { serverKey } from '../connectors/registry'
-import { connectorKeywords, findServer, usableInRoutine, USE_EXTENSION } from '../../shared/localTools'
+import { compiGroupServers, connectorKeywords, findServer, usableInRoutine, USE_EXTENSION } from '../../shared/localTools'
 import { ocrPdf, ocrPng, tooLittleText } from '../windows/ocr'
 import { FILE_KINDS, formatHits, searchFiles } from '../windows/search'
 import {
@@ -731,24 +731,30 @@ export function createCompiServer(sdk: SdkModule, ctx: CompiToolContext): Return
         )
       ]
 
-  // Modèle local : les connecteurs ne sont chargés qu'à la demande (shared/localTools.ts).
-  // La passerelle voit l'appel dans la discussion et ajoute leurs outils à la requête suivante.
+  // Modèle local : les connecteurs et une partie des outils de Compi (groupes) ne sont chargés
+  // qu'à la demande (shared/localTools.ts). La passerelle voit l'appel dans la discussion et
+  // ajoute leurs outils à la requête suivante.
   const connectors = settings.get().connectors.filter((c) => c.enabled)
   const extensionTools =
-    ctx.provider !== 'local' || !connectors.length
+    ctx.provider !== 'local'
       ? []
       : [
           tool(
             USE_EXTENSION,
-            "Charge les outils d'une extension (connecteur) branchée par l'utilisateur, quand la demande en a besoin. Ses outils sont disponibles dès ton action suivante.",
+            "Charge un groupe d'outils de Compi ou les outils d'une extension (connecteur) branchée par l'utilisateur, quand la demande en a besoin. Ses outils sont disponibles dès ton action suivante.",
             {
-              name: z.string().describe('Nom de l’extension, tel qu’il figure dans la liste des extensions branchées'),
+              name: z.string().describe('Nom du groupe ou de l’extension, tel qu’il figure dans tes consignes'),
               tools: z.array(z.string()).optional().describe('Seulement si l’extension est chargée en partie : noms des outils non chargés dont tu as besoin')
             },
             async ({ name, tools: wanted }) => {
               const servers = connectors.map((c) => ({ key: serverKey(c), name: c.name, keywords: connectorKeywords(c.name, c.templateId) }))
-              const s = findServer(name, servers)
-              if (!s) return fail(`Aucune extension « ${name} ». Extensions branchées : ${servers.map((x) => x.name).join(', ')}.`)
+              const groups = compiGroupServers(COMPI_SERVER)
+              const s = findServer(name, [...servers, ...groups])
+              if (s && groups.includes(s)) return text(`Groupe ${s.name} chargé : ses outils sont disponibles dès ton action suivante.`)
+              if (!s)
+                return fail(
+                  `Aucun groupe ni extension « ${name} ». Groupes de Compi : ${groups.map((g) => g.name).join(', ')}.${servers.length ? ` Extensions branchées : ${servers.map((x) => x.name).join(', ')}.` : ''}`
+                )
               if (ctx.headless && !usableInRoutine(s.key, settings.get().alwaysAllow))
                 return fail(
                   `Dans une routine, l’extension ${s.name} n’est pas utilisable : aucun de ses outils n’est autorisé sans validation (réglage « Toujours »). Dis-le en une phrase dans ta réponse.`

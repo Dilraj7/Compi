@@ -1,8 +1,9 @@
 // Outils envoyés à un modèle local. Sa fenêtre est petite (32 000 à 64 000 jetons)
 // et il relit lentement : sur un PC sans grosse carte graphique, ~90 jetons/s, soit
-// 5 min pour les ~26 000 jetons d'outils de quelques connecteurs. Ceux de Compi
-// passent toujours, en tête et dans le même ordre (le modèle les garde en cache
-// d'une discussion à l'autre). Les connecteurs ne sont chargés qu'à la demande :
+// 5 min pour les ~26 000 jetons d'outils de quelques connecteurs. Les outils
+// essentiels de Compi passent toujours, en tête et dans le même ordre (le modèle les
+// garde en cache d'une discussion à l'autre) ; les autres sont rangés en groupes
+// (COMPI_GROUPS), chargés comme des connecteurs. Les connecteurs ne sont chargés qu'à la demande :
 // nommés par l'utilisateur, déjà utilisés, ou demandés par le modèle avec
 // use_extension. Leurs outils viennent après ceux de Compi, dans l'ordre où la
 // discussion les a demandés : la requête ne fait que s'allonger, le cache reste
@@ -24,6 +25,136 @@ export interface ToolServer {
 
 /** Outil de Compi (serveur `compi`) qui charge une extension pour le modèle local. */
 export const USE_EXTENSION = 'use_extension'
+
+/**
+ * Outils de Compi chargés à la demande par le modèle local, par groupe. Les autres (heure,
+ * rappels, minuteur, météo, mémoire, documents, fichiers du PC, pages web, agenda et
+ * e-mails en lecture…) passent toujours : ~40 % de jetons en moins à relire au début de
+ * chaque discussion (mesuré : 40 outils et ~5 300 jetons → 22 outils et ~3 200). Un groupe
+ * se charge quand la demande en parle (mots-clés), quand le modèle le demande
+ * (use_extension) ou dès qu'il a utilisé un de ses outils ; ses outils s'ajoutent à la
+ * fin, comme ceux d'un connecteur, et le début de la requête ne change pas.
+ */
+export interface CompiGroup {
+  id: string
+  name: string
+  /** Noms courts des outils (sans `mcp__compi__`). */
+  tools: string[]
+  /** Mots (repliés, sans accents) qui chargent le groupe quand l'utilisateur les écrit. */
+  keywords: string[]
+  /** Ce que le groupe permet, pour la note des consignes. */
+  summary: string
+}
+
+export const COMPI_GROUPS: CompiGroup[] = [
+  {
+    id: 'windows',
+    name: 'Windows',
+    tools: ['open_app', 'focus_window', 'list_windows', 'sound_control', 'set_theme', 'open_settings', 'open_path'],
+    keywords: [
+      'ouvre',
+      'ouvrir',
+      'lance',
+      'lancer',
+      'application',
+      'applications',
+      'appli',
+      'logiciel',
+      'programme',
+      'fenetre',
+      'fenetres',
+      'volume',
+      'muet',
+      'musique',
+      'chanson',
+      'theme',
+      'mode sombre',
+      'mode clair',
+      'parametres'
+    ],
+    summary: 'ouvrir une application ou un fichier, fenêtres, son et musique, thème, Paramètres'
+  },
+  {
+    id: 'ecran',
+    name: 'Écran et presse-papier',
+    tools: ['screen_capture', 'read_screen_text', 'clipboard_read', 'clipboard_write', 'clipboard_history'],
+    keywords: ['ecran', 'capture', 'presse-papier', 'presse papier', 'copie', 'copier', 'copiee', 'colle', 'coller'],
+    summary: 'regarder ou lire l’écran, lire et écrire le presse-papier, son historique'
+  },
+  {
+    id: 'rangement',
+    name: 'Rangement',
+    tools: ['folder_inventory', 'create_folders', 'move_items', 'undo_moves', 'open_folder'],
+    keywords: [
+      'range',
+      'ranger',
+      'rangement',
+      'trie',
+      'trier',
+      'tri',
+      'organise',
+      'organiser',
+      'bureau',
+      'telechargements',
+      'dossier',
+      'dossiers',
+      'annule le rangement'
+    ],
+    summary: 'inventaire et rangement des dossiers confiés, annulation, ouvrir un dossier'
+  },
+  {
+    id: 'routines',
+    name: 'Routines',
+    tools: ['routine_create', 'routine_list', 'routine_delete'],
+    keywords: [
+      'routine',
+      'routines',
+      'tous les jours',
+      'toutes les semaines',
+      'tous les matins',
+      'tous les soirs',
+      'chaque jour',
+      'chaque semaine',
+      'chaque matin',
+      'chaque soir',
+      'chaque lundi',
+      'chaque mois'
+    ],
+    summary: 'créer, lister ou supprimer une routine'
+  },
+  {
+    id: 'agenda',
+    name: 'Agenda (modifier)',
+    tools: ['calendar_create_event', 'calendar_update_event', 'calendar_delete_event'],
+    keywords: ['agenda', 'rendez-vous', 'rdv', 'reunion', 'evenement', 'planifie', 'deplace', 'deplacer', 'decale', 'decaler', 'reporte', 'reporter'],
+    summary: 'ajouter, déplacer ou supprimer un rendez-vous Google'
+  },
+  {
+    id: 'emails',
+    name: 'E-mails (brouillons)',
+    tools: ['mail_create_draft'],
+    keywords: ['brouillon', 'reponds', 'repondre', 'mail', 'mails', 'e-mail', 'e-mails', 'email', 'emails', 'courriel'],
+    summary: 'préparer un brouillon Gmail'
+  }
+]
+
+/** Groupes de Compi vus comme des extensions : clé `compi:<id>`. */
+export const compiGroupServers = (core = 'compi'): ToolServer[] => COMPI_GROUPS.map((g) => ({ key: `${core}:${g.id}`, name: g.name, keywords: g.keywords }))
+
+/** Groupes dont au moins un outil figure dans la liste (les outils Google n'existent qu'avec un compte connecté), outils absents retirés. */
+export function presentGroups(tools: Pick<ToolDef, 'name'>[], core = 'compi'): CompiGroup[] {
+  const names = new Set(tools.map((t) => t.name))
+  return COMPI_GROUPS.map((g) => ({ ...g, tools: g.tools.filter((t) => names.has(`mcp__${core}__${t}`)) })).filter((g) => g.tools.length)
+}
+
+/** Groupe d'un outil de Compi (`mcp__compi__move_items` → `compi:rangement`), ou null s'il passe toujours. */
+export function compiGroupOf(name: string, core = 'compi'): string | null {
+  const prefix = `mcp__${core}__`
+  if (!name.startsWith(prefix)) return null
+  const short = name.slice(prefix.length)
+  const g = COMPI_GROUPS.find((x) => x.tools.includes(short))
+  return g ? `${core}:${g.id}` : null
+}
 
 /**
  * Outils du moteur qui lisent les ressources des connecteurs (la documentation que
@@ -210,17 +341,24 @@ const textsOf = (content: unknown): string[] =>
 /** Nom court d'un outil de connecteur : « mcp__notion-741c__notion-search » → « notion-search ». */
 export const shortToolName = (name: string): string => name.replace(/^mcp__.+?__/, '')
 
-/** Messages de l'utilisateur, sans les rappels du moteur ni les résultats d'outils (repliés). */
+/**
+ * Ce que l'utilisateur a écrit dans un message (replié) : sans les rappels du moteur, les
+ * résultats d'outils ni les blocs <contexte> et <reglages> ajoutés par Compi (une source
+ * d'agenda qui porte le nom d'un connecteur ne doit pas le charger).
+ */
+const saidIn = (content: unknown): string =>
+  fold(
+    textsOf(content)
+      .filter((t) => !t.trimStart().startsWith('<system-reminder>'))
+      .join('\n')
+      .replace(/<(contexte|reglages)>[\s\S]*?<\/\1>/g, ' ')
+  ).trim()
+
+/** Messages de l'utilisateur (voir saidIn). */
 const userSaid = (messages: Msg[]): string[] =>
   messages
     .filter((m) => m.role === 'user')
-    .map((m) =>
-      fold(
-        textsOf(m.content)
-          .filter((t) => !t.trimStart().startsWith('<system-reminder>'))
-          .join('\n')
-      )
-    )
+    .map((m) => saidIn(m.content))
     .filter(Boolean)
 
 /**
@@ -316,9 +454,9 @@ export function findServer(name: string, servers: ToolServer[]): ToolServer | un
 }
 
 /**
- * Connecteurs voulus dans la discussion, dans l'ordre : déjà utilisés ou chargés
- * (use_extension) par le modèle, ou nommés par l'utilisateur (pas dans les rappels
- * du moteur ni dans les résultats d'outils).
+ * Connecteurs (et groupes d'outils de Compi, clés `compi:<id>`) voulus dans la discussion,
+ * dans l'ordre : déjà utilisés ou chargés (use_extension) par le modèle, ou nommés par
+ * l'utilisateur (pas dans les rappels du moteur, les blocs de Compi ni les résultats d'outils).
  */
 export function wantedServers(messages: Msg[], servers: ToolServer[], core = 'compi'): string[] {
   const wanted: string[] = []
@@ -335,15 +473,11 @@ export function wantedServers(messages: Msg[], servers: ToolServer[], core = 'co
           if (s) add(s.key)
           continue
         }
-        const k = toolServerKey(b.name)
+        const k = compiGroupOf(b.name, core) ?? toolServerKey(b.name)
         if (k && servers.some((s) => s.key === k)) add(k)
       }
     } else if (m.role === 'user') {
-      const said = fold(
-        textsOf(m.content)
-          .filter((t) => !t.trimStart().startsWith('<system-reminder>'))
-          .join('\n')
-      )
+      const said = saidIn(m.content)
       if (!said) continue
       for (const s of servers) if (s.keywords.some((w) => mentions(said, w))) add(s.key)
     }
@@ -357,8 +491,10 @@ export function wantedServers(messages: Msg[], servers: ToolServer[], core = 'co
  * demande, après, dans l'ordre de la demande ; ils se partagent ~40 % de la
  * fenêtre, sans que la requête dépasse 85 % (outil par outil, les plus utiles
  * d'abord, s'ils ne tiennent pas en entier : voir byUsefulness). Les outils de
- * lecture des ressources ne passent qu'avec un connecteur chargé. `allowed`
- * (routine) : seuls ces outils de connecteur peuvent passer, les autres seraient refusés.
+ * lecture des ressources ne passent qu'avec un connecteur chargé, juste avant ses outils.
+ * `allowed` (routine) : seuls ces outils de connecteur peuvent passer, les autres seraient
+ * refusés. `groups` : les outils de Compi des COMPI_GROUPS se chargent eux aussi à la
+ * demande, en entier (ils passaient tous avant : jamais moins de place qu'avant pour eux).
  */
 export function selectLocalTools(o: {
   tools: ToolDef[]
@@ -368,15 +504,20 @@ export function selectLocalTools(o: {
   servers: ToolServer[]
   core?: string
   allowed?: string[]
+  groups?: boolean
 }): ToolSelection {
   const core = o.core ?? 'compi'
-  const known = new Map(o.servers.map((s) => [s.key, s]))
+  const groupServers = o.groups ? compiGroupServers(core) : []
+  const known = new Map([...o.servers, ...groupServers].map((s) => [s.key, s]))
   const keep: ToolDef[] = []
   const readers: ToolDef[] = []
   const byServer = new Map<string, ToolDef[]>()
+  const byGroup = new Map<string, ToolDef[]>()
   for (const t of o.tools) {
     const k = toolServerKey(t.name)
+    const group = o.groups && k === core ? compiGroupOf(t.name, core) : null
     if (RESOURCE_TOOLS.includes(t.name)) readers.push(t)
+    else if (group) byGroup.set(group, [...(byGroup.get(group) ?? []), t])
     else if (k === null || k === core || !known.has(k)) keep.push(t)
     else if (!o.allowed || o.allowed.includes(t.name)) byServer.set(k, [...(byServer.get(k) ?? []), compactTool(t)])
   }
@@ -388,13 +529,23 @@ export function selectLocalTools(o: {
   const missing: Record<string, string[]> = {}
   const loaded: string[] = []
   const chosen: ToolDef[] = []
-  const wanted = wantedServers(o.messages, o.servers, core).filter((k) => byServer.has(k))
+  const wanted = wantedServers(o.messages, [...o.servers, ...groupServers], core).filter((k) => byServer.has(k) || byGroup.has(k))
   const requested = requestedTools(o.messages, core)
-  // Place réservée aux outils de lecture des ressources, rendue si rien ne se charge.
-  const readersSize = wanted.length && readers.length ? estimateTokens(readers) : 0
+  // Les groupes passent en entier : leur place est prise avant celle des connecteurs.
+  for (const k of wanted) if (byGroup.has(k)) used += estimateTokens(byGroup.get(k))
+  // Place réservée aux outils de lecture des ressources, rendue si aucun connecteur ne se charge.
+  const readersSize = wanted.some((k) => byServer.has(k)) && readers.length ? estimateTokens(readers) : 0
   used += readersSize
+  let readersPlaced = false
 
   for (const k of wanted) {
+    const name = known.get(k)!.name
+    const group = byGroup.get(k)
+    if (group) {
+      chosen.push(...group)
+      loaded.push(name)
+      continue
+    }
     const all = byServer.get(k)!
     const picked = new Set<ToolDef>()
     for (const t of byUsefulness(all, known.get(k)!, o.messages, requested)) {
@@ -403,9 +554,12 @@ export function selectLocalTools(o: {
       picked.add(t)
       used += size
     }
+    if (picked.size && !readersPlaced) {
+      chosen.push(...readers)
+      readersPlaced = true
+    }
     // Dans l'ordre du connecteur : la liste reste la même d'un tour à l'autre (cache du modèle).
     chosen.push(...all.filter((t) => picked.has(t)))
-    const name = known.get(k)!.name
     if (!picked.size) omitted.push(name)
     else loaded.push(name)
     if (picked.size && picked.size < all.length) {
@@ -413,23 +567,29 @@ export function selectLocalTools(o: {
       missing[k] = all.filter((t) => !picked.has(t)).map((t) => shortToolName(t.name))
     }
   }
-  if (!chosen.length) used -= readersSize
-  return { tools: [...keep, ...(chosen.length ? readers : []), ...chosen], omitted, partial, missing, wanted, loaded, tokens: used }
+  if (!readersPlaced) used -= readersSize
+  return { tools: [...keep, ...chosen], omitted, partial, missing, wanted, loaded, tokens: used }
 }
 
 /**
- * Consignes ajoutées pour le modèle local : la liste des extensions branchées
- * (toujours la même, pour ne pas changer le début de la requête quand l'une se
- * charge) et celles qui n'ont pas pu se charger du tout. Une extension chargée en
+ * Consignes ajoutées pour le modèle local : les groupes d'outils de Compi et la liste
+ * des extensions branchées (toujours les mêmes, pour ne pas changer le début de la
+ * requête quand l'un se charge) et celles qui n'ont pas pu se charger du tout. Une extension chargée en
  * partie est signalée avec ses outils (withServerInstructions) : les consignes passent
  * avant tous les outils, les changer ferait tout relire au modèle.
  */
-export function localToolsNote(o: { servers: Pick<ToolServer, 'name'>[]; omitted: string[]; core?: string }): string | null {
+export function localToolsNote(o: { servers: Pick<ToolServer, 'name'>[]; omitted: string[]; core?: string; groups?: CompiGroup[] }): string | null {
   const parts: string[] = []
+  const loader = `mcp__${o.core ?? 'compi'}__${USE_EXTENSION}`
+  if (o.groups?.length) {
+    parts.push(
+      `Autres outils de Compi, chargés à la demande : si la demande en a besoin et que tu ne les vois pas, appelle d'abord ${loader} avec le nom du groupe, puis utilise-les.\n${o.groups.map((g) => `- ${g.name} : ${g.summary} (${g.tools.join(', ')})`).join('\n')}`
+    )
+  }
   if (o.servers.length) {
     const names = o.servers.map((s) => s.name).sort((a, b) => a.localeCompare(b, 'fr'))
     parts.push(
-      `Extensions branchées par l'utilisateur : ${names.join(', ')}. Leurs outils ne se chargent qu'à la demande : si la demande concerne l'une d'elles et que tu ne vois pas ses outils, appelle d'abord mcp__${o.core ?? 'compi'}__${USE_EXTENSION} avec son nom, puis utilise ses outils. N'invente jamais leur résultat.`
+      `Extensions branchées par l'utilisateur : ${names.join(', ')}. Leurs outils ne se chargent qu'à la demande : si la demande concerne l'une d'elles et que tu ne vois pas ses outils, appelle d'abord ${loader} avec son nom, puis utilise ses outils. N'invente jamais leur résultat.`
     )
   }
   if (o.omitted.length)

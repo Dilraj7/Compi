@@ -116,6 +116,13 @@ async function localState(): Promise<PerfSnapshot['local']> {
   }
 }
 
+/**
+ * Abonnés qui n'affichent que les jauges (processeur, mémoire, carte graphique) : pour eux
+ * seuls, ni modèles chargés (/api/ps, ~1 200 fois par heure sinon) ni applications les plus
+ * gourmandes. Activité › Ce PC et les réponses locales les demandent, eux.
+ */
+const GAUGES_ONLY = new Set(['ui:island'])
+
 async function sample(): Promise<void> {
   if (sampling) return
   sampling = true
@@ -125,7 +132,12 @@ async function sample(): Promise<void> {
     prevCpu = now
     const totalGb = totalmem() / GB
     hw ??= await hardwareInfo().catch(() => null)
-    const [gpu, top, local] = await Promise.all([gpuSample(), topRam(), localState()])
+    const gaugesOnly = watchers.size > 0 && [...watchers.keys()].every((id) => GAUGES_ONLY.has(id))
+    const [gpu, top, local] = await Promise.all([
+      gpuSample(),
+      gaugesOnly ? Promise.resolve(last?.ram.top ?? []) : topRam(),
+      gaugesOnly ? Promise.resolve(last?.local) : localState()
+    ])
     let gpuInfo: PerfSnapshot['gpu']
     const adapter = gpu ? pickGpu(gpu.adapters) : undefined
     if (gpu && adapter && hw?.gpu) {
@@ -165,9 +177,11 @@ function schedule(): void {
 /** S'abonne (ou se désabonne) à l'activité du PC ; `every` : rythme voulu (ms). */
 export function perfWatch(id: string, on: boolean, every = 2000): PerfSnapshot | null {
   const had = watchers.size
+  // Jusque-là, seulement les jauges : les modèles chargés n'ont pas été relus, on mesure tout de suite.
+  const gaugesOnly = had > 0 && [...watchers.keys()].every((w) => GAUGES_ONLY.has(w))
   if (on) watchers.set(id, Math.max(1000, every))
   else watchers.delete(id)
-  if (on && !had) void sample()
+  if (on && (!had || (gaugesOnly && !GAUGES_ONLY.has(id)))) void sample()
   schedule()
   return last
 }

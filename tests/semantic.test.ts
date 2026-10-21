@@ -2,7 +2,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { chunkText, dot, embedPrefix, MAX_PASSAGES_PER_FILE, toUnit, topK } from '../src/main/semantic/vectors'
+import { chunkText, dot, embedPrefix, IDLE_SEC, indexPace, MAX_PASSAGES_PER_FILE, toUnit, topK } from '../src/main/semantic/vectors'
+
+describe('recherche par le sens : rythme de l’indexation', () => {
+  it('à fond au repos, doucement pendant qu’on travaille, en pause sur batterie', () => {
+    expect(indexPace({ idleSec: IDLE_SEC, onBattery: false })).toBe('full')
+    expect(indexPace({ idleSec: 5, onBattery: false })).toBe('gentle')
+    expect(indexPace({ idleSec: 3600, onBattery: true })).toBe('wait')
+  })
+})
 
 describe('recherche par le sens : découpage', () => {
   it('regroupe les petits paragraphes jusqu’à environ 900 caractères', () => {
@@ -96,7 +104,8 @@ function fakeVector(text: string): number[] {
   return [/résili|préavis|fin du contrat/.test(t) ? 1 : 0, /loyer|paiement|euros/.test(t) ? 1 : 0, /chat|animal/.test(t) ? 1 : 0, 0.05]
 }
 
-vi.mock('electron', () => ({ app: { getPath: () => home } }))
+// PC au repos et sur secteur : l'indexation va à fond (le rythme est testé à part, indexPace).
+vi.mock('electron', () => ({ app: { getPath: () => home }, powerMonitor: { getSystemIdleTime: () => 3600, isOnBatteryPower: () => false } }))
 vi.mock('../src/main/log', () => ({ log: vi.fn() }))
 vi.mock('../src/main/bus', () => ({ emit: vi.fn() }))
 vi.mock('../src/main/store/settings', () => ({

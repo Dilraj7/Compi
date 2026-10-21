@@ -653,6 +653,19 @@ function LocalPanel({ s, update, local, onPick }: { s: PublicSettings; update: U
           />
         </div>
       )}
+      <div className="flex items-center justify-between gap-4 border-t border-white/[0.05] pt-3">
+        <div className="min-w-0">
+          <div className="text-[12.5px] text-fog-100">Longs documents et grosses extensions</div>
+          <div className="mt-0.5 text-[11.5px] leading-snug text-fog-500">
+            Mémoire de travail doublée (64 000 jetons au lieu de 32 000), si la carte graphique a la place. Prend plus de mémoire vidéo.
+          </div>
+        </div>
+        <Toggle
+          checked={s.local.longContext === true}
+          onChange={(longContext) => update({ local: { ...s.local, longContext } })}
+          label="Longs documents et grosses extensions"
+        />
+      </div>
       <div className="flex items-start gap-2 rounded-xl bg-white/[0.03] px-3 py-2 text-[11.5px] leading-snug text-fog-500">
         <Lock size={12} className="mt-0.5 shrink-0 text-fog-300" />
         <span>

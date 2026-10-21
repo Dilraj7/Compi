@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ app: { getPath: () => '.' }, net: { fetch: vi.fn() } }))
-const { applyStyle, createSseMeter, fitLocalTools, hoistSystem, rejectsThinking, summarize } = await import('../src/main/brains/gateway')
+const { applyStyle, createSseMeter, fitLocalTools, hoistSystem, isFirstTurn, prefixGap, promptPrefix, rejectsThinking, summarize } =
+  await import('../src/main/brains/gateway')
 
 const engineBody = { model: 'gemma4:12b-compi', max_tokens: 8192, thinking: { type: 'adaptive' }, output_config: { effort: 'high' }, messages: [] }
 
@@ -87,6 +88,43 @@ describe('consignes en tête (cache du modèle local)', () => {
     expect(out.system).toEqual([text('Tu es Compi.'), text('Env')])
     const plain = { system: 'Tu es Compi.', messages: [{ role: 'user', content: 'Bonjour' }] }
     expect(hoistSystem(plain)).toBe(plain)
+  })
+})
+
+describe('écart avec la requête précédente (cache du modèle local)', () => {
+  const body = (system: string, tools: { name: string }[] = [{ name: 'a' }, { name: 'b' }], thinking: unknown = { type: 'disabled' }) => ({
+    system: [
+      { type: 'text', text: 'You are…' },
+      { type: 'text', text: system }
+    ],
+    tools,
+    thinking,
+    messages: [{ role: 'user', content: 'bonjour' }]
+  })
+
+  it('même début : aucun écart', () => {
+    expect(prefixGap(promptPrefix(body('Tu es Compi.')), promptPrefix(body('Tu es Compi.')))).toBeNull()
+  })
+
+  it('dit où les consignes diffèrent, sans citer leur contenu', () => {
+    const gap = prefixGap(promptPrefix(body('Tu es Compi. Agenda : non connecté.')), promptPrefix(body('Tu es Compi. Agenda : Google.')))
+    expect(gap).toBe('consignes, bloc 2, caractère 22')
+    expect(gap).not.toMatch(/Google|connecté/)
+  })
+
+  it('outil ajouté, retiré ou changé : son rang et son nom', () => {
+    expect(prefixGap(promptPrefix(body('x')), promptPrefix(body('x', [{ name: 'a' }, { name: 'c' }])))).toBe('outil n° 2 (c)')
+    expect(prefixGap(promptPrefix(body('x')), promptPrefix(body('x', [{ name: 'a' }])))).toBe('outil n° 2 (b)')
+  })
+
+  it('réglage de réflexion changé (le modèle relit tout)', () => {
+    expect(prefixGap(promptPrefix(body('x')), promptPrefix(body('x', undefined, { type: 'enabled', budget_tokens: 2048 })))).toBe('réglage de réflexion')
+  })
+
+  it('première requête d’une discussion : aucune réponse encore', () => {
+    expect(isFirstTurn({ messages: [{ role: 'user', content: 'bonjour' }] })).toBe(true)
+    expect(isFirstTurn({ messages: [{ role: 'user' }, { role: 'assistant' }, { role: 'user' }] })).toBe(false)
+    expect(isFirstTurn({ messages: [] })).toBe(false)
   })
 })
 

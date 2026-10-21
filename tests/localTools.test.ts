@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   compactTool,
+  compiGroupOf,
+  compiGroupServers,
   connectorKeywords,
   estimateMessages,
   estimateTokens,
   findServer,
   localToolsNote,
+  presentGroups,
   selectLocalTools,
   splitServerInstructions,
   toolServerKey,
@@ -325,5 +328,107 @@ describe('instructions des connecteurs', () => {
     expect(out[0].description).toBe('x'.repeat(10))
     expect(out[1].description).toBe(`Consignes de l'extension Notion : Cherche avant de créer.\n\n${'x'.repeat(10)}`)
     expect(out[2].description).toBe('x'.repeat(10))
+  })
+})
+
+describe('outils de Compi en groupes (modèle local)', () => {
+  const c = (short: string, chars = 300): ToolDef => tool(`mcp__compi__${short}`, chars)
+  // Ordre du moteur : alphabétique, groupes et outils essentiels mélangés.
+  const compiTools: ToolDef[] = [
+    tool('Skill', 300),
+    c('create_folders'),
+    c('fetch_page'),
+    c('get_datetime'),
+    c('move_items'),
+    c('open_app'),
+    c('reminder_create'),
+    c('routine_create'),
+    c('screen_capture'),
+    c('search_files'),
+    c('set_theme'),
+    c('use_extension'),
+    tool('mcp__notion-741c__notion0', 400),
+    tool('ListMcpResourcesTool', 200)
+  ]
+  const names = (sel: { tools: ToolDef[] }): string[] => sel.tools.map((t) => t.name.replace('mcp__compi__', ''))
+  const select = (messages: Array<{ role: string; content: unknown }>) =>
+    selectLocalTools({ tools: compiTools, messages, contextTokens: 32_768, servers, groups: true })
+
+  it('compiGroupOf et presentGroups : groupe d’un outil, groupes présents dans la liste', () => {
+    expect(compiGroupOf('mcp__compi__move_items')).toBe('compi:rangement')
+    expect(compiGroupOf('mcp__compi__get_datetime')).toBeNull()
+    expect(compiGroupOf('mcp__notion-741c__move_items')).toBeNull()
+    const present = presentGroups(compiTools)
+    // Sans compte Google, pas d'outils d'agenda ni de brouillon : leurs groupes ne sont pas annoncés.
+    expect(present.map((g) => g.id)).toEqual(['windows', 'ecran', 'rangement', 'routines'])
+    expect(present.find((g) => g.id === 'rangement')!.tools).toEqual(['create_folders', 'move_items'])
+  })
+
+  it('par défaut : les outils essentiels seulement, dans l’ordre du moteur', () => {
+    const sel = select(ask('quelle heure est-il ?'))
+    expect(names(sel)).toEqual(['Skill', 'fetch_page', 'get_datetime', 'reminder_create', 'search_files', 'use_extension'])
+    expect(sel.wanted).toEqual([])
+    expect(sel.loaded).toEqual([])
+  })
+
+  it('sans l’option : tous les outils de Compi passent, comme avant', () => {
+    const sel = selectLocalTools({ tools: compiTools, messages: ask('bonjour'), contextTokens: 32_768, servers })
+    expect(names(sel)).toEqual(
+      compiTools.filter((t) => !t.name.includes('notion') && t.name !== 'ListMcpResourcesTool').map((t) => t.name.replace('mcp__compi__', ''))
+    )
+  })
+
+  it('un mot de la demande charge le groupe, à la fin et en entier', () => {
+    const sel = select(ask('Range mon Bureau stp'))
+    expect(names(sel)).toEqual(['Skill', 'fetch_page', 'get_datetime', 'reminder_create', 'search_files', 'use_extension', 'create_folders', 'move_items'])
+    expect(sel.wanted).toEqual(['compi:rangement'])
+    expect(sel.loaded).toEqual(['Rangement'])
+  })
+
+  it('les blocs <contexte> et <reglages> de Compi ne chargent rien (ni groupe ni connecteur)', () => {
+    const first = `<contexte>Nous sommes le mardi.</contexte>\n<reglages>\n- Agenda : sources Notion, Mon CRM.\n- Dossiers confiés : Bureau, Téléchargements\n</reglages>\n\nbonjour`
+    const sel = select(ask(first))
+    expect(sel.wanted).toEqual([])
+    expect(wantedServers(ask(first), servers)).toEqual([])
+  })
+
+  it('groupe demandé par le modèle (use_extension) ou outil d’un groupe déjà utilisé : chargé, dans l’ordre de la demande', () => {
+    const messages = [
+      ...ask('mets la page Notion à jour puis tu sais quoi'),
+      { role: 'assistant', content: [{ type: 'tool_use', name: 'mcp__compi__use_extension', input: { name: 'Écran et presse-papier' } }] },
+      { role: 'user', content: [{ type: 'tool_result', content: 'ok' }] },
+      { role: 'assistant', content: [{ type: 'tool_use', name: 'mcp__compi__set_theme', input: { mode: 'dark' } }] }
+    ]
+    const sel = select(messages)
+    expect(sel.wanted).toEqual(['notion-741c', 'compi:ecran', 'compi:windows'])
+    // Lecture des ressources juste avant le connecteur ; groupes ensuite, dans l'ordre de la demande.
+    expect(names(sel).slice(6)).toEqual(['ListMcpResourcesTool', 'mcp__notion-741c__notion0', 'screen_capture', 'open_app', 'set_theme'])
+  })
+
+  it('un groupe chargé avant un connecteur garde sa place : la requête ne fait que s’allonger', () => {
+    const before = select(ask('ouvre la calculatrice'))
+    const after = select([
+      ...ask('ouvre la calculatrice'),
+      { role: 'assistant', content: [{ type: 'text', text: 'Ouverte.' }] },
+      ...ask('et cherche dans Notion')
+    ])
+    expect(names(after).slice(0, before.tools.length)).toEqual(names(before))
+    expect(names(after).slice(before.tools.length)).toEqual(['ListMcpResourcesTool', 'mcp__notion-741c__notion0'])
+  })
+
+  it('findServer : un groupe par son nom ou un mot, une extension d’abord par son nom exact', () => {
+    const all = [...servers, ...compiGroupServers()]
+    expect(findServer('Rangement', all)?.key).toBe('compi:rangement')
+    expect(findServer('ecran', all)?.key).toBe('compi:ecran')
+    expect(findServer('Notion', all)?.key).toBe('notion-741c')
+  })
+
+  it('note : groupes présents avec leurs outils, texte fixe', () => {
+    const note = localToolsNote({ servers: [], omitted: [], groups: presentGroups(compiTools) })!
+    expect(note).toContain('mcp__compi__use_extension avec le nom du groupe')
+    expect(note).toContain('- Rangement : ')
+    expect(note).toContain('(create_folders, move_items)')
+    expect(note).not.toContain('Agenda')
+    expect(localToolsNote({ servers: [], omitted: [], groups: presentGroups([...compiTools].reverse()) })).toBe(note)
   })
 })

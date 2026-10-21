@@ -85,9 +85,10 @@ export interface PreparedLocal {
 /** Prépare le modèle local d'une discussion : moteur démarré, fenêtre de contexte suffisante. */
 export async function prepareLocalBrain(model: string): Promise<PreparedLocal> {
   const hw = await hardwareInfo()
+  const long = settings.get().local.longContext === true
   if (settings.get().local.engine === 'lmstudio') {
     const info = (await listLmStudioModels(lmstudioBase())).find((m) => m.name === model)
-    const ctx = contextFor((info?.sizeBytes ?? 0) / GB, hw)
+    const ctx = contextFor((info?.sizeBytes ?? 0) / GB, hw, long)
     await loadLmStudioModel(lmstudioBase(), model, ctx)
     return { model, contextTokens: Math.min(ctx, info?.contextLength ?? ctx), vision: info?.vision ?? false, thinking: info?.thinking ?? false }
   }
@@ -101,7 +102,7 @@ export async function prepareLocalBrain(model: string): Promise<PreparedLocal> {
     .then((r) => r.json() as Promise<{ models: Array<{ name: string; size: number }> }>)
     .catch(() => ({ models: [] }))
   const sizeGb = (tags.models.find((m) => m.name === model)?.size ?? 0) / GB
-  const ctx = Math.min(contextFor(sizeGb, hw), caps.contextLength ?? Infinity, ctxLimit.get(model) ?? Infinity)
+  const ctx = Math.min(contextFor(sizeGb, hw, long), caps.contextLength ?? Infinity, ctxLimit.get(model) ?? Infinity)
   try {
     return { model: await ensureContext(base, model, ctx), contextTokens: ctx, vision: caps.vision, thinking: caps.thinking }
   } catch (e) {

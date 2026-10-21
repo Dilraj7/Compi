@@ -106,6 +106,23 @@ export function topK<T>(items: T[], score: (t: T) => number, k: number, group: (
   return out
 }
 
+/** Sans clavier ni souris depuis ce temps, le PC est « au repos ». */
+export const IDLE_SEC = 120
+/** Pendant que l'utilisateur travaille : une pause entre deux lots (≈ 20 % de la carte graphique au plus). */
+export const GENTLE_PAUSE_MS = 4000
+
+export type IndexPace = 'full' | 'gentle' | 'wait'
+
+/**
+ * Rythme de l'indexation de fond : à fond quand le PC est au repos, doucement pendant
+ * qu'on travaille, en pause sur batterie. Le 21/10, une première indexation (3 000
+ * documents) a occupé Ollama 73 min d'affilée dès l'ouverture de session.
+ */
+export function indexPace(o: { idleSec: number; onBattery: boolean }): IndexPace {
+  if (o.onBattery) return 'wait'
+  return o.idleSec >= IDLE_SEC ? 'full' : 'gentle'
+}
+
 /** Consignes attendues par chaque famille de modèles pour une question ou un passage. */
 export function embedPrefix(model: string, kind: 'query' | 'passage'): string {
   const m = model.toLowerCase()

@@ -58,6 +58,15 @@ class ConversationStore {
     }
   }
 
+  /** Empreinte des derniers réglages envoyés au moteur dans cette discussion (bloc <reglages>). */
+  setSettingsKey(id: string, key: string): void {
+    const conv = this.get(id)
+    if (conv && conv.settingsKey !== key) {
+      conv.settingsKey = key
+      this.scheduleSave()
+    }
+  }
+
   /** Un e-mail ou une invitation a été lu dans cette discussion (consignes piégées possibles). */
   markExternal(id: string): void {
     const conv = this.get(id)

@@ -187,8 +187,11 @@ describe('conseiller', () => {
     const gptOss = CATALOG.find((m) => m.id === 'gpt-oss:20b')!
     expect(fitFor(gptOss, rx6800)).toBe('gpu')
     expect(fitFor(gptOss, laptop)).toBeNull()
-    expect(contextFor(6.6, rx6800)).toBe(65536)
-    expect(contextFor(14, rx6800)).toBe(32768)
+    // 32 000 jetons par défaut ; 64 000 seulement si demandé et avec 6 Go de marge sur la carte.
+    expect(contextFor(6.6, rx6800)).toBe(32768)
+    expect(contextFor(6.6, rx6800, true)).toBe(65536)
+    expect(contextFor(14, rx6800, true)).toBe(32768)
+    expect(contextFor(6.6, laptop, true)).toBe(32768)
   })
 })
 

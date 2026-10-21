@@ -3,6 +3,7 @@ import { attentionView } from '@shared/attention'
 import { soundFor } from '@shared/sounds'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Island } from './components/Island'
+import { useLiveMedia } from './components/Live'
 import { maybePlay } from './lib/sounds'
 import { setInteractive, TAB_ORDER, useCompi } from './store'
 
@@ -210,14 +211,20 @@ function usePanelKeys(): void {
   }, [])
 }
 
-/** Mini-jauges de l'îlot (option) : l'activité du PC est mesurée toutes les 3 s. */
+/**
+ * Mini-jauges de l'îlot (option) : l'activité du PC est mesurée toutes les 3 s, seulement
+ * quand elles sont à l'écran (une réponse en cours ou la musique prennent leur place).
+ */
 function useIslandMonitor(): void {
   const on = useCompi((s) => Boolean(s.settings?.monitor.island))
+  const busy = useCompi((s) => s.streamingId !== null || s.sessions.some((x) => x.status === 'working'))
+  const media = useLiveMedia()
+  const visible = on && !busy && !media
   useEffect(() => {
-    if (!on) return
+    if (!visible) return
     void window.compi.perfWatch('island', true, 3000).then((p) => p && useCompi.getState().setPerf(p))
     return () => void window.compi.perfWatch('island', false)
-  }, [on])
+  }, [visible])
 }
 
 export function App() {

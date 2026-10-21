@@ -156,7 +156,7 @@ export function activityLabel(name: string, input: Input = {}): string {
       case 'search_files':
         return `Recherche sur le PC : ${str(input.query)}`
       case 'use_extension':
-        return `Chargement de l’extension ${str(input.name)}`
+        return `Chargement des outils : ${str(input.name)}`
       case 'open_app':
         return `Ouverture de ${str(input.name)}`
       case 'focus_window':
