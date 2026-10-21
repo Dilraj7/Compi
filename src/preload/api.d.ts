@@ -22,6 +22,9 @@ import type {
   ConnectorTestResult,
   Conversation,
   ConversationMeta,
+  DictationCommand,
+  DictationOutcome,
+  DictationStatRow,
   GoogleConnectResult,
   HooksPreview,
   IslandCommand,
@@ -38,6 +41,8 @@ import type {
   Reminder,
   Routine,
   RoutineDraft,
+  SpeechModelId,
+  SpeechModelStatus,
   SemanticPassage,
   SemanticStatus,
   SendRequest,
@@ -211,6 +216,27 @@ export interface CompiApi {
   voiceModelCancel(): Promise<void>
   voiceModelDelete(model: VoiceModelId): Promise<VoiceModelStatus>
   onVoiceModelProgress(cb: (s: VoiceModelStatus) => void): Unsubscribe
+  // dictée partout
+  speechModelStatus(model: SpeechModelId): Promise<SpeechModelStatus>
+  /** Télécharge le modèle de la dictée partout (après l'accord de l'utilisateur). */
+  speechModelDownload(model: SpeechModelId): Promise<SpeechModelStatus>
+  speechModelCancel(): Promise<void>
+  speechModelDelete(model: SpeechModelId): Promise<SpeechModelStatus>
+  onSpeechModelProgress(cb: (s: SpeechModelStatus) => void): Unsubscribe
+  onDictationCommand(cb: (c: DictationCommand) => void): Unsubscribe
+  /** Son en 16 kHz mono → texte (sherpa-onnx, sur le PC). */
+  dictationTranscribe(audio: Float32Array): Promise<string>
+  /** Charge d'avance le modèle de la dictée partout (dictée vers Compi qui commence). */
+  dictationPrepare(): void
+  /** Texte transcrit → collé dans l'application visée (ou demande à Compi). */
+  dictationDeliver(text: string): Promise<DictationOutcome>
+  /** L'îlot n'a pas pu enregistrer ou transcrire. */
+  dictationEnded(message?: string): void
+  /** Bouton « Terminer » de la pastille. */
+  dictationStop(): void
+  dictationStats(): Promise<DictationStatRow[]>
+  clearDictationStats(): Promise<DictationStatRow[]>
+  onDictationStats(cb: (rows: DictationStatRow[]) => void): Unsubscribe
   // ce que je sais de toi
   memory(): Promise<MemoryItem[]>
   addMemory(fact: string): Promise<MemoryItem[]>

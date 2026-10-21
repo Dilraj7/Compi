@@ -2,6 +2,7 @@
 // du raccourci), puis transcrit avec Whisper sur le PC. Le son ne quitte
 // jamais l'ordinateur ; seule la transcription est envoyée à Compi.
 
+import { DICTATION_MAX_MS } from '@shared/dictation'
 import { cleanTranscript, silenceStep, VOICE_MODELS, type SilenceState } from '@shared/voice'
 import type { VoiceModelId, VoiceVariant } from '@shared/types'
 import type { WorkerRequest, WorkerResponse } from './whisper.worker'
@@ -118,11 +119,20 @@ async function toPcm16k(blob: Blob): Promise<Float32Array> {
   }
 }
 
+export interface ListenOptions {
+  /** Arrêt après une pause (dictée vers Compi, par défaut). Sinon : jusqu'à l'ordre d'arrêt (dictée partout). */
+  autoStop?: boolean
+  /** Remplace Whisper : reçoit le son en 16 kHz et renvoie le texte (sherpa-onnx, dans Compi). */
+  transcribe?: (audio: Float32Array) => Promise<string>
+}
+
+export const TOO_SHORT = 'Trop court : maintiens le raccourci pendant que tu parles.'
+
 /**
  * Démarre l'écoute. `ready` (le chargement du modèle) se fait pendant que
  * l'utilisateur parle ; la transcription l'attend si besoin.
  */
-export async function startListening(cb: VoiceCallbacks, ready: Promise<void>): Promise<void> {
+export async function startListening(cb: VoiceCallbacks, ready: Promise<void>, opts: ListenOptions = {}): Promise<void> {
   if (rec) return
   cb.phase('starting')
   let stream: MediaStream
@@ -157,6 +167,11 @@ export async function startListening(cb: VoiceCallbacks, ready: Promise<void>): 
     for (const s of samples) sum += s * s
     const level = Math.min(1, Math.sqrt(sum / samples.length) * 4)
     cb.level(level)
+    if (opts.autoStop === false) {
+      // Dictée partout : la touche décide ; filet de sécurité si l'ordre d'arrêt se perd.
+      if (Date.now() - silence.startedAt >= DICTATION_MAX_MS + 5000) stopListening()
+      return
+    }
     const step = silenceStep(silence, level, Date.now())
     silence = step.state
     if (step.stop === 'nothing') cancelListening('Je n’ai rien entendu.')
@@ -175,9 +190,11 @@ export async function startListening(cb: VoiceCallbacks, ready: Promise<void>): 
     cb.phase('transcribing')
     try {
       const audio = await toPcm16k(new Blob(chunks, { type: 'audio/webm' }))
-      if (audio.length < 16_000 * 0.4) throw new Error('Trop court : maintiens le raccourci pendant que tu parles.')
+      if (audio.length < 16_000 * 0.4) throw new Error(TOO_SHORT)
       await ready
-      const text = cleanTranscript((await call({ type: 'transcribe', audio, language: 'french' })) ?? '')
+      const text = opts.transcribe
+        ? (await opts.transcribe(audio)).trim()
+        : cleanTranscript((await call({ type: 'transcribe', audio, language: 'french' })) ?? '')
       cb.phase('idle')
       cb.result(text)
     } catch (e) {

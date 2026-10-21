@@ -6,6 +6,7 @@ import type {
   Brain,
   ChatMessage,
   ClaudeSession,
+  DictationCommand,
   IslandMode,
   IslandNotice,
   MediaInfo,
@@ -22,7 +23,7 @@ import type {
 import type { PerfSnapshot } from '@shared/perf'
 import { noticeDuration } from '@shared/notice'
 import { onSpeaking, speak, speakStream, stopSpeaking, type SpeechStream } from './lib/speech'
-import { cancelListening, isRecording, loadModel, startListening, stopListening, type VoicePhase } from './lib/voice'
+import { cancelListening, isRecording, loadModel, startListening, stopListening, TOO_SHORT, type VoicePhase } from './lib/voice'
 
 const api = () => window.compi
 
@@ -97,8 +98,11 @@ interface CompiState {
   speakingId: string | null
   /** Le dernier message a été dicté (pour « Lire les réponses : quand je parle »). */
   spokenInput: boolean
-  /** Dictée : écoute, transcription, niveau du micro (0 à 1), préparation du modèle. */
-  dictation: { phase: VoicePhase; level: number; preparing: number | null; error: string | null }
+  /**
+   * Dictée : écoute, transcription, niveau du micro (0 à 1), préparation du modèle.
+   * `everywhere` : dictée partout en cours (touche maintenue), vers l'application visée.
+   */
+  dictation: { phase: VoicePhase; level: number; preparing: number | null; error: string | null; everywhere: DictationEverywhere | null }
   /** Activité du PC (Ce PC, îlot) : dernier instantané reçu. */
   perf: PerfSnapshot | null
   /** Jeton : la première carte en attente prend le clavier (Alt+Maj+Espace, question par raccourci). */
@@ -154,10 +158,19 @@ interface CompiState {
   /** Fin de la prise de parole : transcription puis envoi. */
   stopDictation(): void
   cancelDictation(): void
+  /** Ordre de la touche de dictée partout (processus principal). */
+  onDictationCommand(c: DictationCommand): Promise<void>
   setPerf(p: PerfSnapshot | null): void
   focusPending(): void
   setPalette(on: boolean): void
   focusActivity(f: 'perf' | null): void
+}
+
+/** Dictée partout en cours : mode, touche, application visée (connue juste après le début). */
+export interface DictationEverywhere {
+  handsFree: boolean
+  keyLabel: string
+  app?: string
 }
 
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
@@ -173,6 +186,8 @@ let sleepTimer: ReturnType<typeof setTimeout> | undefined
 let hoverTimer: ReturnType<typeof setTimeout> | undefined
 let hintTimer: ReturnType<typeof setTimeout> | undefined
 let dictationErrorTimer: ReturnType<typeof setTimeout> | undefined
+/** Dictée partout : arrêt demandé avant que le micro soit ouvert. */
+let pendingEnd: 'stop' | 'cancel' | null = null
 
 const SLEEP_AFTER_MS = 4 * 60_000
 
@@ -267,7 +282,7 @@ export const useCompi = create<CompiState>((set, get) => {
     speaking: false,
     speakingId: null,
     spokenInput: false,
-    dictation: { phase: 'idle', level: 0, preparing: null, error: null },
+    dictation: { phase: 'idle', level: 0, preparing: null, error: null, everywhere: null },
     perf: null,
     focusPendingAt: 0,
     palette: false,
@@ -535,8 +550,11 @@ export const useCompi = create<CompiState>((set, get) => {
       if (isRecording() || get().dictation.phase !== 'idle') return
       const s = get().settings
       if (!s) return
-      const status = await api().voiceModelStatus(s.voice.model)
-      if (!status.installed || !status.variant) {
+      // Le modèle de la dictée partout (Parakeet, tamoul) s'il est installé, sinon Whisper.
+      const engine = s.dictation.engine
+      const speech = engine !== 'whisper' && (await api().speechModelStatus(engine)).installed
+      const status = speech ? null : await api().voiceModelStatus(s.voice.model)
+      if (status && (!status.installed || !status.variant)) {
         // Première fois : on montre où installer la dictée (avec l'accord de l'utilisateur).
         set({ settingsFocus: 'voice' })
         get().open('settings', { focus: true })
@@ -552,9 +570,15 @@ export const useCompi = create<CompiState>((set, get) => {
         dictationErrorTimer = setTimeout(() => setDictation({ error: null }), 7000)
       }
       setDictation({ error: null })
-      const ready = loadModel(s.voice.model, status.variant, (r) => setDictation({ preparing: r })).finally(() => setDictation({ preparing: null }))
-      // Une erreur de chargement est signalée à la transcription.
-      ready.catch(() => undefined)
+      let ready: Promise<void> = Promise.resolve()
+      if (status?.variant) {
+        ready = loadModel(s.voice.model, status.variant, (r) => setDictation({ preparing: r })).finally(() => setDictation({ preparing: null }))
+        // Une erreur de chargement est signalée à la transcription.
+        ready.catch(() => undefined)
+      } else {
+        // Le modèle se charge dans Compi pendant que l'utilisateur parle.
+        api().dictationPrepare()
+      }
       await startListening(
         {
           phase: (phase) => setDictation({ phase }),
@@ -567,11 +591,86 @@ export const useCompi = create<CompiState>((set, get) => {
           },
           error: showError
         },
-        ready
+        ready,
+        { transcribe: speech ? (audio) => api().dictationTranscribe(audio) : undefined }
       )
     },
-    stopDictation: () => stopListening(),
-    cancelDictation: () => cancelListening(),
+    stopDictation: () => {
+      // Bouton de la pastille pendant une dictée partout : Compi passe à l'écriture.
+      if (get().dictation.everywhere) api().dictationStop()
+      stopListening()
+    },
+    cancelDictation: () => {
+      if (get().dictation.everywhere) api().dictationEnded()
+      cancelListening()
+    },
+
+    onDictationCommand: async (c) => {
+      const setDictation = (patch: Partial<CompiState['dictation']>): void => set((st) => ({ dictation: { ...st.dictation, ...patch } }))
+      const d = get().dictation
+      if (c.type === 'target') {
+        if (d.everywhere) setDictation({ everywhere: { ...d.everywhere, app: c.app } })
+        return
+      }
+      if (c.type === 'stop' || c.type === 'cancel') {
+        if (!d.everywhere) return
+        // Micro pas encore ouvert : l'ordre s'applique dès qu'il l'est.
+        if (d.phase !== 'recording') pendingEnd = c.type
+        else if (c.type === 'stop') stopListening()
+        else cancelListening(c.message)
+        return
+      }
+      const s = get().settings
+      if (!s || isRecording() || d.phase !== 'idle') {
+        api().dictationEnded(s ? 'Une dictée est déjà en cours.' : undefined)
+        return
+      }
+      pendingEnd = null
+      // La voix de Compi se tait : le micro ne doit pas l'entendre.
+      stopSpeaking()
+      setDictation({ error: null, everywhere: { handsFree: c.handsFree, keyLabel: c.keyLabel } })
+      let ready: Promise<void> = Promise.resolve()
+      let transcribe: ((audio: Float32Array) => Promise<string>) | undefined = (audio) => api().dictationTranscribe(audio)
+      if (c.engine === 'whisper') {
+        const status = await api().voiceModelStatus(s.voice.model)
+        if (!status.installed || !status.variant) {
+          setDictation({ everywhere: null })
+          api().dictationEnded('Pour dicter avec Whisper, télécharge-le d’abord : Réglages › Me parler.')
+          return
+        }
+        ready = loadModel(s.voice.model, status.variant)
+        ready.catch(() => undefined)
+        transcribe = undefined
+      }
+      await startListening(
+        {
+          phase: (phase) => {
+            setDictation(phase === 'idle' ? { phase, everywhere: null } : { phase })
+            if (phase === 'recording' && pendingEnd) {
+              const end = pendingEnd
+              pendingEnd = null
+              if (end === 'stop') stopListening()
+              else cancelListening()
+            }
+          },
+          level: (level) => setDictation({ level }),
+          result: (text) => {
+            void api()
+              .dictationDeliver(text)
+              .then((outcome) => {
+                // « Compi, … » : une demande à l'assistant, avec les cartes habituelles.
+                if (outcome.kind !== 'compi') return
+                get().open('chat', { focus: true })
+                void get().send(outcome.request, { voice: true })
+              })
+          },
+          // Un appui trop court n'est pas une erreur : rien n'est dit.
+          error: (message) => api().dictationEnded(message === TOO_SHORT ? undefined : message)
+        },
+        ready,
+        { autoStop: false, transcribe }
+      )
+    },
 
     setPerf: (perf) => set({ perf }),
     focusPending: () => set({ focusPendingAt: Date.now() }),

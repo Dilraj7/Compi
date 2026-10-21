@@ -16,6 +16,7 @@ import type {
   ClaudeSession,
   ClipItem,
   Conversation,
+  DictationStatRow,
   HardwareInfo,
   IslandCommand,
   IslandNotice,
@@ -33,6 +34,8 @@ import type {
   MessagesStatus,
   SkillDraft,
   SkillInfo,
+  SpeechModelId,
+  SpeechModelStatus,
   TimerState,
   TodayInfo,
   VoiceInfo,
@@ -41,6 +44,8 @@ import type {
   VoiceVariant
 } from '@shared/types'
 import { VOICE_MODELS } from '@shared/voice'
+import { addDictation, DEFAULT_DICTATION } from '@shared/dictation'
+import { SPEECH_MODELS } from '@shared/speechModels'
 import type { OllamaFolder } from '@shared/ollamaFolder'
 import { newPomodoro, newTimer, paused, resumed } from '@shared/timer'
 import { cleanFact, sameFact } from '@shared/memory'
@@ -297,7 +302,7 @@ export function createMockApi(): CompiApi {
     hasCustomKey: params.get('custom') === 'on',
     model: 'claude-opus-5-5',
     effort: 'low',
-    settingsVersion: 11,
+    settingsVersion: 12,
     shortcut: 'Alt+Shift+Space',
     quickShortcut: 'Alt+Shift+C',
     launchAtLogin: true,
@@ -350,6 +355,8 @@ export function createMockApi(): CompiApi {
     showMusic: true,
     voice: { speak: 'voice', voice: '', rate: 1, shortcut: 'Alt+Shift+V', model: 'small' },
     voiceShortcutActive: true,
+    dictation: { ...DEFAULT_DICTATION, enabled: params.get('dictation') === 'on' },
+    dictationKeyActive: params.get('dictation') === 'on',
     clipboardHistory: params.get('clip') === 'on',
     semantic: { enabled: params.get('semantic') === 'ready', model: 'qwen3-embedding:0.6b' },
     messages: {
@@ -528,6 +535,27 @@ export function createMockApi(): CompiApi {
     sizeBytes: voiceInstalled[model] ? VOICE_MODELS[model].variants[voiceInstalled[model]!].approxMb * 1e6 : undefined,
     downloading: voiceDl ?? undefined
   })
+  // Dictée partout (scénarios ?speech=installed, ?stats=demo) : rien n'est téléchargé.
+  const speechCh = channel<SpeechModelStatus>()
+  let speechInstalled: Partial<Record<SpeechModelId, boolean>> = params.get('speech') === 'installed' ? { parakeet: true } : {}
+  let speechDl: SpeechModelStatus['downloading'] | null = null
+  let speechCancelled = false
+  const speechStatus = (model: SpeechModelId): SpeechModelStatus => ({
+    model,
+    installed: Boolean(speechInstalled[model]),
+    sizeBytes: speechInstalled[model] ? SPEECH_MODELS[model].approxMb * 1e6 : undefined,
+    downloading: speechDl ?? undefined
+  })
+  const statsCh = channel<DictationStatRow[]>()
+  let dictationRows: DictationStatRow[] = []
+  if (params.get('stats') === 'demo') {
+    const apps = ['outlook', 'teams', 'code', 'chrome']
+    for (let i = 0; i < 30; i++)
+      for (const [j, app] of apps.entries()) {
+        const words = Math.round(((i * 37 + j * 53) % 90) + (i % 7 === 6 ? 0 : 40) / (j + 1))
+        if (words > 15) dictationRows = addDictation(dictationRows, { at: Date.now() - (29 - i) * 86_400_000, app, words, speakingMs: words * 400 })
+      }
+  }
   const VOICES: VoiceInfo[] = [
     { id: 'julie', name: 'Julie', lang: 'fr-FR', gender: 'Female' },
     { id: 'paul', name: 'Paul', lang: 'fr-FR', gender: 'Male' },
@@ -1175,6 +1203,46 @@ export function createMockApi(): CompiApi {
       return voiceStatus(model)
     },
     onVoiceModelProgress: voiceCh.on,
+    speechModelStatus: async (model) => speechStatus(model),
+    speechModelDownload: async (model) => {
+      const total = SPEECH_MODELS[model].approxMb * 1e6
+      for (let received = 0; received <= total; received += total / 25) {
+        if (speechCancelled) {
+          speechCancelled = false
+          speechDl = null
+          speechCh.emit(speechStatus(model))
+          throw new Error('Téléchargement annulé.')
+        }
+        speechDl = { model, received, total }
+        speechCh.emit(speechStatus(model))
+        await new Promise((r) => setTimeout(r, 120))
+      }
+      speechDl = null
+      speechInstalled = { ...speechInstalled, [model]: true }
+      speechCh.emit(speechStatus(model))
+      return speechStatus(model)
+    },
+    speechModelCancel: async () => {
+      speechCancelled = Boolean(speechDl)
+    },
+    speechModelDelete: async (model) => {
+      speechInstalled = { ...speechInstalled, [model]: false }
+      return speechStatus(model)
+    },
+    onSpeechModelProgress: speechCh.on,
+    onDictationCommand: () => () => undefined,
+    dictationTranscribe: async () => '',
+    dictationPrepare: () => undefined,
+    dictationDeliver: async () => ({ kind: 'empty' }),
+    dictationEnded: () => undefined,
+    dictationStop: () => undefined,
+    dictationStats: async () => dictationRows,
+    clearDictationStats: async () => {
+      dictationRows = []
+      statsCh.emit(dictationRows)
+      return dictationRows
+    },
+    onDictationStats: statsCh.on,
     speak: async (text) => {
       await new Promise((r) => setTimeout(r, 150))
       return silentWav(text)

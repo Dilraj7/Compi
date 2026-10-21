@@ -1,8 +1,10 @@
 import { randomBytes } from 'node:crypto'
-import { join } from 'node:path'
+import { copyFileSync, existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { app } from 'electron'
+import { DEFAULT_DICTATION, isDictationKey, isDictationStyle } from '../../shared/dictation'
 import { DEFAULT_PRIVACY } from '../../shared/privacy'
-import type { Settings } from '../../shared/types'
+import type { DictationSettings, Settings } from '../../shared/types'
 import { readJson, writeJson } from './jsonFile'
 
 export const DEFAULT_SHORTCUT = 'Alt+Shift+Space'
@@ -22,8 +24,9 @@ export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
  * v9 : messages en attente (notifications des messageries), catégorie « messages ».
  * v10 : sons, raccourcis des autorisations, activité du PC, durée de chargement du modèle local.
  * v11 : sources de l'agenda (agendas Google choisis, connecteurs, liens .ics).
+ * v12 : dictée partout (désactivée par défaut). Copie settings.v11.bak.json avant la migration.
  */
-export const SETTINGS_VERSION = 11
+export const SETTINGS_VERSION = 12
 
 /** Modèle d'Ollama pour la recherche par le sens : multilingue, bon en français, ~640 Mo. */
 export const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b'
@@ -61,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   agenda: { googleCalendars: null, sources: [] },
   showMusic: true,
   voice: { speak: 'voice', voice: '', rate: 1, shortcut: DEFAULT_VOICE_SHORTCUT, model: 'small' },
+  dictation: DEFAULT_DICTATION,
   clipboardHistory: false,
   semantic: { enabled: false, model: DEFAULT_EMBED_MODEL },
   messages: { enabled: false, apps: [], remindAfterMin: 60, quietStart: '22:00', quietEnd: '08:00', preview: false, readByCompi: false },
@@ -79,6 +83,43 @@ export const DEFAULT_SETTINGS: Settings = {
 }
 
 type Listener = (s: Settings) => void
+
+/** Réglages de la dictée partout, vérifiés : un fichier modifié à la main ne bloque pas le démarrage. */
+function dictationFrom(raw: Partial<DictationSettings> | undefined): DictationSettings {
+  const d = { ...DEFAULT_DICTATION, ...raw }
+  return {
+    ...d,
+    enabled: d.enabled === true,
+    key: isDictationKey(d.key) ? d.key : DEFAULT_DICTATION.key,
+    engine: d.engine === 'parakeet' || d.engine === 'omnilingual' || d.engine === 'whisper' ? d.engine : DEFAULT_DICTATION.engine,
+    style: isDictationStyle(d.style) ? d.style : DEFAULT_DICTATION.style,
+    appStyles: Array.isArray(d.appStyles)
+      ? d.appStyles
+          .filter((r) => typeof r?.app === 'string' && r.app.trim() && isDictationStyle(r.style))
+          .slice(0, 50)
+          .map((r) => ({ app: r.app.trim().slice(0, 60), style: r.style }))
+      : [],
+    dictionary: Array.isArray(d.dictionary)
+      ? d.dictionary
+          .filter((r) => typeof r?.from === 'string' && typeof r.to === 'string')
+          .slice(0, 300)
+          .map((r) => ({ from: r.from.slice(0, 100), to: r.to.slice(0, 4000) }))
+      : [],
+    compiPrefix: d.compiPrefix !== false,
+    polishOnline: d.polishOnline === true,
+    typingWpm: Number.isFinite(d.typingWpm) && d.typingWpm >= 5 && d.typingWpm <= 250 ? Math.round(d.typingWpm) : DEFAULT_DICTATION.typingWpm
+  }
+}
+
+/** Avant d'écrire un format plus récent : copie de l'ancien fichier, une seule fois par version. */
+function backupBeforeMigration(path: string, from: number): void {
+  const bak = join(dirname(path), `settings.v${from}.bak.json`)
+  try {
+    if (existsSync(path) && !existsSync(bak)) copyFileSync(path, bak)
+  } catch {
+    // copie impossible (disque plein…) : la migration garde de toute façon toutes les valeurs
+  }
+}
 
 class SettingsStore {
   private data: Settings = DEFAULT_SETTINGS
@@ -104,6 +145,7 @@ class SettingsStore {
         sources: Array.isArray(raw.agenda?.sources) ? raw.agenda.sources : []
       },
       voice: { ...DEFAULT_SETTINGS.voice, ...raw.voice },
+      dictation: dictationFrom(raw.dictation),
       semantic: { ...DEFAULT_SETTINGS.semantic, ...raw.semantic },
       messages: { ...DEFAULT_SETTINGS.messages, ...raw.messages },
       sounds: { ...DEFAULT_SETTINGS.sounds, ...raw.sounds },
@@ -111,6 +153,7 @@ class SettingsStore {
       monitor: { ...DEFAULT_SETTINGS.monitor, ...raw.monitor }
     }
     if ((raw.settingsVersion ?? 1) < SETTINGS_VERSION) {
+      backupBeforeMigration(this.path, raw.settingsVersion ?? 1)
       if (this.data.shortcut === 'Control+Shift+Space') this.data.shortcut = DEFAULT_SHORTCUT
       this.data.settingsVersion = SETTINGS_VERSION
       this.save()
@@ -138,6 +181,7 @@ class SettingsStore {
       day: { ...this.data.day, ...patch.day },
       agenda: { ...this.data.agenda, ...patch.agenda },
       voice: { ...this.data.voice, ...patch.voice },
+      dictation: dictationFrom({ ...this.data.dictation, ...patch.dictation }),
       semantic: { ...this.data.semantic, ...patch.semantic },
       messages: { ...this.data.messages, ...patch.messages },
       sounds: { ...this.data.sounds, ...patch.sounds },

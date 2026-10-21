@@ -73,7 +73,7 @@ export function voiceModelStatus(id: VoiceModelId): VoiceModelStatus {
   }
 }
 
-interface TreeEntry {
+export interface TreeEntry {
   path: string
   size: number
   oid: string
@@ -90,13 +90,13 @@ export function gitBlobHasher(size: number): ReturnType<typeof createHash> {
   return createHash('sha1').update(`blob ${size}\0`)
 }
 
-async function tree(repo: string, revision: string, folder: string, signal: AbortSignal): Promise<TreeEntry[]> {
+export async function tree(repo: string, revision: string, folder: string, signal: AbortSignal): Promise<TreeEntry[]> {
   const res = await net.fetch(`${hfBase()}/api/models/${repo}/tree/${revision}${folder ? `/${folder}` : ''}`, { signal })
   if (!res.ok) throw new Error(`Hugging Face a répondu ${res.status}.`)
   return (await res.json()) as TreeEntry[]
 }
 
-async function downloadFile(url: string, dest: string, entry: TreeEntry, signal: AbortSignal, onBytes: (n: number) => void): Promise<void> {
+export async function downloadFile(url: string, dest: string, entry: TreeEntry, signal: AbortSignal, onBytes: (n: number) => void): Promise<void> {
   mkdirSync(dirname(dest), { recursive: true })
   const part = `${dest}.part`
   const res = await net.fetch(url, { signal })

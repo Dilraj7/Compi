@@ -24,6 +24,7 @@ export type HostFn =
   | 'theme'
   | 'copy'
   | 'paste'
+  | 'clip_text'
   | 'ocr_languages'
   | 'ocr_image'
   | 'ocr_pdf'

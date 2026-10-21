@@ -17,6 +17,7 @@ import type {
   Settings,
   SkillDraft,
   SoundSettings,
+  SpeechModelId,
   VoiceModelId,
   VoiceSettings,
   VoiceVariant
@@ -82,6 +83,22 @@ import {
   voiceModelStatus
 } from './voice/model'
 import { isVoiceModel } from '../shared/voice'
+import { isSpeechModel } from '../shared/speechModels'
+import {
+  applyDictationSettings,
+  deliverDictation,
+  dictationEnded,
+  dictationKeyActive,
+  hookDictationPower,
+  onDictationKeyActive,
+  prepareDictation,
+  stopDictationEverywhere,
+  stopSession,
+  transcribeDictation
+} from './dictation'
+import { clearDictationStats, dictationStats } from './dictation/stats'
+import { unloadSpeech } from './speech/engine'
+import { cancelSpeechDownload, cleanPartialSpeechDownloads, deleteSpeechModel, downloadSpeechModel, speechModelStatus } from './speech/models'
 import { restrictPermissions } from './permissions'
 import { clearSent, listSent } from './privacy/log'
 import { clearApprovalLog, listApprovalLog } from './privacy/approvalLog'
@@ -129,6 +146,7 @@ function publicSettings(): PublicSettings {
     shortcutActive: shortcutActive(),
     quickShortcutActive: quickShortcutActive(),
     voiceShortcutActive: voiceShortcutActive(),
+    dictationKeyActive: dictationKeyActive(),
     approvalKeysTaken,
     hasGoogleClient: hasGoogleClient(),
     connectorSecrets,
@@ -668,6 +686,26 @@ function registerIpc(): void {
   ipcMain.handle(IPC.voiceModelCancel, () => cancelVoiceDownload())
   ipcMain.handle(IPC.voiceModelDelete, (_e, id: VoiceModelId) => deleteVoiceModel(modelId(id)))
 
+  // Dictée partout
+  const speechId = (id: unknown): SpeechModelId => {
+    if (!isSpeechModel(id)) throw new Error('Modèle inconnu.')
+    return id
+  }
+  ipcMain.handle(IPC.speechModelStatus, (_e, id: SpeechModelId) => speechModelStatus(speechId(id)))
+  ipcMain.handle(IPC.speechModelDownload, (_e, id: SpeechModelId) => downloadSpeechModel(speechId(id), (st) => emit(IPC.speechModelProgress, st)))
+  ipcMain.handle(IPC.speechModelCancel, () => cancelSpeechDownload())
+  ipcMain.handle(IPC.speechModelDelete, (_e, id: SpeechModelId) => {
+    unloadSpeech()
+    return deleteSpeechModel(speechId(id))
+  })
+  ipcMain.handle(IPC.dictationTranscribe, (_e, audio: Float32Array) => transcribeDictation(audio))
+  ipcMain.handle(IPC.dictationDeliver, (_e, text: string) => deliverDictation(String(text ?? '')))
+  ipcMain.on(IPC.dictationEnded, (_e, message?: string) => dictationEnded(typeof message === 'string' ? message.slice(0, 300) : undefined))
+  ipcMain.on(IPC.dictationStop, () => stopSession(true))
+  ipcMain.on(IPC.dictationPrepare, () => prepareDictation())
+  ipcMain.handle(IPC.dictationStats, () => dictationStats())
+  ipcMain.handle(IPC.dictationStatsClear, () => clearDictationStats())
+
   // Ce que je sais de toi
   ipcMain.handle(IPC.memoryList, () => listMemory())
   ipcMain.handle(IPC.memoryAdd, (_e, fact: string) => {
@@ -780,6 +818,7 @@ app.whenReady().then(async () => {
   if (voiceKey?.replaced) settings.update({ voice: { ...settings.get().voice, shortcut: voiceKey.accelerator } })
   handleModelScheme()
   cleanPartialDownloads()
+  cleanPartialSpeechDownloads()
   restrictPermissions()
 
   const win = createNotchWindow()
@@ -807,6 +846,8 @@ app.whenReady().then(async () => {
   hookMediaPower()
   hookMessagesPower()
   hookPerfPower()
+  hookDictationPower()
+  onDictationKeyActive(() => emit(IPC.settingsChanged, publicSettings()))
   syncMessages()
   onApprovalShortcut(onApprovalKey)
   approvals.onChange(syncApprovalKeys)
@@ -830,6 +871,7 @@ app.whenReady().then(async () => {
       if (app.getLoginItemSettings().openAtLogin !== s.launchAtLogin) app.setLoginItemSettings({ openAtLogin: s.launchAtLogin })
       appliedLogin = s.launchAtLogin
     }
+    applyDictationSettings(s.dictation)
     emit(IPC.settingsChanged, publicSettings())
   }
   applySystemSettings(settings.get())
@@ -856,6 +898,9 @@ app.on('before-quit', () => {
   stopQuick()
   watchMedia(false, () => undefined)
   cancelVoiceDownload()
+  cancelSpeechDownload()
+  stopDictationEverywhere()
+  unloadSpeech()
   stopHost()
   stopMeetings()
   stopTimers()

@@ -1,12 +1,14 @@
-// Réglages « Me parler » : la dictée avec Whisper, sur le PC. Le modèle n'est
+// Réglages « Me parler » : la dictée vers Compi, sur le PC. Elle utilise le
+// modèle de la dictée partout s'il est installé, sinon Whisper. Un modèle n'est
 // téléchargé qu'après un clic explicite, avec sa taille affichée ; on peut
 // annuler, puis le supprimer.
 
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { Cpu, Download, Lock, Mic, Trash2, X, Zap } from 'lucide-react'
+import { SPEECH_MODELS } from '@shared/speechModels'
 import { sizeLabel, VOICE_MODELS } from '@shared/voice'
-import type { PublicSettings, Settings, VoiceModelId, VoiceModelStatus, VoiceVariant } from '@shared/types'
+import type { PublicSettings, Settings, SpeechModelId, SpeechModelStatus, VoiceModelId, VoiceModelStatus, VoiceVariant } from '@shared/types'
 import { useCompi } from '../store'
 import { detectVariant, unloadModel } from '../lib/voice'
 import { Badge, Button, Row, Section, Segmented, ShortcutInput, prettyShortcut } from '../components/ui'
@@ -20,6 +22,9 @@ export function DictationSection({ s, update }: Props) {
   const [status, setStatus] = useState<VoiceModelStatus | null>(null)
   const [variant, setVariant] = useState<VoiceVariant | null>(null)
   const [error, setError] = useState('')
+  // Modèle de la dictée partout (Parakeet, tamoul) : s'il est installé, la dictée vers Compi s'en sert aussi.
+  const speechId: SpeechModelId | null = s.dictation.engine === 'whisper' ? null : s.dictation.engine
+  const [speech, setSpeech] = useState<SpeechModelStatus | null>(null)
   const focus = useCompi((st) => st.settingsFocus)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -33,6 +38,12 @@ export function DictationSection({ s, update }: Props) {
     void window.compi.voiceModelStatus(v.model).then(setStatus)
   }, [v.model])
 
+  useEffect(() => {
+    if (!speechId) return
+    void window.compi.speechModelStatus(speechId).then(setSpeech)
+    return window.compi.onSpeechModelProgress((st) => st.model === speechId && setSpeech(st))
+  }, [speechId])
+
   // Arrivée depuis le raccourci alors que la dictée n'est pas installée.
   useEffect(() => {
     if (focus !== 'voice') return
@@ -41,7 +52,10 @@ export function DictationSection({ s, update }: Props) {
   }, [focus])
 
   const dl = status?.downloading
-  const installed = status?.installed
+  const useSpeech = Boolean(speechId && speech?.model === speechId && speech.installed)
+  // Encore inconnu : rien ne s'affiche plutôt que de proposer Whisper pour rien.
+  const speechPending = Boolean(speechId) && speech?.model !== speechId
+  const installed = status?.installed || useSpeech
   const chosen = installed && status?.variant ? status.variant : variant ?? 'gpu'
   const def = VOICE_MODELS[v.model]
   const approx = def.variants[chosen].approxMb
@@ -61,15 +75,22 @@ export function DictationSection({ s, update }: Props) {
   return (
     <div ref={ref} className="scroll-mt-2">
       <Section title="Me parler" hint="Ta voix est transcrite sur ton PC : elle n’est jamais envoyée, seul le texte part à Compi.">
-        {!installed && !dl && (
+        {!installed && !dl && !speechPending && (
           <div className="space-y-3 px-3.5 py-3.5">
             <div className="flex items-start gap-3">
               <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[var(--led)]/10 text-[var(--led)]">
                 <Mic size={17} />
               </span>
               <div className="min-w-0 text-[12.5px] leading-snug text-fog-300">
-                Maintiens <b className="text-fog-100">{prettyShortcut(v.shortcut || 'Alt+Shift+V')}</b>, parle, puis relâche : Compi écrit ce que tu dis et te répond. Il faut d’abord
-                télécharger le modèle de reconnaissance vocale (Whisper), une seule fois.
+                {v.shortcut ? (
+                  <>
+                    Maintiens <b className="text-fog-100">{prettyShortcut(v.shortcut)}</b>, parle, puis relâche
+                  </>
+                ) : (
+                  'Appuie sur le micro du chat, puis parle'
+                )}{' '}
+                : Compi écrit ce que tu dis et te répond. Il faut d’abord télécharger un modèle de reconnaissance vocale, une seule fois : Whisper ici, ou celui
+                de la « Dictée partout » plus bas, qui sert aussi ici.
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -128,12 +149,15 @@ export function DictationSection({ s, update }: Props) {
             <Row
               label={
                 <span className="inline-flex items-center gap-2">
-                  Dictée prête <Badge color="#4ADE80">{def.label}</Badge>
+                  Dictée prête <Badge color="#4ADE80">{useSpeech && speechId ? SPEECH_MODELS[speechId].label : def.label}</Badge>
                 </span>
               }
               hint={
                 <span className="inline-flex items-center gap-1">
-                  <Lock size={10} /> {status?.sizeBytes ? sizeLabel(status.sizeBytes) : ''} sur ton PC · {status?.variant === 'gpu' ? 'carte graphique' : 'processeur'}
+                  <Lock size={10} />{' '}
+                  {useSpeech
+                    ? 'Le même modèle que la « Dictée partout », sur ton PC'
+                    : `${status?.sizeBytes ? sizeLabel(status.sizeBytes) : ''} sur ton PC · ${status?.variant === 'gpu' ? 'carte graphique' : 'processeur'}`}
                 </span>
               }
             >
@@ -141,22 +165,45 @@ export function DictationSection({ s, update }: Props) {
                 <Button size="sm" variant="ghost" onClick={() => void useCompi.getState().startDictation()}>
                   <Mic size={13} /> Essayer
                 </Button>
-                <Button size="sm" variant="ghost" onClick={remove} title="Supprimer le modèle du PC">
-                  <Trash2 size={13} /> Supprimer
-                </Button>
+                {!useSpeech && (
+                  <Button size="sm" variant="ghost" onClick={remove} title="Supprimer le modèle du PC">
+                    <Trash2 size={13} /> Supprimer
+                  </Button>
+                )}
               </div>
             </Row>
+            {useSpeech && status?.installed && (
+              <Row
+                label="Whisper ne sert plus"
+                hint={`${status.sizeBytes ? `${sizeLabel(status.sizeBytes)} sur ton PC. ` : ''}Tu peux le supprimer : la dictée utilise ${speechId ? SPEECH_MODELS[speechId].label : 'l’autre modèle'}.`}
+              >
+                <Button size="sm" variant="ghost" onClick={remove} title="Supprimer Whisper du PC">
+                  <Trash2 size={13} /> Supprimer
+                </Button>
+              </Row>
+            )}
             <Row
               label="Raccourci de la dictée"
               hint={
-                s.voiceShortcutActive ? (
-                  'Maintiens-le en parlant, ou appuie une fois : je m’arrête quand tu fais une pause.'
-                ) : (
+                !v.shortcut ? (
+                  'Désactivé : le micro du chat reste là. Choisis une combinaison pour le remettre.'
+                ) : !s.voiceShortcutActive ? (
                   <span className="text-led-amber">Inactif : combinaison déjà utilisée. Choisis-en une autre.</span>
+                ) : s.dictation.enabled && s.dictation.compiPrefix ? (
+                  'Maintiens-le en parlant. Avec la « Dictée partout », dire « Compi, … » fait la même chose : tu peux le désactiver.'
+                ) : (
+                  'Maintiens-le en parlant, ou appuie une fois : je m’arrête quand tu fais une pause.'
                 )
               }
             >
-              <ShortcutInput value={v.shortcut} onChange={(shortcut) => update({ voice: { ...v, shortcut } })} />
+              <div className="flex items-center gap-1">
+                {v.shortcut && (
+                  <Button size="sm" variant="ghost" onClick={() => update({ voice: { ...v, shortcut: '' } })} title="Libérer cette combinaison du clavier">
+                    Désactiver
+                  </Button>
+                )}
+                <ShortcutInput value={v.shortcut} onChange={(shortcut) => update({ voice: { ...v, shortcut } })} />
+              </div>
             </Row>
           </>
         )}

@@ -286,19 +286,30 @@ export function SpeakingPeek({ eyes }: { eyes: ReactNode }) {
 
 export function ListeningPeek({ eyes }: { eyes: ReactNode }) {
   const phase = useCompi((s) => s.dictation.phase)
+  const everywhere = useCompi((s) => s.dictation.everywhere)
   const color = PILLS.chat.color
   const listening = phase === 'recording' || phase === 'starting'
+  // Dictée partout : on dit où le texte va s'écrire et comment finir.
+  const hint = everywhere
+    ? listening
+      ? everywhere.handsFree
+        ? `${everywhere.keyLabel} pour finir · Échap pour annuler`
+        : `Relâche ${everywhere.keyLabel} pour écrire${everywhere.app ? ` dans ${everywhere.app}` : ''}`
+      : `Sur ton PC${everywhere.app ? ` · vers ${everywhere.app}` : ''}`
+    : listening
+      ? 'Fais une pause pour envoyer'
+      : 'Sur ton PC, rien n’est envoyé'
   return (
     <div className="flex h-full items-center gap-3.5 pr-3.5 pl-5">
       {eyes}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="led-text text-[12px] leading-tight" style={{ color, textShadow: `0 0 10px ${color}88` }}>
-            {listening ? 'Je t’écoute' : 'Je transcris'}
+            {listening ? 'Je t’écoute' : everywhere ? 'J’écris' : 'Je transcris'}
           </span>
           <LedEq color={color} on={listening} />
         </div>
-        <div className="mt-0.5 truncate text-[12px] text-fog-300">{listening ? 'Fais une pause pour envoyer' : 'Sur ton PC, rien n’est envoyé'}</div>
+        <div className="mt-0.5 truncate text-[12px] text-fog-300">{hint}</div>
       </div>
       {listening && (
         <LiveButton label="Terminer la dictée" onClick={() => useCompi.getState().stopDictation()} big color={color}>

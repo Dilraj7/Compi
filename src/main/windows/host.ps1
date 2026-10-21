@@ -131,6 +131,45 @@ namespace Compi {
     public static bool Tap(ushort vk) { return Send(new[] { Key(vk, false), Key(vk, true) }); }
   }
 
+  // Texte « privé » dans le presse-papier : exclu de l'historique Win+V, du
+  // presse-papier cloud et des gestionnaires de presse-papier (dictée partout).
+  public static class Clip {
+    [DllImport("user32.dll")] static extern bool OpenClipboard(IntPtr h);
+    [DllImport("user32.dll")] static extern bool CloseClipboard();
+    [DllImport("user32.dll")] static extern bool EmptyClipboard();
+    [DllImport("user32.dll")] static extern IntPtr SetClipboardData(uint fmt, IntPtr mem);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern uint RegisterClipboardFormat(string name);
+    [DllImport("kernel32.dll")] static extern IntPtr GlobalAlloc(uint flags, UIntPtr bytes);
+    [DllImport("kernel32.dll")] static extern IntPtr GlobalLock(IntPtr h);
+    [DllImport("kernel32.dll")] static extern bool GlobalUnlock(IntPtr h);
+    [DllImport("kernel32.dll")] static extern IntPtr GlobalFree(IntPtr h);
+
+    static bool Put(uint fmt, byte[] data) {
+      IntPtr h = GlobalAlloc(0x0002, (UIntPtr)data.Length);
+      if (h == IntPtr.Zero) return false;
+      IntPtr p = GlobalLock(h);
+      Marshal.Copy(data, 0, p, data.Length);
+      GlobalUnlock(h);
+      if (SetClipboardData(fmt, h) == IntPtr.Zero) { GlobalFree(h); return false; }
+      return true;
+    }
+
+    // Sans fenêtre propriétaire : aucune application ne peut attendre Compi en vidant le presse-papier.
+    public static bool SetPrivateText(string text) {
+      bool open = false;
+      for (int i = 0; i < 15 && !(open = OpenClipboard(IntPtr.Zero)); i++) Thread.Sleep(20);
+      if (!open) return false;
+      try {
+        EmptyClipboard();
+        byte[] zero = BitConverter.GetBytes(0);
+        Put(RegisterClipboardFormat("ExcludeClipboardContentFromMonitorProcessing"), zero);
+        Put(RegisterClipboardFormat("CanIncludeInClipboardHistory"), zero);
+        Put(RegisterClipboardFormat("CanUploadToCloudClipboard"), zero);
+        return Put(13, Encoding.Unicode.GetBytes(text + "\0"));
+      } finally { CloseClipboard(); }
+    }
+  }
+
   [ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
   interface IAudioEndpointVolume {
     int RegisterControlChangeNotify(IntPtr p);
@@ -388,12 +427,24 @@ $Fns.copy = {
 $Fns.paste = {
   param($a)
   $h = [int64]$a.handle
-  if (-not [Compi.Win]::Focus($h)) { return @{ pasted = $false; reason = 'focus' } }
+  # Dictée partout : on ne reprend jamais la main à une autre fenêtre choisie entre-temps.
+  if ($a.onlyIfForeground) {
+    $now = [Compi.Win]::Foreground()
+    if ($null -eq $now -or $now.Handle -ne $h) { return @{ pasted = $false; reason = 'moved' } }
+  } elseif (-not [Compi.Win]::Focus($h)) { return @{ pasted = $false; reason = 'focus' } }
   if (-not [Compi.Keys]::WaitModifiersUp(1500)) { return @{ pasted = $false; reason = 'keys' } }
   Start-Sleep -Milliseconds 80
   $fg = [Compi.Win]::Foreground()
   if ($null -eq $fg -or $fg.Handle -ne $h) { return @{ pasted = $false; reason = 'focus' } }
   @{ pasted = [Compi.Keys]::CtrlChord(0x56) }
+}
+
+# Dictée partout : le texte dicté, hors de l'historique du presse-papier.
+$Fns.clip_text = {
+  param($a)
+  $t = [string]$a.text
+  if ($t.Length -eq 0 -or $t.Length -gt 100000) { throw 'Texte invalide.' }
+  @{ copied = [Compi.Clip]::SetPrivateText($t) }
 }
 
 $Fns.ocr_languages = {

@@ -71,7 +71,17 @@ Le texte de la licence est à la fin de ce fichier.
 - **JSZip** : double licence MIT ou GPL-3.0, utilisé sous MIT.
 - **pako** : MIT et Zlib.
 - **Electron** : MIT. Chromium et ses composants : voir `LICENSES.chromium.html`, livré avec Electron.
+- **sherpa-onnx** (`sherpa-onnx-node`, `sherpa-onnx-win-x64`) : Apache-2.0, projet k2-fsa. Ses binaires Windows embarquent **ONNX Runtime** (MIT, Microsoft).
+- **uiohook-napi** : MIT pour l'enveloppe Node. Il contient **libuiohook** (Copyright 2006-2023 Alexander Barker), sous **LGPL-3.0 ou ultérieure**. Compi charge ce module comme un fichier séparé (`prebuilds/win32-x64/uiohook-napi.node`), que l'on peut remplacer par une version recompilée. Son code source complet est livré dans `node_modules/uiohook-napi` (dossier `libuiohook`) et sur https://github.com/SnosMe/uiohook-napi. Un installateur qui embarque ce module doit aussi fournir le texte de la LGPL-3.0 et de la GPL-3.0 (https://www.gnu.org/licenses/lgpl-3.0.txt, https://www.gnu.org/licenses/gpl-3.0.txt).
 - Les autres dépendances sont sous licence MIT, ISC, BSD, Apache-2.0 ou Unlicense. Leur texte complet est dans leur dossier `node_modules`.
+
+## Modèles téléchargés à ta demande
+
+Ils ne sont pas dans le dépôt ni dans l'installateur : chacun est téléchargé depuis Hugging Face, une seule fois, après ton clic.
+
+- **Whisper** (OpenAI), version ONNX de `onnx-community` : MIT. Dictée vers Compi.
+- **Parakeet TDT 0.6B v3** (NVIDIA), version sherpa-onnx de `csukuangfj` : **CC-BY-4.0**, attribution obligatoire. Dictée partout, français, anglais et 23 autres langues.
+- **Omnilingual ASR 300M** (Meta), version sherpa-onnx de `csukuangfj` : Apache-2.0. Dictée partout, tamoul.
 
 ## Texte de la SIL Open Font License 1.1
 

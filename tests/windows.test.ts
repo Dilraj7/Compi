@@ -70,6 +70,7 @@ describe('pont PowerShell', () => {
     const fns = [...script.matchAll(/^\$Fns\.(\w+) =/gm)].map((m) => m[1])
     expect(fns.sort()).toEqual([
       'apps',
+      'clip_text',
       'copy',
       'focus',
       'foreground',

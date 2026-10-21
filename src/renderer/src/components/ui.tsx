@@ -357,7 +357,7 @@ export function ShortcutInput({ value, onChange }: { value: string; onChange: (v
         recording ? 'bg-[var(--led)]/10 text-[var(--led)] ring-[var(--led)]/50' : 'bg-white/[0.05] text-fog-100 ring-white/[0.08] hover:bg-white/[0.08]'
       }`}
     >
-      {recording ? 'Appuie sur ta combinaison…' : prettyShortcut(value)}
+      {recording ? 'Appuie sur ta combinaison…' : value ? prettyShortcut(value) : 'Choisir…'}
     </button>
   )
 }

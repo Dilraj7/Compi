@@ -13,8 +13,11 @@ extraResources:
     filter:
       - '*.png'
 # Le moteur de l'agent (claude.exe) doit rester exécutable : hors de l'archive asar.
+# Idem pour les modules natifs de la dictée partout (sherpa-onnx et ses DLL, uiohook).
 asarUnpack:
   - node_modules/@anthropic-ai/claude-agent-sdk-*/**
+  - node_modules/sherpa-onnx-*/**
+  - node_modules/uiohook-napi/**
 npmRebuild: false
 win:
   target:

@@ -98,6 +98,7 @@ function useBridge(): void {
         const kind = n.sound === undefined ? soundFor(n.pill) : n.sound
         if (kind) void maybePlay(kind, st().settings, n.pill)
       }),
+      api.onDictationCommand((c) => void st().onDictationCommand(c)),
       api.onQuickOpen((sel) => st().openQuick(sel)),
       api.onQuickEvent((e) => st().onQuickEvent(e)),
       // Clic sur la notification d'une routine : sa discussion s'ouvre.

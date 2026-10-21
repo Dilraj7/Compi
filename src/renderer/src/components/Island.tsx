@@ -303,10 +303,11 @@ export function Island() {
   const holdNotice = useCompi((s) => s.holdNotice)
   const open = useCompi((s) => s.open)
   const addAttachments = useCompi((s) => s.addAttachments)
+  const everywhere = useCompi((s) => s.dictation.everywhere !== null)
   const { color } = useMood()
 
-  // Une notification force l'aperçu le temps de l'afficher.
-  const shown = notice && mode !== 'expanded' ? 'peek' : mode
+  // Une notification (ou une dictée partout) force l'aperçu le temps de l'afficher, sans prendre le focus.
+  const shown = (notice || everywhere) && mode !== 'expanded' ? 'peek' : mode
   const size = shown === 'peek' && notice ? SIZE.notice : SIZE[shown]
   const expanded = shown === 'expanded'
 

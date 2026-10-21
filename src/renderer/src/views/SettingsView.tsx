@@ -10,6 +10,7 @@ import { DaySection, GoogleSection } from './AccountsSection'
 import { AgendaSourcesSection } from './AgendaSourcesSection'
 import { LiveSection } from './LiveSection'
 import { DictationSection } from './DictationSection'
+import { DictationEverywhereSection } from './DictationEverywhere'
 import { MessagesSection } from './MessagesSection'
 
 const TOOL_NAMES: Record<string, string> = {
@@ -180,6 +181,7 @@ export function SettingsView() {
         <AgendaSourcesSection s={s} apply={apply} />
       </div>
       <DictationSection s={s} update={update} />
+      <DictationEverywhereSection s={s} update={update} />
       <LiveSection s={s} update={update} />
       <MessagesSection s={s} update={update} />
 

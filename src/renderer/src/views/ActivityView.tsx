@@ -4,6 +4,7 @@ import { PendingRequests, SessionCard } from '../components/Cards'
 import { Button } from '../components/ui'
 import { JournalSection } from './JournalSection'
 import { PerfSection } from './PerfSection'
+import { TimeSavedSection } from './TimeSavedSection'
 import { UsageSection } from './UsageSection'
 
 export function ActivityView() {
@@ -53,6 +54,8 @@ export function ActivityView() {
           </div>
         )}
       </section>
+
+      <TimeSavedSection />
 
       <UsageSection />
 

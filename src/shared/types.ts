@@ -166,6 +166,8 @@ export interface Settings {
   /** Afficher la musique en cours dans l'îlot. */
   showMusic: boolean
   voice: VoiceSettings
+  /** Dictée partout : touche maintenue, texte écrit dans l'application ouverte. */
+  dictation: DictationSettings
   /** Garder un historique (chiffré, sur le PC) de ce qui est copié. */
   clipboardHistory: boolean
   semantic: SemanticSettings
@@ -245,6 +247,8 @@ export interface PublicSettings extends Settings {
   shortcutActive: boolean
   quickShortcutActive: boolean
   voiceShortcutActive: boolean
+  /** La touche de la dictée partout est observée (sinon : module absent ou refusé par Windows). */
+  dictationKeyActive: boolean
   /** Les raccourcis des autorisations n'ont pas pu être pris la dernière fois (autre application). */
   approvalKeysTaken: string[]
   /** Le fichier du client Google (ID + secret) a été importé. */
@@ -723,6 +727,80 @@ export interface VoiceModelStatus {
   variant?: VoiceVariant
   sizeBytes?: number
   downloading?: { model: VoiceModelId; variant: VoiceVariant; received: number; total: number }
+}
+
+// ─── Dictée partout ──────────────────────────────────────────────────────────
+
+/** Touche à maintenir pour dicter (observée par uiohook, jamais bloquée). */
+export type DictationKey = 'ControlRight' | 'ShiftRight' | 'AltRight'
+/** Brut : tel quel. Naturel : hésitations retirées, espaces corrigés. Soigné : réécrit par le cerveau. */
+export type DictationStyle = 'raw' | 'natural' | 'polished'
+/** Modèles de reconnaissance de sherpa-onnx (processus annexe). */
+export type SpeechModelId = 'parakeet' | 'omnilingual'
+/** Moteur de la dictée partout : un modèle sherpa-onnx, ou le Whisper de « Me parler ». */
+export type DictationEngine = SpeechModelId | 'whisper'
+
+export interface DictationAppStyle {
+  /** Nom du processus, sans « .exe » (« outlook », « code »). */
+  app: string
+  style: DictationStyle
+}
+
+export interface DictationReplacement {
+  /** Ce qui est dit (« ma signature »). */
+  from: string
+  /** Ce qui est écrit (peut tenir sur plusieurs lignes). */
+  to: string
+}
+
+export interface DictationSettings {
+  /** Maintenir la touche écrit dans l'application ouverte. Désactivé par défaut. */
+  enabled: boolean
+  key: DictationKey
+  engine: DictationEngine
+  style: DictationStyle
+  /** Style par application, choisi par l'utilisateur (aucune règle par défaut). */
+  appStyles: DictationAppStyle[]
+  /** Remplacements et raccourcis vocaux. */
+  dictionary: DictationReplacement[]
+  /** « Compi, … » au début : une demande à l'assistant au lieu d'un texte à écrire. */
+  compiPrefix: boolean
+  /** Style Soigné avec un cerveau en ligne : le texte dicté peut partir (sinon, Naturel). */
+  polishOnline: boolean
+  /** Vitesse de frappe (mots par minute), pour le temps gagné. */
+  typingWpm: number
+}
+
+export interface SpeechModelStatus {
+  model: SpeechModelId
+  installed: boolean
+  sizeBytes?: number
+  downloading?: { model: SpeechModelId; received: number; total: number }
+}
+
+/** Ordre de la touche de dictée vers l'îlot (qui enregistre le micro). `target` : l'application visée, connue juste après le début. */
+export type DictationCommand =
+  | { type: 'start'; handsFree: boolean; engine: DictationEngine; keyLabel: string }
+  | { type: 'target'; app?: string }
+  | { type: 'stop' }
+  | { type: 'cancel'; message?: string }
+
+/** Fin d'une dictée partout : ce qui a été fait du texte. */
+export type DictationOutcome =
+  | { kind: 'pasted'; words: number; app?: string }
+  | { kind: 'copied'; words: number; reason: string }
+  | { kind: 'compi'; request: string }
+  | { kind: 'empty' }
+  | { kind: 'error'; message: string }
+
+/** Une journée de dictée dans une application (Activité › Temps gagné). */
+export interface DictationStatRow {
+  day: string
+  app: string
+  dictations: number
+  words: number
+  /** Temps de parole (ms). */
+  speakingMs: number
 }
 
 // ─── Mémoire, routines, presse-papier, recherche par le sens ─────────────────

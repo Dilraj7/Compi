@@ -19,7 +19,8 @@ Tout est dans le dossier `%APPDATA%\Compi`.
 | Journal « Envoyé en ligne »                              | `privacy-log.json`                                                | destination, types de données et titre de la discussion ; 100 entrées                          |
 | Copies de travail du moteur                              | `agent\`                                                          | le moteur les garde 30 jours, **même après la suppression d'une discussion** (à corriger)      |
 | Index de la recherche par le sens                        | `semantic\`                                                       | seulement si tu l'actives                                                                      |
-| Modèle de dictée                                         | `models\`                                                         | seulement si tu le télécharges                                                                 |
+| Modèles de dictée (Whisper, Parakeet, tamoul)            | `models\`                                                         | seulement si tu les télécharges                                                                |
+| Temps gagné (dictée partout)                             | `dictation-stats.json`                                            | par jour et par programme : dictées, mots, temps de parole ; **jamais le texte**               |
 | Journal des rangements                                   | `moves\`                                                          | noms des fichiers déplacés, pour pouvoir annuler ; les 20 derniers rangements                  |
 | Utilisation                                              | `usage-claude-code.json`, `usage-compi.json`                      | des totaux seulement, aucun texte                                                              |
 | Messages en attente                                      | `messages-reminders.json`                                         | identifiants de notification et heures, **jamais le texte**                                    |
@@ -57,6 +58,17 @@ Sauf les deux lignes chiffrées, ces fichiers sont lisibles par ton compte Windo
 - Les téléchargements de modèles, toujours après ton clic : Hugging Face pour la dictée, Ollama pour les modèles locaux.
 
 Chaque service applique sa propre politique de confidentialité (Anthropic, Google, OpenRouter…).
+
+## Dictée partout
+
+Désactivée par défaut (Réglages › Dictée partout).
+
+- **La touche** : un petit processus séparé observe le clavier (module uiohook), sans jamais rien bloquer. Seule la touche choisie compte. Les autres frappes ne sont ni lues, ni gardées, ni transmises à Compi : ce processus ne lui envoie que « commencer », « arrêter » ou « annuler ». Une fenêtre lancée en administrateur ne lui transmet rien.
+- **Le micro** ne s'ouvre que pendant que tu maintiens la touche (ou en mains libres, après un double appui). Ta voix est transcrite sur ton PC ; le son n'est jamais écrit sur le disque ni envoyé.
+- **Le texte** est collé là où est ton curseur, par le presse-papier, marqué pour rester hors de l'historique Win+V et du presse-papier cloud. Ce que tu avais copié est remis juste après. Si la fenêtre a changé entre-temps, rien n'est collé : le texte reste copié pour un Ctrl+V.
+- **Le style Soigné** fait réécrire le texte par ton cerveau. Sur ce PC, rien ne part. Avec un cerveau en ligne, seulement si tu l'autorises, et seulement le texte, jamais la voix.
+- **« Compi, … »** : une dictée qui commence ainsi devient une demande à Compi, avec les règles habituelles.
+- Compi retient le nom du programme (« outlook »), jamais le titre de la fenêtre.
 
 ## Routines
 
