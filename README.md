@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/apercu.jpg" alt="Compi ouvert en haut de l'écran : « Qu'est-ce que j'ai aujourd'hui ? », avec l'agenda, les e-mails et la météo">
+  <img src="docs/images/apercu.gif" alt="Compi en action : il répond à « Qu'est-ce que j'ai aujourd'hui ? », note un rappel dicté, déplace un rendez-vous, affiche la musique et le minuteur, puis range le Bureau après ton accord">
 </p>
 
 Compi vit dans un « îlot » noir collé en haut de l'écran, à la manière du Dynamic Island, avec le visage d'un petit robot aux yeux LED. Au repos, c'est une pastille. Un clic ou un raccourci, et il s'ouvre.
