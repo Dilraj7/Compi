@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Aucune ressource externe : tout vient de ce site (ni traceur, ni police ou script d'ailleurs). -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self'; media-src 'self'; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Compi · ton compagnon IA en haut de l’écran Windows</title>
+    <meta
+      name="description"
+      content="Compi vit dans un îlot en haut de ton écran Windows : il discute, agit sur ton PC avec ton accord et peut tourner 100 % en local. Libre (MIT), sans compte ni télémétrie."
+    />
+    <meta name="theme-color" content="#050507" />
+    <link rel="canonical" href="https://dilraj7.github.io/Compi/" />
+    <link rel="icon" type="image/png" href="icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:title" content="Compi · ton compagnon IA en haut de l’écran Windows" />
+    <meta property="og:description" content="Il discute, agit sur ton PC avec ton accord, et peut tourner 100 % en local. Libre et gratuit." />
+    <meta property="og:url" content="https://dilraj7.github.io/Compi/" />
+    <meta property="og:image" content="https://dilraj7.github.io/Compi/media/og.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preload" href="fonts/onest-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="theme.js"></script>
+    <script src="main.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#contenu">Aller au contenu</a>
+
+    <header class="bar">
+      <nav class="island" aria-label="Navigation principale" data-island>
+        <a class="island-brand" href="#top">
+          <span class="mini-eyes" aria-hidden="true"><i></i><i></i></span>
+          <span class="dot">compi</span>
+        </a>
+        <ul class="island-links" id="menu">
+          <li><a href="#fonctions">Fonctions</a></li>
+          <li><a href="#cerveau">Cerveau</a></li>
+          <li><a href="#confidentialite">Confidentialité</a></li>
+          <li><a href="#installer">Installer</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+        <div class="island-tools">
+          <button class="icon-btn" type="button" data-theme-toggle aria-label="Passer en thème clair">
+            <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+            </svg>
+            <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" /></svg>
+          </button>
+          <a class="icon-btn" href="https://github.com/Dilraj7/Compi" aria-label="Le code de Compi sur GitHub">
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="i-fill">
+              <path
+                d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5a3.9 3.9 0 0 1 1-2.7c-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c2-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7a3.9 3.9 0 0 1 1 2.7c0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="icon-btn menu-btn" type="button" aria-controls="menu" aria-expanded="false" data-menu>
+            <span class="sr">Menu</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16M4 16h16" /></svg>
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <main id="contenu">
+      <section class="hero" id="top" aria-labelledby="titre">
+        <div class="hero-copy">
+          <p class="kicker dot">Windows 10 et 11 · libre et gratuit</p>
+          <h1 id="titre">Ton compagnon IA, toujours là <span class="led">en haut de l’écran</span>.</h1>
+          <p class="lead">
+            Compi vit dans un îlot noir collé en haut de Windows. Il discute, agit sur ton PC <strong>avec ton accord</strong>, et peut tourner
+            <strong>100 % en local</strong>.
+          </p>
+          <div class="cta">
+            <a class="btn btn-led" href="#installer">Installer Compi</a>
+            <a class="btn btn-ghost" href="#film">Voir le film <span aria-hidden="true">▶</span></a>
+          </div>
+          <ul class="chips" aria-label="En bref">
+            <li>Licence MIT</li>
+            <li>Ni compte, ni télémétrie</li>
+            <li>Change de modèle quand tu veux</li>
+          </ul>
+        </div>
+
+        <div class="stage">
+          <div class="robot" data-robot role="img" aria-label="Le visage de Compi : un petit robot aux yeux LED">
+            <span class="antenna" aria-hidden="true"></span>
+            <span class="ear ear-l" aria-hidden="true"></span>
+            <span class="ear ear-r" aria-hidden="true"></span>
+            <span class="visor" aria-hidden="true">
+              <span class="eye" data-eye></span>
+              <span class="eye" data-eye></span>
+            </span>
+          </div>
+          <p class="ask" aria-live="off">
+            <span class="ask-dot" aria-hidden="true"></span>
+            <span data-ask>Qu’est-ce que j’ai aujourd’hui ?</span>
+          </p>
+        </div>
+      </section>
+
+      <section class="film" id="film" aria-labelledby="film-titre">
+        <div class="head">
+          <p class="kicker dot">Le film</p>
+          <h2 id="film-titre">55 secondes pour faire connaissance</h2>
+        </div>
+        <figure class="screen">
+          <video controls preload="none" playsinline width="1280" height="720" poster="media/poster.jpg">
+            <source src="media/compi.mp4" type="video/mp4" />
+            Ton navigateur ne lit pas cette vidéo : <a href="media/compi.mp4">télécharge-la</a>.
+          </video>
+          <figcaption>Avec le son. Toutes les données sont fictives (Alex, alex@example.com).</figcaption>
+        </figure>
+      </section>
+
+      <section class="features" id="fonctions" aria-labelledby="fonctions-titre">
+        <div class="head">
+          <p class="kicker dot">Ce qu’il sait faire</p>
+          <h2 id="fonctions-titre">Un clic ou un raccourci, et il s’ouvre.</h2>
+          <p class="sub">Au repos, c’est une pastille avec le visage d’un petit robot. Ouvert, c’est un assistant qui connaît ta journée et ton PC.</p>
+        </div>
+
+        <ul class="grid-8">
+          <li class="c-cyan">
+            <h3>Ta journée en une question</h3>
+            <p>Agenda (Google, lien .ics ou connecteur), e-mails Gmail, météo, rappels.</p>
+          </li>
+          <li class="c-violet">
+            <h3>Actions rapides</h3>
+            <p>Sur n’importe quel texte sélectionné, dans toutes tes applis : corriger, reformuler, traduire, résumer.</p>
+          </li>
+          <li class="c-amber">
+            <h3>Il agit, avec ton OK</h3>
+            <p>Déplacer un rendez-vous, ranger un dossier, régler le son, ouvrir une appli. Une carte avant chaque action.</p>
+          </li>
+          <li class="c-green">
+            <h3>Parle-lui</h3>
+            <p>Ta voix est transcrite sur ton PC, jamais envoyée. Il peut aussi te répondre à voix haute.</p>
+          </li>
+          <li class="c-pink">
+            <h3>Tes documents</h3>
+            <p>PDF (même scannés), Word, Excel, et une recherche qui comprend le sens.</p>
+          </li>
+          <li class="c-cyan">
+            <h3>Connecteurs en un clic</h3>
+            <p>Notion, Todoist, Linear, Jira… Et tes sessions Claude Code, pilotées depuis l’îlot.</p>
+          </li>
+          <li class="c-violet">
+            <h3>Routines et mémoire</h3>
+            <p>« Chaque lundi à 9 h, résume mes e-mails », et ce qu’il sait de toi, que tu lis et corriges.</p>
+          </li>
+          <li class="c-amber">
+            <h3>Un îlot vivant</h3>
+            <p>Musique en cours, minuteur, alerte avant chaque réunion.</p>
+          </li>
+        </ul>
+
+        <!-- Captures au double (nettes sur les écrans haute définition) ; un clic les ouvre en grand. -->
+        <div class="shots">
+          <figure>
+            <a class="shot" href="images/actions-rapides@2x.jpg" data-zoom>
+              <img
+                src="images/actions-rapides.jpg"
+                srcset="images/actions-rapides.jpg 880w, images/actions-rapides@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="Actions rapides proposées sur un e-mail sélectionné"
+              />
+            </a>
+            <figcaption><b>Actions rapides</b> Sélectionne un texte, <kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>C</kbd>, choisis.</figcaption>
+          </figure>
+          <figure>
+            <a class="shot" href="images/agenda@2x.jpg" data-zoom>
+              <img
+                src="images/agenda.jpg"
+                srcset="images/agenda.jpg 880w, images/agenda@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="Carte de validation pour déplacer le rendez-vous « Déjeuner avec Léa »"
+              />
+            </a>
+            <figcaption><b>Agenda</b> Le même événement, déplacé. Sans doublon.</figcaption>
+          </figure>
+          <figure>
+            <a class="shot" href="images/cerveau@2x.jpg" data-zoom>
+              <img
+                src="images/cerveau.jpg"
+                srcset="images/cerveau.jpg 880w, images/cerveau@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="Choix du cerveau : Claude, sur ce PC ou un autre service"
+              />
+            </a>
+            <figcaption><b>Ton cerveau</b> Claude, un modèle sur ton PC, ou un autre service.</figcaption>
+          </figure>
+          <figure>
+            <a class="shot" href="images/confidentialite@2x.jpg" data-zoom>
+              <img
+                src="images/confidentialite.jpg"
+                srcset="images/confidentialite.jpg 880w, images/confidentialite@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="Un IBAN masqué avant l’envoi vers Claude"
+              />
+            </a>
+            <figcaption><b>Confidentialité</b> Les secrets sont masqués, et tu vois ce qui part.</figcaption>
+          </figure>
+          <figure>
+            <a class="shot" href="images/claude-code@2x.jpg" data-zoom>
+              <img
+                src="images/claude-code.jpg"
+                srcset="images/claude-code.jpg 880w, images/claude-code@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="Claude Code demande d’exécuter une commande, depuis l’îlot"
+              />
+            </a>
+            <figcaption><b>Claude Code</b> Autorise ou refuse sans quitter ton éditeur.</figcaption>
+          </figure>
+          <figure>
+            <a class="shot" href="images/connecteurs@2x.jpg" data-zoom>
+              <img
+                src="images/connecteurs.jpg"
+                srcset="images/connecteurs.jpg 880w, images/connecteurs@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="Liste de connecteurs : Notion, Todoist, Linear…"
+              />
+            </a>
+            <figcaption><b>Connecteurs</b> Tu te connectes avec ton compte, sans clé à copier.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="brains" id="cerveau" aria-labelledby="cerveau-titre">
+        <div class="head">
+          <p class="kicker dot">Ton cerveau, ton choix</p>
+          <h2 id="cerveau-titre">Le meilleur modèle, ou rien qui ne quitte ton PC.</h2>
+          <p class="sub">
+            En local, Compi regarde ta machine et te conseille un modèle. Il installe Ollama et ce modèle en un clic, seulement si tu le décides. Et tu changes de cerveau
+            quand tu veux.
+          </p>
+        </div>
+        <div class="cards-3">
+          <article class="c-violet">
+            <h3>Claude</h3>
+            <dl>
+              <div><dt>Qualité</dt><dd>la meilleure</dd></div>
+              <div><dt>Prix</dt><dd>à l’usage (ta clé API)</dd></div>
+              <div><dt>Tes messages</dt><dd>envoyés à Anthropic</dd></div>
+              <div><dt>Hors ligne</dt><dd>non</dd></div>
+            </dl>
+          </article>
+          <article class="pick c-cyan">
+            <p class="tag dot">100 % local</p>
+            <h3>Sur ce PC</h3>
+            <dl>
+              <div><dt>Qualité</dt><dd>bonne à très bonne</dd></div>
+              <div><dt>Prix</dt><dd>gratuit</dd></div>
+              <div><dt>Tes messages</dt><dd><strong>ne quittent pas le PC</strong></dd></div>
+              <div><dt>Hors ligne</dt><dd>oui</dd></div>
+            </dl>
+          </article>
+          <article class="c-amber">
+            <h3>Autre service</h3>
+            <dl>
+              <div><dt>Qualité</dt><dd>selon le service</dd></div>
+              <div><dt>Prix</dt><dd>selon le service</dd></div>
+              <div><dt>Tes messages</dt><dd>envoyés à ce service</dd></div>
+              <div><dt>Hors ligne</dt><dd>non</dd></div>
+            </dl>
+          </article>
+        </div>
+        <div class="free">
+          <div class="free-copy">
+            <h3>Jamais coincé avec un modèle</h3>
+            <p>
+              Change de cerveau à tout moment, d’un clic sur la pastille de la zone de saisie : un modèle sur ton PC pour un document privé, Claude pour une question
+              difficile, un autre service si tu préfères, puis retour au local. Sans abonnement ni compte Compi : le local est gratuit, et en ligne tu paies seulement le
+              service que tu choisis, avec ta clé.
+            </p>
+            <p class="note">Avec le même fournisseur, la discussion continue. Avec un autre, Compi en ouvre une nouvelle.</p>
+          </div>
+          <a class="shot free-shot" href="images/changer-de-cerveau@2x.jpg" data-zoom>
+            <img
+              src="images/changer-de-cerveau.jpg"
+              srcset="images/changer-de-cerveau.jpg 700w, images/changer-de-cerveau@2x.jpg 1400w"
+              sizes="(min-width: 981px) 440px, 100vw"
+              width="700"
+              height="490"
+              loading="lazy"
+              alt="Menu de la pastille du cerveau : Opus 5.5, Sonnet 5.5, Haiku 5.5, un modèle sur ce PC et un modèle OpenRouter"
+            />
+          </a>
+        </div>
+      </section>
+
+      <section class="privacy" id="confidentialite" aria-labelledby="confidentialite-titre">
+        <div class="head">
+          <p class="kicker dot">Confidentialité</p>
+          <h2 id="confidentialite-titre">Tu gardes la main. Toujours.</h2>
+        </div>
+        <ul class="points">
+          <li>
+            <h3>Ni compte, ni serveur, ni télémétrie</h3>
+            <p>Compi n’envoie rien à ses auteurs.</p>
+          </li>
+          <li>
+            <h3>Tu choisis ce qui part</h3>
+            <p>Vers un cerveau en ligne, pour chaque type de donnée (écran, fichiers, e-mails, agenda…) : <em>Me demander</em>, <em>Toujours</em> ou <em>Jamais</em>.</p>
+          </li>
+          <li>
+            <h3>Les secrets sont masqués</h3>
+            <p>IBAN, cartes, mots de passe et clés sont masqués avant l’envoi, et chaque réponse dit ce qui est parti et vers qui.</p>
+          </li>
+          <li>
+            <h3>Tes clés sont chiffrées</h3>
+            <p>Tes clés et jetons sont chiffrés par Windows.</p>
+          </li>
+          <li>
+            <h3>Une carte avant chaque action sensible</h3>
+            <p>Relis-la : une page web ou un e-mail peut cacher des consignes piégées.</p>
+          </li>
+        </ul>
+        <p class="more">
+          Tout le détail est dans <a href="https://github.com/Dilraj7/Compi/blob/main/PRIVACY.md">PRIVACY.md</a>. Pour signaler une faille :
+          <a href="https://github.com/Dilraj7/Compi/blob/main/SECURITY.md">SECURITY.md</a>.
+        </p>
+      </section>
+
+      <section class="install" id="installer" aria-labelledby="installer-titre">
+        <div class="head">
+          <p class="kicker dot">Installer</p>
+          <h2 id="installer-titre">Quatre commandes, et l’îlot apparaît.</h2>
+          <p class="sub">
+            Il faut <strong>Windows 10 ou 11 (64 bits)</strong>, <a href="https://git-scm.com">Git</a> et <a href="https://nodejs.org">Node.js</a> 22 ou plus récent.
+          </p>
+        </div>
+        <div class="steps">
+          <div class="code">
+            <div class="code-top">
+              <span class="dot">terminal</span>
+              <button class="copy" type="button" data-copy="code-install">Copier</button>
+            </div>
+            <pre id="code-install"><code>git clone https://github.com/Dilraj7/Compi.git
+cd Compi
+npm install
+npm run build:win</code></pre>
+          </div>
+          <ol class="after">
+            <li>Lance <code>dist/Compi-Setup-0.1.0.exe</code>. L’installateur n’est pas signé : SmartScreen affiche un avertissement, clique sur <b>Informations complémentaires</b>, puis <b>Exécuter quand même</b>.</li>
+            <li>Clique sur l’îlot et choisis ton cerveau, ou laisse Compi te conseiller en 4 questions. Tu pourras en changer à tout moment.</li>
+            <li>Avec Claude, colle ta clé API créée sur <a href="https://console.anthropic.com/settings/keys">console.anthropic.com</a>.</li>
+          </ol>
+        </div>
+        <table class="keys">
+          <caption class="sr">Raccourcis clavier</caption>
+          <thead>
+            <tr><th scope="col">Raccourci</th><th scope="col">Action</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>Espace</kbd></td><td>ouvrir Compi</td></tr>
+            <tr><td><kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>C</kbd></td><td>actions rapides sur le texte sélectionné</td></tr>
+            <tr><td><kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>V</kbd></td><td>maintenir pour parler (une fois la dictée installée)</td></tr>
+            <tr><td><kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>O</kbd> / <kbd>N</kbd></td><td>autoriser / refuser une demande</td></tr>
+          </tbody>
+        </table>
+        <p class="more">
+          Connecter Google (agenda et Gmail), dépannage et développement : tout est dans le
+          <a href="https://github.com/Dilraj7/Compi#readme">README</a>.
+        </p>
+      </section>
+
+      <section class="faq" id="faq" aria-labelledby="faq-titre">
+        <div class="head">
+          <p class="kicker dot">Questions</p>
+          <h2 id="faq-titre">Questions fréquentes</h2>
+        </div>
+        <div class="qa">
+          <details>
+            <summary>Compi est-il gratuit ?</summary>
+            <p>
+              Oui : Compi est libre (licence MIT) et gratuit. Avec Claude, tu paies Anthropic à l’usage, avec ta propre clé API. Avec un modèle sur ton PC, tout est
+              gratuit.
+            </p>
+          </details>
+          <details>
+            <summary>Mes messages quittent-ils mon PC ?</summary>
+            <p>
+              Avec un modèle local, non. Avec Claude ou un autre service, ils partent vers ce service, et tu choisis pour chaque type de donnée ce qui peut partir. Compi
+              n’envoie jamais rien à ses auteurs.
+            </p>
+          </details>
+          <details>
+            <summary>Suis-je bloqué avec le modèle choisi ?</summary>
+            <p>
+              Non. Tu changes de cerveau à tout moment : la pastille sous la zone de saisie, ou Réglages › Cerveau. Par exemple un modèle sur ton PC pour tes papiers, puis
+              Claude pour une question difficile. Avec le même fournisseur, la discussion continue ; avec un autre, Compi en ouvre une nouvelle.
+            </p>
+          </details>
+          <details>
+            <summary>Est-ce qu’il agit sans me demander ?</summary>
+            <p>
+              Non. Une carte s’affiche avant chaque action sensible : déplacer un rendez-vous, ranger un dossier, ouvrir une appli… Un rangement ne supprime jamais rien, et
+              Compi n’envoie jamais d’e-mail : il prépare un brouillon que tu relis.
+            </p>
+          </details>
+          <details>
+            <summary>Quel PC faut-il pour le mode local ?</summary>
+            <p>
+              Compi regarde ta machine et te conseille un modèle adapté. Compte au moins 8 Go de mémoire et 10 Go libres sur le disque ; une carte graphique NVIDIA ou AMD
+              rend les réponses bien plus rapides.
+            </p>
+          </details>
+          <details>
+            <summary>Pourquoi faut-il construire l’installateur soi-même ?</summary>
+            <p>
+              Le moteur de l’agent (<code>claude.exe</code>, du Claude Agent SDK) appartient à Anthropic et n’est pas sous licence MIT : Compi ne le redistribue pas.
+              <code>npm install</code> le télécharge directement, puis <code>npm run build:win</code> crée ton installateur.
+            </p>
+          </details>
+          <details>
+            <summary>Et sur Mac ou Linux ?</summary>
+            <p>Pas pour l’instant : Compi est fait pour Windows 10 et 11.</p>
+          </details>
+          <details>
+            <summary>Ce site utilise-t-il des cookies ?</summary>
+            <p>Non. Aucun traceur, aucune statistique, aucune ressource venue d’ailleurs. Seul ton choix de thème (clair ou sombre) est gardé dans ton navigateur.</p>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="foot-brand">
+        <img src="icon.png" width="40" height="40" alt="" />
+        <p><span class="dot">compi</span><br />Ton compagnon IA, en haut de l’écran Windows.</p>
+      </div>
+      <ul class="foot-links">
+        <li><a href="https://github.com/Dilraj7/Compi">Code source</a></li>
+        <li><a href="https://github.com/Dilraj7/Compi/blob/main/LICENSE">Licence MIT</a></li>
+        <li><a href="https://github.com/Dilraj7/Compi/blob/main/PRIVACY.md">Confidentialité</a></li>
+        <li><a href="https://github.com/Dilraj7/Compi/blob/main/SECURITY.md">Sécurité</a></li>
+        <li><a href="https://github.com/Dilraj7/Compi/blob/main/THIRD_PARTY_NOTICES.md">Composants tiers</a></li>
+      </ul>
+      <p class="foot-note">
+        Le moteur de l’agent appartient à Anthropic et n’est pas sous licence MIT. Polices <a href="fonts/OFL-Doto.txt">Doto</a> et
+        <a href="fonts/OFL-Onest.txt">Onest</a> sous licence SIL OFL 1.1. Ce site n’a ni cookie, ni traceur.
+      </p>
+    </footer>
+
+    <dialog class="zoom" aria-label="Image agrandie" data-zoom-dialog>
+      <button class="zoom-close" type="button" data-zoom-close>Fermer <span aria-hidden="true">✕</span></button>
+      <img alt="" />
+    </dialog>
+  </body>
+</html>

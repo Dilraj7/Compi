@@ -290,8 +290,11 @@ export function createMockApi(): CompiApi {
   let settings: PublicSettings = {
     provider: 'anthropic',
     local: { engine: 'ollama', baseUrl: 'http://127.0.0.1:11434', model: '', cloudHelp: true, effort: 'low', keepAlive: '30m' },
-    custom: { name: '', baseUrl: '', model: '', effort: 'medium' },
-    hasCustomKey: false,
+    custom:
+      params.get('custom') === 'on'
+        ? { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-chat', effort: 'medium' }
+        : { name: '', baseUrl: '', model: '', effort: 'medium' },
+    hasCustomKey: params.get('custom') === 'on',
     model: 'claude-opus-5-5',
     effort: 'low',
     settingsVersion: 11,

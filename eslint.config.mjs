@@ -21,6 +21,11 @@ export default tseslint.config(
     }
   },
   {
+    // Site GitHub Pages : script de page, sans module.
+    files: ['site/**/*.js'],
+    languageOptions: { globals: globals.browser, sourceType: 'script' }
+  },
+  {
     // Film promo : scripts de page (navigateur) et de rendu (Electron, CommonJS).
     files: ['marketing/**/*.{js,cjs}'],
     languageOptions: { globals: { ...globals.browser, ...globals.node }, sourceType: 'script' },

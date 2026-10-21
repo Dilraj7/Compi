@@ -24,6 +24,8 @@ coverage/
 # Vidéos rendues (trop lourdes : à joindre au README ou à une Release)
 *.mp4
 *.webm
+# … sauf la version web du film (7 Mo), servie par le site GitHub Pages
+!site/media/compi.mp4
 
 # Notes et sauvegardes personnelles (jamais publiées)
 perso/
