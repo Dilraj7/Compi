@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { Check, ChevronDown, Cloud, Lock, Settings2, Sparkles, Wand2 } from 'lucide-react'
 import { brainLabel, brainMissing, CLAUDE_MODELS, defaultBrain } from '@shared/brains'
 import type { Brain, LocalStatus, ProviderId, Settings } from '@shared/types'
+import { webSearchReady } from '@shared/webSearch'
 import { useCompi } from '../store'
 import { cx } from './ui'
 
@@ -156,7 +157,9 @@ export function BrainChip() {
     <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] text-fog-500 ring-1 ring-inset ring-white/[0.06]">
       <BrainIcon provider={brain.provider} size={10} />
       {brainLabel(brain, s)}
-      {brain.provider === 'local' && <span className="text-fog-700">· 100 % sur ton PC</span>}
+      {brain.provider === 'local' && (
+        <span className="text-fog-700">{webSearchReady(s.webSearch, s.hasWebSearchKey) ? '· sur ton PC, sauf recherches web' : '· 100 % sur ton PC'}</span>
+      )}
     </span>
   )
 }

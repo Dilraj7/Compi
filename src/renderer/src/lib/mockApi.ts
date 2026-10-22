@@ -347,7 +347,8 @@ export function createMockApi(): CompiApi {
       window: 'ask',
       memory: 'never',
       messages: 'ask',
-      meetings: 'ask'
+      meetings: 'ask',
+      web: 'ask'
     },
     hasGoogleClient: params.get('google') !== 'none',
     google:
@@ -406,7 +407,13 @@ export function createMockApi(): CompiApi {
     },
     approvalKeys: { enabled: true, allow: 'Alt+Shift+O', deny: 'Alt+Shift+N' },
     approvalKeysTaken: params.get('keys') === 'taken' ? ['Alt+Shift+N'] : [],
-    monitor: { island: params.get('monitor') === 'on' }
+    monitor: { island: params.get('monitor') === 'on' },
+    // ?web=ollama (clé enregistrée) ou ?web=searxng : recherche web réglée.
+    webSearch: {
+      provider: params.get('web') === 'ollama' ? 'ollama' : params.get('web') === 'searxng' ? 'searxng' : 'off',
+      searxngUrl: params.get('web') === 'searxng' ? 'http://localhost:8080' : ''
+    },
+    hasWebSearchKey: params.get('web') === 'ollama'
   }
 
   // Ce PC (scénarios : ?perf=ok, ?perf=spill, ?perf=nogpu) : instantanés simulés, qui bougent un peu.
@@ -1733,6 +1740,14 @@ export function createMockApi(): CompiApi {
     setCustomKey: async (key) => {
       settings = { ...settings, hasCustomKey: Boolean(key) }
       return settings
+    },
+    setWebSearchKey: async (key) => {
+      settings = { ...settings, hasWebSearchKey: Boolean(key) }
+      return settings
+    },
+    testWebSearch: async () => {
+      await new Promise((r) => setTimeout(r, 900))
+      return { ok: true, message: 'Ça marche : 3 résultat(s) reçu(s).' }
     },
     setConversationBrain: async (id, brain) => {
       const conv = conversations.find((c) => c.id === id)

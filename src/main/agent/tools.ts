@@ -32,6 +32,8 @@ import { redact } from '../privacy/redact'
 import { semanticSearch } from '../semantic'
 import { serverKey } from '../connectors/registry'
 import { compiGroupServers, connectorKeywords, findServer, usableInRoutine, USE_EXTENSION } from '../../shared/localTools'
+import { cleanQuery, DEFAULT_RESULTS, formatResults, MAX_RESULTS, WEB_SEARCH_TOOL, webSearchLabel, webSearchReady } from '../../shared/webSearch'
+import { searchWeb } from './webSearch'
 import { ocrPdf, ocrPng, tooLittleText } from '../windows/ocr'
 import { FILE_KINDS, formatHits, searchFiles } from '../windows/search'
 import {
@@ -772,10 +774,35 @@ export function createCompiServer(sdk: SdkModule, ctx: CompiToolContext): Return
         ]
 
   // Hors Claude, WebFetch n'est pas disponible : Compi lit les pages lui-même, sur ce PC.
+  // Recherche web : seulement si l'utilisateur a choisi un service (carte « Recherches web » avant chaque envoi).
+  const ws = settings.get().webSearch
+  const searchTools =
+    ctx.provider !== 'anthropic' && webSearchReady(ws, secrets.hasWebSearchKey())
+      ? [
+          tool(
+            WEB_SEARCH_TOOL,
+            'Cherche sur le web avec le service choisi par l’utilisateur et renvoie titres, adresses et extraits. Lis ensuite les pages utiles avec fetch_page avant de répondre, et cite leurs adresses.',
+            {
+              query: z.string().describe('Ce qu’il faut chercher, en quelques mots'),
+              max_results: z.number().int().min(1).max(MAX_RESULTS).optional().describe(`Nombre de résultats (${DEFAULT_RESULTS} par défaut)`)
+            },
+            async ({ query, max_results }) => {
+              try {
+                const results = await searchWeb(query, max_results ?? DEFAULT_RESULTS)
+                return text(formatResults(cleanQuery(query) ?? query, results, webSearchLabel(settings.get().webSearch)))
+              } catch (e) {
+                return fail((e as Error).message)
+              }
+            },
+            { annotations: { readOnlyHint: true, openWorldHint: true } }
+          )
+        ]
+      : []
   const webTools =
     ctx.provider === 'anthropic'
       ? []
       : [
+          ...searchTools,
           tool(
             'fetch_page',
             'Lit une page web (ou un PDF en ligne) et renvoie son texte. Les longues pages sont découpées en parties.',

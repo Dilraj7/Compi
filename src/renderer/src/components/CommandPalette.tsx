@@ -10,6 +10,7 @@ import {
   Brain,
   CalendarDays,
   Gauge,
+  Globe,
   History,
   Keyboard,
   Mail,
@@ -54,6 +55,7 @@ const VIEW_META: Record<PanelView, { label: string; icon: LucideIcon; keywords?:
 const SETTINGS: Array<{ focus: SettingsFocus; label: string; icon: LucideIcon; keywords: string }> = [
   { focus: 'brain', label: 'Cerveau', icon: Brain, keywords: 'modele local ollama claude cle api garder pret' },
   { focus: 'quiz', label: 'Aide-moi à choisir un cerveau', icon: Brain, keywords: 'questionnaire modele conseil' },
+  { focus: 'websearch', label: 'Recherche web', icon: Globe, keywords: 'internet chercher ollama searxng cle brave' },
   { focus: 'voice', label: 'Dictée', icon: Mic, keywords: 'micro voix whisper parler' },
   { focus: 'dictation', label: 'Dictée partout', icon: Mic, keywords: 'ctrl droit coller curseur style parakeet tamoul' },
   { focus: 'speak', label: 'Lecture à voix haute', icon: AudioLines, keywords: 'voix windows lire reponses vitesse' },

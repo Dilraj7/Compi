@@ -78,6 +78,8 @@ export const IPC = {
   recommendBrain: 'brain:recommend',
   testBrain: 'brain:test',
   setCustomKey: 'brain:set-custom-key',
+  setWebSearchKey: 'websearch:set-key',
+  testWebSearch: 'websearch:test',
   setConversationBrain: 'brain:set-conversation',
   // actions rapides sur la sélection
   quickOpen: 'quick:open',

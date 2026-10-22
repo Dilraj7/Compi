@@ -36,14 +36,24 @@ Sauf les deux lignes chiffrées, ces fichiers sont lisibles par ton compte Windo
 
 - **Claude (Anthropic)** : tes messages et les résultats des outils que tu autorises partent vers Anthropic, avec ta propre clé. Le moteur n'envoie aucune statistique d'usage. Quand Claude lit une page web, Anthropic vérifie le nom du site (pas l'adresse complète) dans sa liste de sites dangereux.
 - **Autre service** (OpenRouter, DeepSeek, Kimi, GLM, ou une adresse de ton choix) : la même chose, vers ce service, avec sa clé. Ta clé Anthropic ne lui est jamais envoyée.
-- **Sur ce PC** (Ollama, LM Studio) : rien ne part. Une seule exception : pour une image ou un scan que le modèle ne sait pas lire, une carte te propose de l'envoyer à Claude, à chaque fois et sans « Toujours ».
+- **Sur ce PC** (Ollama, LM Studio) : rien ne part. Deux exceptions : pour une image ou un scan que le modèle ne sait pas lire, une carte te propose de l'envoyer à Claude, à chaque fois et sans « Toujours » ; et tes recherches web, si tu les actives (voir plus bas).
 
 **Le garde-fou des cerveaux en ligne**
 
-- Pour chaque type de donnée (écran, fichiers, e-mails, agenda, presse-papier, fenêtres, mémoire, réunions), tu choisis **Me demander** (par défaut), **Toujours** ou **Jamais**, dans Réglages › Confidentialité. Pour tes messages reçus, une carte demande ton accord à chaque fois, sans « Toujours ».
+- Pour chaque type de donnée (écran, fichiers, e-mails, agenda, presse-papier, fenêtres, mémoire, réunions, recherches web), tu choisis **Me demander** (par défaut), **Toujours** ou **Jamais**, dans Réglages › Confidentialité. Pour tes messages reçus, une carte demande ton accord à chaque fois, sans « Toujours ».
 - Les IBAN, cartes bancaires, n° de sécurité sociale, mots de passe, codes et clés d'API sont masqués avant l'envoi.
 - Ta mémoire n'est pas envoyée, sauf si tu choisis « Toujours » pour elle.
 - Sous chaque réponse, une puce dit ce qui est parti et vers qui.
+
+**La recherche web (cerveau local et « Autre service »)**
+
+Désactivée par défaut (Réglages › Cerveau › Recherche web). Avec Claude, c'est sa propre recherche web qui sert.
+
+- **Le service est ton choix** : Ollama (avec la clé de ton compte, chiffrée par Windows) ou ta propre instance SearXNG. Rien n'est préréglé.
+- **Seuls les mots cherchés partent** chez ce service, jamais ta question entière ni tes données. Compi lit ensuite les pages lui-même, sur ton PC.
+- **Une carte avant chaque recherche** (Réglages › Confidentialité › Recherches web : Me demander par défaut, Toujours ou Jamais). Après la lecture d'un e-mail, une carte à chaque fois, sans « Toujours ». Dans une routine, seulement si tu as choisi « Toujours ».
+- Sous la réponse, la puce dit « Recherche web envoyée à … » ; le journal « Envoyé en ligne » note le service, jamais les mots cherchés. Le journal technique ne les garde pas non plus.
+- Ollama demande un compte (gratuit) et ne publie pas ses limites : en cas de refus, Compi le dit.
 
 **Les services que tu branches**
 

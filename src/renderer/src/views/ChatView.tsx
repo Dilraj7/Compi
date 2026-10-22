@@ -173,6 +173,13 @@ function LocalWait() {
 /** Ce qui a quitté le PC pour cette réponse, et vers qui. */
 function SentLine({ sent }: { sent: SentTo }) {
   if (!sent.destination) {
+    if (sent.searched) {
+      return (
+        <span className="inline-flex items-center gap-1" title="Seules tes recherches web sont parties ; ta question et tes données sont restées sur ce PC.">
+          <Globe size={10} /> Recherche web envoyée à {sent.searched} · le reste sur ton PC
+        </span>
+      )
+    }
     return (
       <span className="inline-flex items-center gap-1" title="Ni ta question ni tes données n’ont quitté ce PC.">
         <Lock size={10} /> 100 % sur ton PC
@@ -184,6 +191,7 @@ function SentLine({ sent }: { sent: SentTo }) {
     <span className="inline-flex items-center gap-1" title="Ce qui est parti vers le service en ligne pour cette réponse.">
       <CloudUpload size={10} /> Envoyé à {sent.destination} : {items.join(' · ')}
       {sent.masked ? ` · ${sent.masked} secret${sent.masked > 1 ? 's' : ''} masqué${sent.masked > 1 ? 's' : ''}` : ''}
+      {sent.searched ? ` · recherche web envoyée à ${sent.searched}` : ''}
     </span>
   )
 }

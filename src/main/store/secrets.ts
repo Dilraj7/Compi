@@ -10,6 +10,7 @@ const API_KEY = 'anthropic.apiKey'
 const CUSTOM_KEY = 'custom.apiKey'
 const GOOGLE_CLIENT_SECRET = 'google.clientSecret'
 const GOOGLE_REFRESH_TOKEN = 'google.refreshToken'
+const WEB_SEARCH_KEY = 'webSearch.ollamaKey'
 
 type Vault = Record<string, string> // clé → valeur chiffrée en base64
 
@@ -97,6 +98,19 @@ class SecretStore {
 
   setGoogleRefreshToken(token: string | null): void {
     this.set(GOOGLE_REFRESH_TOKEN, token || null)
+  }
+
+  // ─── Recherche web (clé du compte Ollama de l'utilisateur) ───
+  getWebSearchKey(): string | undefined {
+    return this.get(WEB_SEARCH_KEY)
+  }
+
+  setWebSearchKey(key: string | null): void {
+    this.set(WEB_SEARCH_KEY, key?.trim() || null)
+  }
+
+  hasWebSearchKey(): boolean {
+    return this.has(WEB_SEARCH_KEY)
   }
 
   // ─── Connecteurs ───

@@ -62,7 +62,8 @@ import type {
   VoiceInfo,
   VoiceModelId,
   VoiceModelStatus,
-  VoiceVariant
+  VoiceVariant,
+  WebSearchTestResult
 } from '../shared/types'
 import type { ClaudeCodeUsage, CompiUsageRow } from '../shared/usage'
 import type { PerfSnapshot } from '../shared/perf'
@@ -145,6 +146,10 @@ export interface CompiApi {
   recommendBrain(answers: BrainQuizAnswers): Promise<BrainRecommendation>
   testBrain(brain: Brain): Promise<BrainTestResult>
   setCustomKey(key: string | null): Promise<PublicSettings>
+  /** Clé du compte Ollama pour la recherche web (chiffrée, jamais renvoyée). */
+  setWebSearchKey(key: string | null): Promise<PublicSettings>
+  /** Essai de la recherche web réglée : une recherche « wikipedia » envoyée au service choisi. */
+  testWebSearch(): Promise<WebSearchTestResult>
   setConversationBrain(conversationId: string, brain: Brain): Promise<void>
   // confidentialité
   // journal des autorisations et utilisation (Activité)

@@ -58,6 +58,8 @@ Compi vit dans un « îlot » noir collé en haut de l'écran, à la manière du
 
 En local, Compi regarde ta machine et te conseille un modèle. Il installe Ollama et ce modèle en un clic, seulement si tu le décides.
 
+En local, il peut aussi chercher sur le web si tu choisis un service (Ollama avec ton compte, ou ton SearXNG) : seuls les mots cherchés partent, avec une carte avant chaque recherche.
+
 ## Confidentialité
 
 - **Ni compte, ni serveur, ni télémétrie.** Compi n'envoie rien à ses auteurs.

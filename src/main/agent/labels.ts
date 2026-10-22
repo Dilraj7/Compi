@@ -147,6 +147,8 @@ export function activityLabel(name: string, input: Input = {}): string {
         return `Recherche dans tes documents${semanticReady ? ' (par le sens)' : ''} : ${str(input.query)}`
       case 'fetch_page':
         return `Lecture de ${host(str(input.url))}`
+      case 'web_search':
+        return `Recherche sur le web : ${str(input.query)}`
       case 'read_screen_text':
         return 'Lecture du texte de l’écran'
       case 'windows_status':
@@ -266,6 +268,7 @@ export function auditTarget(name: string, input: Input = {}): string | undefined
       out = str(input.url) ? host(str(input.url)) : ''
       break
     case 'WebSearch':
+    case 'mcp__compi__web_search':
       out = short(str(input.query), 80)
       break
     case 'Bash':
@@ -328,6 +331,8 @@ export function approvalTitle(name: string, input: Input = {}): { title: string;
         return { title: 'Compi veut lire un document hors de tes dossiers', detail: str(input.path) }
       case 'fetch_page':
         return { title: 'Compi veut lire une page web', detail: str(input.url) }
+      case 'web_search':
+        return { title: 'Compi veut chercher sur le web', detail: `« ${str(input.query).slice(0, 300)} »` }
       case 'read_screen_text':
         return { title: 'Compi veut lire le texte de ton écran' }
       case 'windows_status':

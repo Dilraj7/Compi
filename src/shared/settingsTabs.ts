@@ -6,6 +6,7 @@
 export type SettingsFocus =
   | 'brain'
   | 'quiz'
+  | 'websearch'
   | 'voice'
   | 'dictation'
   | 'speak'
@@ -35,6 +36,7 @@ export const SETTINGS_TABS: Array<{ value: SettingsTab; label: string }> = [
 export const SETTINGS_TAB_OF: Record<SettingsFocus, SettingsTab> = {
   brain: 'brain',
   quiz: 'brain',
+  websearch: 'brain',
   voice: 'voice',
   dictation: 'voice',
   speak: 'voice',

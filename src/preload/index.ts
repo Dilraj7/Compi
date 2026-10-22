@@ -68,6 +68,8 @@ const api: CompiApi = {
   recommendBrain: (answers) => ipcRenderer.invoke(IPC.recommendBrain, answers),
   testBrain: (brain) => ipcRenderer.invoke(IPC.testBrain, brain),
   setCustomKey: (key) => ipcRenderer.invoke(IPC.setCustomKey, key),
+  setWebSearchKey: (key) => ipcRenderer.invoke(IPC.setWebSearchKey, key),
+  testWebSearch: () => ipcRenderer.invoke(IPC.testWebSearch),
   setConversationBrain: (id, brain) => ipcRenderer.invoke(IPC.setConversationBrain, id, brain),
 
   approvalLog: () => ipcRenderer.invoke(IPC.approvalLog),

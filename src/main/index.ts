@@ -22,9 +22,11 @@ import type {
   SpeechPackId,
   VoiceModelId,
   VoiceSettings,
-  VoiceVariant
+  VoiceVariant,
+  WebSearchTestResult
 } from '../shared/types'
 import { runRoutineAgent, sendMessage, stopAll, stopConversation } from './agent/assistant'
+import { searchWeb } from './agent/webSearch'
 import { normalizeWorkspaceId } from './agent/errors'
 import { cancelReminder, listReminders, restoreReminders, snoozeReminder } from './day/reminders'
 import { inMeeting, startMeetings, stopMeetings } from './day/meetings'
@@ -161,6 +163,7 @@ function publicSettings(): PublicSettings {
     ...s,
     hasApiKey: secrets.hasApiKey(),
     hasCustomKey: secrets.hasCustomKey(),
+    hasWebSearchKey: secrets.hasWebSearchKey(),
     shortcutActive: shortcutActive(),
     quickShortcutActive: quickShortcutActive(),
     voiceShortcutActive: voiceShortcutActive(),
@@ -570,6 +573,23 @@ function registerIpc(): void {
     secrets.setCustomKey(key)
     log('info', `clé du service « Autre » ${key ? 'enregistrée' : 'supprimée'}`)
     return publicSettings()
+  })
+  ipcMain.handle(IPC.setWebSearchKey, (_e, key: string | null) => {
+    secrets.setWebSearchKey(typeof key === 'string' ? key : null)
+    log('info', `clé Ollama de la recherche web ${key ? 'enregistrée' : 'supprimée'}`)
+    return publicSettings()
+  })
+  // Essai demandé par l'utilisateur (bouton) : une recherche neutre, rien de personnel.
+  ipcMain.handle(IPC.testWebSearch, async (): Promise<WebSearchTestResult> => {
+    try {
+      const results = await searchWeb('wikipedia', 3)
+      return {
+        ok: results.length > 0,
+        message: results.length ? `Ça marche : ${results.length} résultat(s) reçu(s).` : 'Le service a répondu, mais sans résultat.'
+      }
+    } catch (e) {
+      return { ok: false, message: (e as Error).message }
+    }
   })
   ipcMain.handle(IPC.setConversationBrain, (_e, id: string, brain: Brain) => {
     const conv = conversations.get(id)

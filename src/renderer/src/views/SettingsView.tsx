@@ -7,6 +7,7 @@ import { useCompi } from '../store'
 import { Badge, Button, IconButton, Row, Section, Segmented, ShortcutInput, TextInput, Toggle, prettyShortcut } from '../components/ui'
 import { SETTINGS_TABS, type SettingsTab } from '@shared/settingsTabs'
 import { BrainSection } from './BrainSection'
+import { WebSearchSection } from './WebSearchSection'
 import { DaySection, GoogleSection } from './AccountsSection'
 import { AgendaSourcesSection } from './AgendaSourcesSection'
 import { IslandSection, SpeakSection } from './LiveSection'
@@ -187,9 +188,14 @@ export function SettingsView() {
           </div>
         )}
         {tab === 'brain' && (
-          <div data-settings-focus="brain" className="scroll-mt-2">
-            <BrainSection s={s} apply={apply} update={update} />
-          </div>
+          <>
+            <div data-settings-focus="brain" className="scroll-mt-2">
+              <BrainSection s={s} apply={apply} update={update} />
+            </div>
+            <div data-settings-focus="websearch" className="scroll-mt-2">
+              <WebSearchSection s={s} apply={apply} update={update} />
+            </div>
+          </>
         )}
         {tab === 'voice' && (
           <>
@@ -312,8 +318,8 @@ export function SettingsView() {
           <div data-settings-focus="privacy" className="scroll-mt-2">
             <Section title="Confidentialité" hint="Aucune télémétrie, aucun compte. Tes secrets sont chiffrés par Windows.">
               <div className="px-3.5 pt-3 pb-1 text-[11.5px] leading-snug text-fog-500">
-                Avec un cerveau local, rien ne quitte ton PC. Avec Claude ou un autre service en ligne, choisis ce que je peux lui envoyer. Les IBAN, cartes
-                bancaires, mots de passe et clés sont masqués automatiquement.
+                Avec un cerveau local, rien ne quitte ton PC, sauf tes recherches web si tu les actives. Avec Claude ou un autre service en ligne, choisis ce
+                que je peux lui envoyer. Les IBAN, cartes bancaires, mots de passe et clés sont masqués automatiquement.
               </div>
               {PRIVACY_CATEGORIES.map((c) => (
                 <Row key={c.id} label={c.label} hint={c.id === 'memory' ? `${c.what} (« Toujours » : je m’en sers à chaque message)` : c.what}>

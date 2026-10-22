@@ -180,6 +180,23 @@ export interface Settings {
   approvalKeys: ApprovalKeysSettings
   /** Activité du PC (processeur, mémoire, carte graphique). */
   monitor: MonitorSettings
+  /** Recherche web des cerveaux autres que Claude (désactivée par défaut). */
+  webSearch: WebSearchSettings
+}
+
+export type WebSearchProvider = 'off' | 'ollama' | 'searxng'
+
+/** Service de recherche web choisi par l'utilisateur ; la clé d'Ollama est dans le coffre. */
+export interface WebSearchSettings {
+  provider: WebSearchProvider
+  /** Adresse de l'instance SearXNG de l'utilisateur. */
+  searxngUrl: string
+}
+
+/** Essai de la recherche web depuis les réglages. */
+export interface WebSearchTestResult {
+  ok: boolean
+  message: string
 }
 
 export type SoundVolume = 'very-low' | 'low' | 'medium'
@@ -245,6 +262,8 @@ export interface PublicSettings extends Settings {
   hasApiKey: boolean
   /** Une clé est enregistrée pour le service « Autre ». */
   hasCustomKey: boolean
+  /** Une clé Ollama est enregistrée pour la recherche web. */
+  hasWebSearchKey: boolean
   /** Le raccourci global est bien enregistré (pas pris par une autre app). */
   shortcutActive: boolean
   quickShortcutActive: boolean
@@ -309,6 +328,8 @@ export interface SentTo {
   categories: PrivacyCategory[]
   /** Nombre de secrets masqués avant l'envoi. */
   masked?: number
+  /** Service qui a reçu des recherches web (même avec un cerveau local). */
+  searched?: string
 }
 
 /** Ligne du journal local des envois (vue Activité). */

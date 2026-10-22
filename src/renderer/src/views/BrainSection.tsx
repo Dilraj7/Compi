@@ -41,6 +41,7 @@ import type {
   Settings
 } from '@shared/types'
 import { KEEP_ALIVE_LABEL, gbText } from '@shared/perf'
+import { webSearchReady } from '@shared/webSearch'
 import type { OllamaFolder } from '@shared/ollamaFolder'
 import { useCompi } from '../store'
 import { Badge, Button, Segmented, TextInput, Toggle, cx } from '../components/ui'
@@ -669,8 +670,8 @@ function LocalPanel({ s, update, local, onPick }: { s: PublicSettings; update: U
       <div className="flex items-start gap-2 rounded-xl bg-white/[0.03] px-3 py-2 text-[11.5px] leading-snug text-fog-500">
         <Lock size={12} className="mt-0.5 shrink-0 text-fog-300" />
         <span>
-          En local, tes messages et tes documents restent sur ton PC. Je lis les pages web moi-même ; pour chercher sur le web, branche le connecteur gratuit
-          Brave Search (Extensions › Connecteurs).
+          En local, tes messages et tes documents restent sur ton PC. Je lis les pages web moi-même ; pour chercher sur le web, choisis un service ci-dessous
+          (Recherche web) ou branche le connecteur Brave Search (Extensions › Connecteurs).
         </span>
       </div>
     </div>
@@ -1069,7 +1070,8 @@ export function BrainSection({ s, apply, update }: { s: PublicSettings; apply: A
           <Segmented value={s.provider} options={PROVIDERS} onChange={(provider) => update({ provider })} />
           <div className={cx('mt-2 flex items-center gap-1.5 text-[11.5px]', missing ? 'text-led-amber' : 'text-fog-500')}>
             {missing ? <TriangleAlert size={12} /> : <Check size={12} className="text-led-green" />}
-            {missing ?? `J’utilise ${brainLabel(current, s)}${s.provider === 'local' ? ', 100 % sur ton PC' : ''}.`}
+            {missing ??
+              `J’utilise ${brainLabel(current, s)}${s.provider === 'local' ? (webSearchReady(s.webSearch, s.hasWebSearchKey) ? ', sur ton PC (sauf recherches web)' : ', 100 % sur ton PC') : ''}.`}
           </div>
           {error && <div className="mt-1 text-[11.5px] text-led-red">{error}</div>}
         </div>

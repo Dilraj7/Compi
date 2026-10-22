@@ -40,6 +40,7 @@ const READ_ONLY = new Set([
   'mail_read',
   'weather_forecast',
   'fetch_page',
+  'web_search',
   'messages_recent',
   'use_extension',
   'ListMcpResourcesTool',

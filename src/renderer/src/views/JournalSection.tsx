@@ -123,7 +123,7 @@ function ApprovalsLog() {
   )
 }
 
-/** Ce qui est parti vers un cerveau en ligne, et vers qui (jamais le contenu). */
+/** Ce qui est parti en ligne (cerveau en ligne, recherches web), et vers qui (jamais le contenu). */
 function SentLog() {
   const [log, setLog] = useState<SentLogEntry[]>([])
   useEffect(() => {
@@ -133,7 +133,7 @@ function SentLog() {
   if (!log.length) {
     return (
       <div className="rounded-2xl border border-dashed border-white/[0.08] px-4 py-5 text-center text-[12px] text-fog-500">
-        Rien n’est parti vers un cerveau en ligne pour l’instant.
+        Rien n’est parti en ligne pour l’instant.
       </div>
     )
   }
@@ -146,8 +146,14 @@ function SentLog() {
             <div className="min-w-0 flex-1">
               <div className="truncate text-[12px] text-fog-300">{e.conversation || 'Discussion'}</div>
               <div className="text-[11px] text-fog-500">
-                {e.destination} · ta question
-                {e.categories.map((c) => ` · ${CATEGORY_SENT_LABEL[c]}`).join('')}
+                {e.categories.length === 1 && e.categories[0] === 'web' ? (
+                  `${e.destination} · ${CATEGORY_SENT_LABEL.web}`
+                ) : (
+                  <>
+                    {e.destination} · ta question
+                    {e.categories.map((c) => ` · ${CATEGORY_SENT_LABEL[c]}`).join('')}
+                  </>
+                )}
                 {e.masked ? ` · ${e.masked} secret${e.masked > 1 ? 's' : ''} masqué${e.masked > 1 ? 's' : ''}` : ''}
               </div>
             </div>

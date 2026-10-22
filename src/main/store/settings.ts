@@ -8,6 +8,7 @@ import { DEFAULT_NATURAL_VOICE } from '../../shared/naturalVoice'
 import { DEFAULT_PRIVACY } from '../../shared/privacy'
 import { isSpeechModel } from '../../shared/speechModels'
 import type { DictationSettings, MeetingSettings, Settings } from '../../shared/types'
+import { cleanWebSearch, DEFAULT_WEB_SEARCH } from '../../shared/webSearch'
 import { readJson, writeJson } from './jsonFile'
 
 export const DEFAULT_SHORTCUT = 'Alt+Shift+Space'
@@ -30,8 +31,9 @@ export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
  * v12 : dictée partout (désactivée par défaut). Copie settings.v11.bak.json avant la migration.
  * v13 : enregistreur d'appels (lancé seulement à la main), catégorie « réunions ».
  * v14 : voix naturelle pour la lecture à voix haute (voix de Windows par défaut).
+ * v15 : recherche web des cerveaux hors Claude (désactivée), catégorie « recherches web ».
  */
-export const SETTINGS_VERSION = 14
+export const SETTINGS_VERSION = 15
 
 /** Modèle d'Ollama pour la recherche par le sens : multilingue, bon en français, ~640 Mo. */
 export const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b'
@@ -85,7 +87,8 @@ export const DEFAULT_SETTINGS: Settings = {
     quietEnd: '08:00'
   },
   approvalKeys: { enabled: true, allow: DEFAULT_ALLOW_KEY, deny: DEFAULT_DENY_KEY },
-  monitor: { island: false }
+  monitor: { island: false },
+  webSearch: DEFAULT_WEB_SEARCH
 }
 
 type Listener = (s: Settings) => void
@@ -168,7 +171,8 @@ class SettingsStore {
       messages: { ...DEFAULT_SETTINGS.messages, ...raw.messages },
       sounds: { ...DEFAULT_SETTINGS.sounds, ...raw.sounds },
       approvalKeys: { ...DEFAULT_SETTINGS.approvalKeys, ...raw.approvalKeys },
-      monitor: { ...DEFAULT_SETTINGS.monitor, ...raw.monitor }
+      monitor: { ...DEFAULT_SETTINGS.monitor, ...raw.monitor },
+      webSearch: cleanWebSearch(raw.webSearch)
     }
     if ((raw.settingsVersion ?? 1) < SETTINGS_VERSION) {
       backupBeforeMigration(this.path, raw.settingsVersion ?? 1)
@@ -205,7 +209,8 @@ class SettingsStore {
       messages: { ...this.data.messages, ...patch.messages },
       sounds: { ...this.data.sounds, ...patch.sounds },
       approvalKeys: { ...this.data.approvalKeys, ...patch.approvalKeys },
-      monitor: { ...this.data.monitor, ...patch.monitor }
+      monitor: { ...this.data.monitor, ...patch.monitor },
+      webSearch: cleanWebSearch({ ...this.data.webSearch, ...patch.webSearch })
     }
     this.save()
     for (const l of this.listeners) l(this.data)

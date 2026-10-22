@@ -5,7 +5,7 @@
 
 import type { ProviderId } from './types'
 
-export type PrivacyCategory = 'screen' | 'files' | 'mail' | 'calendar' | 'clipboard' | 'window' | 'memory' | 'messages' | 'meetings'
+export type PrivacyCategory = 'screen' | 'files' | 'mail' | 'calendar' | 'clipboard' | 'window' | 'memory' | 'messages' | 'meetings' | 'web'
 export type PrivacyChoice = 'ask' | 'always' | 'never'
 export type PrivacySettings = Record<PrivacyCategory, PrivacyChoice>
 
@@ -18,7 +18,8 @@ export const DEFAULT_PRIVACY: PrivacySettings = {
   window: 'ask',
   memory: 'ask',
   messages: 'ask',
-  meetings: 'ask'
+  meetings: 'ask',
+  web: 'ask'
 }
 
 /** `noAlways` : pas de « Toujours » possible, une carte à chaque fois. */
@@ -31,7 +32,8 @@ export const PRIVACY_CATEGORIES: { id: PrivacyCategory; label: string; what: str
   { id: 'window', label: 'Fenêtres', what: 'titres des fenêtres ouvertes et état du PC' },
   { id: 'memory', label: 'Mémoire', what: 'ce que Compi a retenu sur toi' },
   { id: 'messages', label: 'Messages', what: 'tes messages reçus (WhatsApp, SMS…) : une carte à chaque fois', noAlways: true },
-  { id: 'meetings', label: 'Réunions', what: 'les transcriptions de tes appels enregistrés' }
+  { id: 'meetings', label: 'Réunions', what: 'les transcriptions de tes appels enregistrés' },
+  { id: 'web', label: 'Recherches web', what: 'ce que je cherche sur le web, envoyé au service de recherche choisi (même avec un cerveau local)' }
 ]
 
 /** Libellé court pour la puce « Envoyé à … ». */
@@ -44,7 +46,8 @@ export const CATEGORY_SENT_LABEL: Record<PrivacyCategory, string> = {
   window: 'fenêtres',
   memory: 'mémoire',
   messages: 'messages',
-  meetings: 'réunions'
+  meetings: 'réunions',
+  web: 'recherches web'
 }
 
 const compi = (t: string): string => `mcp__compi__${t}`
@@ -82,8 +85,17 @@ export const EXTERNAL_CONTENT_TOOLS = [compi('mail_search'), compi('mail_read'),
 /** Outils par lesquels des données peuvent quitter le PC, hors cerveau : pages web, liens, connecteurs, commandes. */
 export function isOutbound(toolName: string): boolean {
   if (['WebFetch', 'WebSearch', 'Bash', 'PowerShell'].includes(toolName)) return true
-  if (toolName === compi('fetch_page') || toolName === compi('open_url')) return true
+  if (toolName === compi('fetch_page') || toolName === compi('open_url') || toolName === compi('web_search')) return true
   return toolName.startsWith('mcp__') && !toolName.startsWith('mcp__compi__')
+}
+
+/**
+ * Recherche web de Compi : la requête part chez le service de recherche choisi,
+ * quel que soit le cerveau (même local). Réglage « Recherches web ».
+ */
+export function webSearchDecision(privacy: Partial<PrivacySettings> | undefined): PrivacyDecision {
+  const choice = privacy?.web ?? 'ask'
+  return choice === 'always' ? 'allow' : choice === 'never' ? 'deny' : 'ask'
 }
 
 export const isOnline = (provider: ProviderId): boolean => provider !== 'local'
