@@ -16,8 +16,11 @@ const FORMATS = [
   { Icon: Image, label: 'Images' }
 ]
 
+/** Toujours la même liste vide : une nouvelle à chaque lecture ferait boucler l'affichage avant le chargement des réglages. */
+const NO_FOLDERS: string[] = []
+
 function FoldersPanel() {
-  const folders = useCompi((s) => s.settings?.folders ?? [])
+  const folders = useCompi((s) => s.settings?.folders ?? NO_FOLDERS)
   const setSettings = useCompi((s) => s.setSettings)
 
   return (

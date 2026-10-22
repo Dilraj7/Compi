@@ -1,5 +1,5 @@
-// Réglages « Îlot et voix » : musique en cours dans l'îlot, lecture des
-// réponses à voix haute (voix de Windows, rien ne quitte le PC).
+// Réglages de l'îlot (musique en cours, moniteur du PC, sons discrets) et de la
+// lecture des réponses à voix haute (voix de Windows, rien ne quitte le PC).
 
 import { useEffect, useState } from 'react'
 import { Play, Square, Volume2 } from 'lucide-react'
@@ -75,7 +75,30 @@ function SoundRows({ s, update }: Props) {
   )
 }
 
-export function LiveSection({ s, update }: Props) {
+/** Îlot : musique en cours, moniteur du PC, sons discrets (Réglages › Îlot). */
+export function IslandSection({ s, update }: Props) {
+  return (
+    <Section title="Îlot" hint="La musique et les sons passent par Windows : rien n’est envoyé en ligne.">
+      <Row label="Musique en cours dans l’îlot" hint="Pochette et égaliseur dans l’îlot ; au survol : pause, suivant, précédent.">
+        <Toggle checked={s.showMusic} onChange={(showMusic) => update({ showMusic })} label="Musique en cours dans l’îlot" />
+      </Row>
+      <div data-settings-focus="island" className="scroll-mt-2">
+        <Row
+          label="Moniteur du PC dans l’îlot"
+          hint="Mini-jauges à côté de moi (processeur, mémoire, carte graphique, mémoire vidéo) ; les chiffres au survol."
+        >
+          <Toggle checked={s.monitor.island} onChange={(island) => update({ monitor: { island } })} label="Moniteur du PC dans l’îlot" />
+        </Row>
+      </div>
+      <div data-settings-focus="sounds" className="scroll-mt-2">
+        <SoundRows s={s} update={update} />
+      </div>
+    </Section>
+  )
+}
+
+/** Lecture des réponses à voix haute (Réglages › Voix). */
+export function SpeakSection({ s, update }: Props) {
   const v = s.voice
   const [voices, setVoices] = useState<VoiceInfo[] | null>(null)
   const [voiceError, setVoiceError] = useState('')
@@ -91,21 +114,7 @@ export function LiveSection({ s, update }: Props) {
   const rate = RATES.reduce((best, r) => (Math.abs(Number(r.value) - v.rate) < Math.abs(Number(best.value) - v.rate) ? r : best), RATES[1])
 
   return (
-    <Section title="Îlot et voix" hint="La musique et la voix passent par Windows : rien n’est envoyé en ligne.">
-      <Row label="Musique en cours dans l’îlot" hint="Pochette et égaliseur dans l’îlot ; au survol : pause, suivant, précédent.">
-        <Toggle checked={s.showMusic} onChange={(showMusic) => update({ showMusic })} label="Musique en cours dans l’îlot" />
-      </Row>
-      <div data-settings-focus="island" className="scroll-mt-2">
-        <Row
-          label="Moniteur du PC dans l’îlot"
-          hint="Mini-jauges à côté de moi (processeur, mémoire, carte graphique, mémoire vidéo) ; les chiffres au survol."
-        >
-          <Toggle checked={s.monitor.island} onChange={(island) => update({ monitor: { island } })} label="Moniteur du PC dans l’îlot" />
-        </Row>
-      </div>
-      <div data-settings-focus="sounds" className="scroll-mt-2">
-        <SoundRows s={s} update={update} />
-      </div>
+    <Section title="Lecture à voix haute" hint="La voix passe par Windows : rien n’est envoyé en ligne.">
       <Row label="Lire mes réponses à voix haute" hint="« Quand je parle » : après une question posée à la voix. Le bouton « Écouter » marche toujours.">
         <Segmented<VoiceSettings['speak']>
           id="voice-speak"

@@ -29,6 +29,7 @@ import { onSpeaking, speak, speakStream, stopSpeaking, type SpeechStream } from 
 import { cancelListening, isRecording, loadModel, startListening, stopListening, TOO_SHORT, type VoicePhase } from './lib/voice'
 import { startCallCapture, type CallCapture } from './lib/callCapture'
 import { formatDuration } from '@shared/meetings'
+import { SETTINGS_TAB_OF, type ActivityTab, type SettingsFocus, type SettingsTab } from '@shared/settingsTabs'
 
 const api = () => window.compi
 
@@ -47,8 +48,7 @@ export function setInteractive(v: boolean): void {
 /** Ordre des onglets de l'en-tête : Ctrl+1 … Ctrl+7. */
 export const TAB_ORDER: PanelView[] = ['chat', 'today', 'activity', 'history', 'memory', 'connectors', 'settings']
 
-/** Partie des réglages à montrer en ouvrant Réglages. */
-export type SettingsFocus = 'quiz' | 'voice' | 'privacy' | 'messages' | 'brain' | 'island' | 'sounds' | 'keys' | 'agenda'
+export type { SettingsFocus } from '@shared/settingsTabs'
 
 type Phase = 'thinking' | 'tool' | 'text' | null
 
@@ -81,6 +81,8 @@ interface CompiState {
   brainHint: string | null
   /** Ouvrir les réglages directement sur le questionnaire du cerveau. */
   settingsFocus: SettingsFocus | null
+  /** Rubrique des Réglages ouverte (gardée pendant la session). */
+  settingsTab: SettingsTab
   messages: ChatMessage[]
   streamingId: string | null
   phase: Phase
@@ -116,6 +118,8 @@ interface CompiState {
   palette: boolean
   /** Activité : faire défiler jusqu'à « Ce PC ». */
   activityFocus: 'perf' | null
+  /** Onglet d'Activité ouvert (gardé pendant la session). */
+  activityTab: ActivityTab
   /** Appel en cours d'enregistrement (bandeau rouge de l'îlot). */
   call: CallState | null
   /** Historique : discussions ou réunions. */
@@ -140,7 +144,9 @@ interface CompiState {
   loadConversation(id: string): Promise<void>
   /** Choisit un cerveau : devient celui par défaut, et celui de la discussion si le fournisseur est le même. */
   pickBrain(brain: Brain, extra?: Partial<Settings>): Promise<void>
+  /** Ouvre aussi la rubrique qui montre ce réglage. */
   focusSettings(focus: SettingsFocus | null): void
+  setSettingsTab(tab: SettingsTab): void
   /** `voice` : message dicté (la réponse pourra être lue à voix haute). `external` : texte venu d'autres personnes (résumé d'appel). */
   send(text: string, opts?: { voice?: boolean; external?: boolean }): Promise<void>
   stop(): void
@@ -175,6 +181,7 @@ interface CompiState {
   focusPending(): void
   setPalette(on: boolean): void
   focusActivity(f: 'perf' | null): void
+  setActivityTab(tab: ActivityTab): void
   /** Commence l'enregistrement d'un appel (après « Commencer »). */
   startCall(opts: MeetingStartOptions): Promise<void>
   stopCall(): Promise<void>
@@ -298,6 +305,7 @@ export const useCompi = create<CompiState>((set, get) => {
     conversationBrain: null,
     brainHint: null,
     settingsFocus: null,
+    settingsTab: 'brain',
     messages: [],
     streamingId: null,
     phase: null,
@@ -321,6 +329,7 @@ export const useCompi = create<CompiState>((set, get) => {
     focusPendingAt: 0,
     palette: false,
     activityFocus: null,
+    activityTab: 'perf',
     call: null,
     historyTab: 'chats',
     openMeetingId: null,
@@ -449,7 +458,8 @@ export const useCompi = create<CompiState>((set, get) => {
       }
     },
 
-    focusSettings: (settingsFocus) => set({ settingsFocus }),
+    focusSettings: (settingsFocus) => set(settingsFocus ? { settingsFocus, settingsTab: SETTINGS_TAB_OF[settingsFocus] } : { settingsFocus }),
+    setSettingsTab: (settingsTab) => set({ settingsTab }),
 
     send: async (text, opts = {}) => {
       const trimmed = text.trim()
@@ -593,7 +603,7 @@ export const useCompi = create<CompiState>((set, get) => {
       const status = speech ? null : await api().voiceModelStatus(s.voice.model)
       if (status && (!status.installed || !status.variant)) {
         // Première fois : on montre où installer la dictée (avec l'accord de l'utilisateur).
-        set({ settingsFocus: 'voice' })
+        get().focusSettings('voice')
         get().open('settings', { focus: true })
         return
       }
@@ -712,7 +722,8 @@ export const useCompi = create<CompiState>((set, get) => {
     setPerf: (perf) => set({ perf }),
     focusPending: () => set({ focusPendingAt: Date.now() }),
     setPalette: (palette) => set({ palette }),
-    focusActivity: (activityFocus) => set({ activityFocus }),
+    focusActivity: (activityFocus) => set(activityFocus ? { activityFocus, activityTab: 'perf' } : { activityFocus }),
+    setActivityTab: (activityTab) => set({ activityTab }),
 
     startCall: async (opts) => {
       if (get().call) return
