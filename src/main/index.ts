@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { app, globalShortcut, ipcMain, shell } from 'electron'
 import { IPC } from '../shared/ipc'
 import { recommend } from '../shared/recommend'
@@ -12,12 +12,14 @@ import type {
   DaySettings,
   KeepAlive,
   MediaAction,
+  MeetingStartOptions,
+  MeetingTrack,
   PublicSettings,
   RoutineDraft,
   Settings,
   SkillDraft,
   SoundSettings,
-  SpeechModelId,
+  SpeechPackId,
   VoiceModelId,
   VoiceSettings,
   VoiceVariant
@@ -83,7 +85,7 @@ import {
   voiceModelStatus
 } from './voice/model'
 import { isVoiceModel } from '../shared/voice'
-import { isSpeechModel } from '../shared/speechModels'
+import { isSpeechModel, isSpeechPack } from '../shared/speechModels'
 import {
   applyDictationSettings,
   deliverDictation,
@@ -99,7 +101,21 @@ import {
 import { clearDictationStats, dictationStats } from './dictation/stats'
 import { unloadSpeech } from './speech/engine'
 import { cancelSpeechDownload, cleanPartialSpeechDownloads, deleteSpeechModel, downloadSpeechModel, speechModelStatus } from './speech/models'
-import { restrictPermissions } from './permissions'
+import { allowCallAudio, restrictPermissions } from './permissions'
+import {
+  discardMeeting,
+  hookMeetingsPower,
+  meetingAudio,
+  recordingId,
+  recoverMeetings,
+  resumeMeeting,
+  startMeeting,
+  stopMeeting,
+  takeDisplayCapture
+} from './meetings/recorder'
+import { deleteMeeting, getMeeting, isMeetingId, listMeetings, updateMeeting } from './meetings/store'
+import { summarizeMeeting } from './meetings/summary'
+import { meetingMarkdown, nameVoice } from '../shared/meetings'
 import { clearSent, listSent } from './privacy/log'
 import { clearApprovalLog, listApprovalLog } from './privacy/approvalLog'
 import { claudeCodeUsage, refreshClaudeCodeUsage, startUsageWatch, stopUsageWatch } from './usage/claudeCode'
@@ -120,7 +136,7 @@ import { keyTarget } from '../shared/attention'
 import { SOUND_KINDS, shouldPlay, type SoundKind } from '../shared/sounds'
 import type { PillId } from '../shared/pills'
 import { fullscreenNow, hookPerfPower, perfWatch, stopPerf, unloadLocal } from './system/monitor'
-import { createNotchWindow, onPanelOpen, registerIslandIpc, sendIslandCommand, showOpenDialog } from './notchWindow'
+import { createNotchWindow, onPanelOpen, registerIslandIpc, sendIslandCommand, showOpenDialog, showSaveDialog } from './notchWindow'
 import { conversations } from './store/conversations'
 import { secrets } from './store/secrets'
 import { OLLAMA_URL, settings } from './store/settings'
@@ -687,15 +703,16 @@ function registerIpc(): void {
   ipcMain.handle(IPC.voiceModelDelete, (_e, id: VoiceModelId) => deleteVoiceModel(modelId(id)))
 
   // Dictée partout
-  const speechId = (id: unknown): SpeechModelId => {
-    if (!isSpeechModel(id)) throw new Error('Modèle inconnu.')
+  const speechId = (id: unknown): SpeechPackId => {
+    if (!isSpeechPack(id)) throw new Error('Modèle inconnu.')
     return id
   }
-  ipcMain.handle(IPC.speechModelStatus, (_e, id: SpeechModelId) => speechModelStatus(speechId(id)))
-  ipcMain.handle(IPC.speechModelDownload, (_e, id: SpeechModelId) => downloadSpeechModel(speechId(id), (st) => emit(IPC.speechModelProgress, st)))
+  ipcMain.handle(IPC.speechModelStatus, (_e, id: SpeechPackId) => speechModelStatus(speechId(id)))
+  ipcMain.handle(IPC.speechModelDownload, (_e, id: SpeechPackId) => downloadSpeechModel(speechId(id), (st) => emit(IPC.speechModelProgress, st)))
   ipcMain.handle(IPC.speechModelCancel, () => cancelSpeechDownload())
-  ipcMain.handle(IPC.speechModelDelete, (_e, id: SpeechModelId) => {
-    unloadSpeech()
+  ipcMain.handle(IPC.speechModelDelete, (_e, id: SpeechPackId) => {
+    // Le moteur de reconnaissance garde son modèle ouvert : on le libère avant d'effacer.
+    if (isSpeechModel(id)) unloadSpeech()
     return deleteSpeechModel(speechId(id))
   })
   ipcMain.handle(IPC.dictationTranscribe, (_e, audio: Float32Array) => transcribeDictation(audio))
@@ -705,6 +722,56 @@ function registerIpc(): void {
   ipcMain.on(IPC.dictationPrepare, () => prepareDictation())
   ipcMain.handle(IPC.dictationStats, () => dictationStats())
   ipcMain.handle(IPC.dictationStatsClear, () => clearDictationStats())
+
+  // Réunions (enregistreur d'appels)
+  const meetingId = (id: unknown): string => {
+    if (!isMeetingId(id)) throw new Error('Réunion introuvable.')
+    return id
+  }
+  ipcMain.handle(IPC.meetingStart, (_e, opts: MeetingStartOptions) =>
+    startMeeting({ engine: opts?.engine === 'omnilingual' ? 'omnilingual' : 'parakeet', others: opts?.others === true })
+  )
+  ipcMain.on(IPC.meetingAudio, (_e, id: string, track: MeetingTrack, data: Int16Array) => {
+    if (track === 'me' || track === 'others') meetingAudio(String(id), track, data)
+  })
+  ipcMain.handle(IPC.meetingStop, () => stopMeeting())
+  ipcMain.handle(IPC.meetingDiscard, () => discardMeeting())
+  ipcMain.handle(IPC.meetingsList, () => listMeetings())
+  ipcMain.handle(IPC.meetingGet, (_e, id: string) => getMeeting(meetingId(id)))
+  ipcMain.handle(IPC.meetingDelete, (_e, id: string) => {
+    if (id === recordingId()) throw new Error('Arrête d’abord l’enregistrement.')
+    return deleteMeeting(meetingId(id))
+  })
+  ipcMain.handle(IPC.meetingRename, (_e, id: string, title: string) => {
+    const t = String(title ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80)
+    return t ? updateMeeting(meetingId(id), (m) => ({ ...m, title: t })) : getMeeting(meetingId(id))
+  })
+  ipcMain.handle(IPC.meetingNameVoice, (_e, id: string, who: string, name: string) => {
+    if (!/^(s\d{1,2}|others)$/.test(String(who))) throw new Error('Voix inconnue.')
+    const n = String(name ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 40)
+    return updateMeeting(meetingId(id), (m) => nameVoice(m, who, n))
+  })
+  ipcMain.handle(IPC.meetingResume, (_e, id: string) => resumeMeeting(meetingId(id)))
+  ipcMain.handle(IPC.meetingSummarize, (_e, id: string) => summarizeMeeting(meetingId(id), true))
+  ipcMain.handle(IPC.meetingExport, async (_e, id: string) => {
+    const m = getMeeting(meetingId(id))
+    if (!m) throw new Error('Réunion introuvable.')
+    const safe =
+      m.title
+        .replace(/[\\/:*?"<>|]+/g, ' ')
+        .trim()
+        .slice(0, 60) || 'Réunion'
+    const r = await showSaveDialog({ title: 'Exporter la réunion', defaultPath: `${safe}.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] })
+    if (r.canceled || !r.filePath) return false
+    writeFileSync(r.filePath, meetingMarkdown(m), 'utf8')
+    return true
+  })
 
   // Ce que je sais de toi
   ipcMain.handle(IPC.memoryList, () => listMemory())
@@ -820,6 +887,8 @@ app.whenReady().then(async () => {
   cleanPartialDownloads()
   cleanPartialSpeechDownloads()
   restrictPermissions()
+  allowCallAudio(takeDisplayCapture)
+  recoverMeetings()
 
   const win = createNotchWindow()
   setBusTarget(win)
@@ -847,6 +916,7 @@ app.whenReady().then(async () => {
   hookMessagesPower()
   hookPerfPower()
   hookDictationPower()
+  hookMeetingsPower()
   onDictationKeyActive(() => emit(IPC.settingsChanged, publicSettings()))
   syncMessages()
   onApprovalShortcut(onApprovalKey)

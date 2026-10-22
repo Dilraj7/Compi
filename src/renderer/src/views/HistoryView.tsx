@@ -5,9 +5,38 @@ import { brainLabel } from '@shared/brains'
 import type { ConversationMeta } from '@shared/types'
 import { useCompi } from '../store'
 import { BrainIcon } from '../components/BrainPicker'
-import { Button, timeAgo } from '../components/ui'
+import { Button, cx, timeAgo } from '../components/ui'
+import { MeetingsView } from './MeetingsView'
+
+/** Discussions ou réunions enregistrées. */
+function HistoryTabs() {
+  const tab = useCompi((s) => s.historyTab)
+  const setTab = useCompi((s) => s.setHistoryTab)
+  const item = (id: 'chats' | 'meetings', label: string) => (
+    <button
+      onClick={() => setTab(id)}
+      className={cx(
+        'led-text rounded-lg px-2 py-1 text-[11px] transition-colors',
+        tab === id ? 'bg-white/[0.08] text-fog-100' : 'text-fog-500 hover:text-fog-300'
+      )}
+    >
+      {label}
+    </button>
+  )
+  return (
+    <div className="-ml-2 flex items-center gap-0.5">
+      {item('chats', 'Discussions récentes')}
+      {item('meetings', 'Réunions')}
+    </div>
+  )
+}
 
 export function HistoryView() {
+  const tab = useCompi((s) => s.historyTab)
+  return tab === 'meetings' ? <MeetingsView tabs={<HistoryTabs />} /> : <ChatHistory />
+}
+
+function ChatHistory() {
   const [items, setItems] = useState<ConversationMeta[] | null>(null)
   const current = useCompi((s) => s.conversationId)
   const load = useCompi((s) => s.loadConversation)
@@ -27,7 +56,7 @@ export function HistoryView() {
   return (
     <div className="flex flex-1 flex-col px-5 pt-1 pb-5">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="led-text px-0.5 text-[11px] text-fog-500">Discussions récentes</h3>
+        <HistoryTabs />
         <Button size="sm" variant="subtle" onClick={newConversation}>
           <Plus size={13} /> Nouvelle
         </Button>

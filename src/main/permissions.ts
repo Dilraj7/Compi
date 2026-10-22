@@ -1,8 +1,9 @@
 // Autorisations du navigateur intégré : seulement le micro (pour la dictée,
-// jamais la caméra) et la copie dans le presse-papier, et seulement pour
-// l'interface de Compi elle-même. Tout le reste est refusé.
+// jamais la caméra), le son de l'ordinateur pendant un appel enregistré, et la
+// copie dans le presse-papier, et seulement pour l'interface de Compi
+// elle-même. Tout le reste est refusé.
 
-import { session } from 'electron'
+import { desktopCapturer, session } from 'electron'
 
 const ALLOWED = new Set(['clipboard-sanitized-write'])
 
@@ -17,6 +18,23 @@ export function isOwnPage(url: string, devUrl = process.env.ELECTRON_RENDERER_UR
     }
   }
   return url.startsWith('file://')
+}
+
+/**
+ * Son de l'ordinateur pendant un appel enregistré, en secours (d'ordinaire,
+ * Windows le capte pour Compi) : accordé une seule fois, juste après un
+ * « Commencer » qui en a besoin (`armed`), et seulement à l'interface de Compi.
+ * Chromium exige aussi une image de l'écran : l'îlot l'arrête aussitôt, elle
+ * n'est jamais lue ni gardée.
+ */
+export function allowCallAudio(armed: () => boolean): void {
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    if (!isOwnPage(request.frame?.url ?? request.securityOrigin) || !request.audioRequested || !armed()) return callback(null)
+    desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } }).then(
+      (sources) => callback(sources[0] ? { video: sources[0], audio: 'loopback' } : null),
+      () => callback(null)
+    )
+  })
 }
 
 export function restrictPermissions(): void {

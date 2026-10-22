@@ -4,7 +4,17 @@
 // l'intérieur. Hors de l'îlot, les clics traversent vers le bureau.
 
 import { join } from 'node:path'
-import { BrowserWindow, dialog, ipcMain, screen, shell, type OpenDialogOptions, type OpenDialogReturnValue } from 'electron'
+import {
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  screen,
+  shell,
+  type OpenDialogOptions,
+  type OpenDialogReturnValue,
+  type SaveDialogOptions,
+  type SaveDialogReturnValue
+} from 'electron'
 import { IPC } from '../shared/ipc'
 import type { IslandCommand } from '../shared/types'
 
@@ -184,6 +194,21 @@ export async function showOpenDialog(options: OpenDialogOptions): Promise<OpenDi
   const refocus = Boolean(win && !win.isDestroyed() && activatable)
   try {
     return win && !win.isDestroyed() ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+  } finally {
+    dialogOpen = false
+    if (win && !win.isDestroyed() && refocus) {
+      win.focus()
+      win.setAlwaysOnTop(true, 'screen-saver')
+    }
+  }
+}
+
+/** Même chose pour enregistrer un fichier (export d'une réunion). */
+export async function showSaveDialog(options: SaveDialogOptions): Promise<SaveDialogReturnValue> {
+  dialogOpen = true
+  const refocus = Boolean(win && !win.isDestroyed() && activatable)
+  try {
+    return win && !win.isDestroyed() ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
   } finally {
     dialogOpen = false
     if (win && !win.isDestroyed() && refocus) {

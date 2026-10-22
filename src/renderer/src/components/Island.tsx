@@ -14,6 +14,7 @@ import { LedDots, prettyShortcut, Ticker } from './ui'
 import { PILL_ICONS, openFromNotice } from './Notice'
 import { Panel } from './Panel'
 import { CompactArt, CompactTimer, LedEq, ListeningPeek, MediaPeek, SpeakingPeek, TimerPeek, useLiveMedia } from './Live'
+import { CallPeek, CompactCall, REC } from './CallLive'
 
 const SIZE = {
   hidden: { width: 140, height: 6, radius: 6 },
@@ -119,17 +120,23 @@ function CompactContent() {
   const speaking = useCompi((s) => s.speaking)
   const dictating = useCompi((s) => s.dictation.phase !== 'idle')
   const perf = useCompi((s) => (s.settings?.monitor.island ? s.perf : null))
+  const call = useCompi((s) => s.call)
   const media = useLiveMedia()
 
-  // À gauche : l'activité de Compi, sinon la pochette, sinon les mini-jauges (option).
+  // À gauche : l'enregistrement d'un appel (toujours visible), l'activité de Compi, sinon la pochette, sinon les mini-jauges (option).
   // À droite : ce qui attend l'utilisateur, puis le minuteur, la voix, la musique.
-  const left = streaming || working > 0 ? 'busy' : media ? 'art' : perf ? 'perf' : null
+  const left = call ? 'call' : streaming || working > 0 ? 'busy' : media ? 'art' : perf ? 'perf' : null
   const right = pending > 0 ? 'pending' : dictating ? 'listening' : timer ? 'timer' : speaking ? 'speaking' : media ? 'eq' : null
 
   return (
     <div className="relative flex h-full items-center justify-center px-3">
       <div className="absolute left-3 flex items-center">
         <AnimatePresence mode="popLayout" initial={false}>
+          {left === 'call' && call && (
+            <Fade key="call">
+              <CompactCall call={call} />
+            </Fade>
+          )}
           {left === 'busy' && (
             <Fade key="busy" className="pl-0.5">
               <LedDots />
@@ -200,9 +207,11 @@ function PeekContent() {
   const media = useCompi((s) => (s.settings?.showMusic ? s.media : null))
   const perf = useCompi((s) => (s.settings?.monitor.island ? s.perf : null))
   const noticeScrollTime = useCompi((s) => s.noticeScrollTime)
+  const calling = useCompi((s) => s.call !== null)
 
   // Ce qui demande l'attention passe avant l'îlot vivant.
   if (dictating && !pending) return <ListeningPeek eyes={<Eyes size="md" />} />
+  if (calling && !pending && !notice) return <CallPeek eyes={<Eyes size="md" />} />
   if (!notice && !pending && !streamingId) {
     if (speaking) return <SpeakingPeek eyes={<Eyes size="md" />} />
     if (timer) return <TimerPeek timer={timer} />
@@ -304,10 +313,12 @@ export function Island() {
   const open = useCompi((s) => s.open)
   const addAttachments = useCompi((s) => s.addAttachments)
   const everywhere = useCompi((s) => s.dictation.everywhere !== null)
+  const calling = useCompi((s) => s.call !== null)
   const { color } = useMood()
 
   // Une notification (ou une dictée partout) force l'aperçu le temps de l'afficher, sans prendre le focus.
-  const shown = (notice || everywhere) && mode !== 'expanded' ? 'peek' : mode
+  // Un appel enregistré n'est jamais caché : au moins la pastille, avec son point rouge.
+  const shown = (notice || everywhere) && mode !== 'expanded' ? 'peek' : calling && mode === 'hidden' ? 'compact' : mode
   const size = shown === 'peek' && notice ? SIZE.notice : SIZE[shown]
   const expanded = shown === 'expanded'
 
@@ -359,8 +370,8 @@ export function Island() {
           borderBottomLeftRadius: size.radius,
           borderBottomRightRadius: size.radius,
           boxShadow: expanded
-            ? `0 34px 90px -24px rgb(0 0 0 / 0.85), 0 0 0 1px rgb(255 255 255 / 0.07), 0 18px 60px -30px ${color}`
-            : `0 8px 24px -10px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.05), 0 6px 26px -14px ${color}`
+            ? `0 34px 90px -24px rgb(0 0 0 / 0.85), 0 0 0 1px ${calling ? `${REC}99` : 'rgb(255 255 255 / 0.07)'}, 0 18px 60px -30px ${color}`
+            : `0 8px 24px -10px rgb(0 0 0 / 0.7), 0 0 0 1px ${calling ? `${REC}b3` : 'rgb(255 255 255 / 0.05)'}, 0 6px 26px -14px ${calling ? REC : color}`
         }}
         transition={SPRING}
         onClick={!expanded ? () => openFromNotice(notice) : undefined}

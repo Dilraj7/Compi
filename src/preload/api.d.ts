@@ -41,8 +41,14 @@ import type {
   Reminder,
   Routine,
   RoutineDraft,
-  SpeechModelId,
+  SpeechPackId,
   SpeechModelStatus,
+  Meeting,
+  MeetingEvent,
+  MeetingMeta,
+  MeetingStart,
+  MeetingStartOptions,
+  MeetingTrack,
   SemanticPassage,
   SemanticStatus,
   SendRequest,
@@ -217,11 +223,11 @@ export interface CompiApi {
   voiceModelDelete(model: VoiceModelId): Promise<VoiceModelStatus>
   onVoiceModelProgress(cb: (s: VoiceModelStatus) => void): Unsubscribe
   // dictée partout
-  speechModelStatus(model: SpeechModelId): Promise<SpeechModelStatus>
+  speechModelStatus(model: SpeechPackId): Promise<SpeechModelStatus>
   /** Télécharge le modèle de la dictée partout (après l'accord de l'utilisateur). */
-  speechModelDownload(model: SpeechModelId): Promise<SpeechModelStatus>
+  speechModelDownload(model: SpeechPackId): Promise<SpeechModelStatus>
   speechModelCancel(): Promise<void>
-  speechModelDelete(model: SpeechModelId): Promise<SpeechModelStatus>
+  speechModelDelete(model: SpeechPackId): Promise<SpeechModelStatus>
   onSpeechModelProgress(cb: (s: SpeechModelStatus) => void): Unsubscribe
   onDictationCommand(cb: (c: DictationCommand) => void): Unsubscribe
   /** Son en 16 kHz mono → texte (sherpa-onnx, sur le PC). */
@@ -237,6 +243,26 @@ export interface CompiApi {
   dictationStats(): Promise<DictationStatRow[]>
   clearDictationStats(): Promise<DictationStatRow[]>
   onDictationStats(cb: (rows: DictationStatRow[]) => void): Unsubscribe
+  // réunions (enregistreur d'appels)
+  /** Commence un enregistrement (après le clic sur « Commencer »). */
+  meetingStart(opts: MeetingStartOptions): Promise<MeetingStart>
+  /** Morceau de son d'une piste (16 bits, 16 kHz). */
+  meetingAudio(id: string, track: MeetingTrack, data: Int16Array): void
+  meetingStop(): Promise<MeetingMeta | null>
+  /** Annule l'enregistrement en cours : rien n'est gardé. */
+  meetingDiscard(): Promise<void>
+  onMeetingEvent(cb: (e: MeetingEvent) => void): Unsubscribe
+  meetings(): Promise<MeetingMeta[]>
+  meeting(id: string): Promise<Meeting | null>
+  deleteMeeting(id: string): Promise<MeetingMeta[]>
+  renameMeeting(id: string, title: string): Promise<Meeting | null>
+  /** Nom d'une voix (« s1 » → « Paul ») ; vide pour revenir à « Personne 1 ». */
+  nameMeetingVoice(id: string, who: string, name: string): Promise<Meeting | null>
+  resumeMeeting(id: string): Promise<MeetingMeta | null>
+  summarizeMeeting(id: string): Promise<Meeting>
+  /** Enregistre la réunion en Markdown (fenêtre « Enregistrer sous »). */
+  exportMeeting(id: string): Promise<boolean>
+  onMeetings(cb: (list: MeetingMeta[]) => void): Unsubscribe
   // ce que je sais de toi
   memory(): Promise<MemoryItem[]>
   addMemory(fact: string): Promise<MemoryItem[]>

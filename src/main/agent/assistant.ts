@@ -272,7 +272,7 @@ const FOLDER_READ_TOOLS: Record<string, (input: Record<string, unknown>) => stri
 const ALWAYS_INSIDE = '\0inside'
 
 /** Nom du service en ligne qui recevra les données (`null` : cerveau local). */
-function destinationOf(brain: Brain): string | null {
+export function destinationOf(brain: Brain): string | null {
   if (!isOnline(brain.provider)) return null
   if (brain.provider === 'anthropic') return 'Claude (Anthropic)'
   const { custom } = settings.get()
@@ -1067,6 +1067,7 @@ export async function sendMessage(req: SendRequest): Promise<SendResult> {
   const attachments = req.attachments ?? []
   const s = settings.get()
   if (!conversations.get(conversationId)) conversations.create(conversationId, req.text, defaultBrain(s))
+  if (req.external === true) conversations.markExternal(conversationId)
   const brain = resolveBrain(s, conversations.get(conversationId))
 
   const userMessage: ChatMessage = {

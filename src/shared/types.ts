@@ -168,6 +168,8 @@ export interface Settings {
   voice: VoiceSettings
   /** Dictée partout : touche maintenue, texte écrit dans l'application ouverte. */
   dictation: DictationSettings
+  /** Enregistreur d'appels et de réunions. */
+  meetings: MeetingSettings
   /** Garder un historique (chiffré, sur le PC) de ce qui est copié. */
   clipboardHistory: boolean
   semantic: SemanticSettings
@@ -343,6 +345,8 @@ export interface SendRequest {
   conversationId?: string
   text: string
   attachments?: string[]
+  /** Le texte vient en partie d'autres personnes (résumé d'un appel) : les actions sortantes demanderont un OK. */
+  external?: boolean
 }
 
 export interface SendResult {
@@ -739,6 +743,8 @@ export type DictationStyle = 'raw' | 'natural' | 'polished'
 export type SpeechModelId = 'parakeet' | 'omnilingual'
 /** Moteur de la dictée partout : un modèle sherpa-onnx, ou le Whisper de « Me parler ». */
 export type DictationEngine = SpeechModelId | 'whisper'
+/** Ce qui se télécharge : un modèle de reconnaissance, ou le pack des voix (séparer les participants d'un appel). */
+export type SpeechPackId = SpeechModelId | 'voices'
 
 export interface DictationAppStyle {
   /** Nom du processus, sans « .exe » (« outlook », « code »). */
@@ -772,10 +778,10 @@ export interface DictationSettings {
 }
 
 export interface SpeechModelStatus {
-  model: SpeechModelId
+  model: SpeechPackId
   installed: boolean
   sizeBytes?: number
-  downloading?: { model: SpeechModelId; received: number; total: number }
+  downloading?: { model: SpeechPackId; received: number; total: number }
 }
 
 /** Ordre de la touche de dictée vers l'îlot (qui enregistre le micro). `target` : l'application visée, connue juste après le début. */
@@ -801,6 +807,96 @@ export interface DictationStatRow {
   words: number
   /** Temps de parole (ms). */
   speakingMs: number
+}
+
+// ─── Réunions (enregistreur d'appels) ────────────────────────────────────────
+
+/** Les deux pistes d'un appel : le micro, et le son de l'ordinateur (les autres participants). */
+export type MeetingTrack = 'me' | 'others'
+
+export interface MeetingLine {
+  /** Secondes depuis le début de l'enregistrement. */
+  start: number
+  end: number
+  /** `me`, `others` (voix non séparées), ou `s1`, `s2`… (pack des voix). */
+  who: string
+  text: string
+}
+
+export interface MeetingTask {
+  text: string
+  owner?: string
+  /** Échéance telle que dite (« jeudi midi »), jamais devinée. */
+  due?: string
+}
+
+export interface MeetingSummary {
+  title: string
+  summary: string
+  points: string[]
+  tasks: MeetingTask[]
+  /** Cerveau qui a fait le résumé (libellé). */
+  brain: string
+  at: number
+}
+
+/** `interrupted` : Compi fermé ou arrêt brutal pendant l'appel ; le son reste, la transcription peut reprendre. */
+export type MeetingStatus = 'recording' | 'processing' | 'done' | 'interrupted'
+
+export interface MeetingMeta {
+  id: string
+  title: string
+  startedAt: number
+  durationMs: number
+  status: MeetingStatus
+  engine: SpeechModelId
+  /** Le son de l'appel a été capté (sinon : le micro seul). */
+  others: boolean
+  /** Voix trouvées chez les autres (pack des voix). */
+  speakers?: number
+  hasSummary: boolean
+  /** Le son est encore sur le PC (option « garder le son », ou transcription à reprendre). */
+  audio: boolean
+}
+
+export interface Meeting extends MeetingMeta {
+  lines: MeetingLine[]
+  /** Noms donnés aux voix : `{ s1: 'Paul' }`. */
+  names: Record<string, string>
+  summary?: MeetingSummary
+}
+
+export interface MeetingStartOptions {
+  engine: SpeechModelId
+  /** Capter aussi le son de l'ordinateur (les autres participants). */
+  others: boolean
+}
+
+export interface MeetingStart {
+  id: string
+  startedAt: number
+  /** Qui capte le son de l'ordinateur : Windows, l'îlot (secours), ou personne (micro seul). */
+  systemAudio: 'windows' | 'browser' | 'none'
+}
+
+/** Ce que Compi dit à l'îlot pendant et après un enregistrement. */
+export type MeetingEvent =
+  | { type: 'line'; id: string; line: MeetingLine }
+  | { type: 'processing'; id: string; step: string }
+  | { type: 'done'; id: string; meta: MeetingMeta }
+  | { type: 'stopped'; id: string; message: string }
+  /** Information qui n'arrête pas l'enregistrement. */
+  | { type: 'notice'; id: string; message: string }
+
+export interface MeetingSettings {
+  /** Langue des appels (modèle de reconnaissance). */
+  engine: SpeechModelId
+  /** Séparer les voix des autres participants (si le pack des voix est téléchargé). */
+  voices: boolean
+  /** Garder le son après la transcription (par défaut : effacé). */
+  keepAudio: boolean
+  /** Résumer à la fin de l'appel quand le cerveau est sur le PC (ou autorisé en ligne). */
+  autoSummary: boolean
 }
 
 // ─── Mémoire, routines, presse-papier, recherche par le sens ─────────────────

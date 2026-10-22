@@ -6,7 +6,7 @@
 
 import { join } from 'node:path'
 import { utilityProcess, type UtilityProcess } from 'electron'
-import { SPEECH_MODELS } from '../../shared/speechModels'
+import { SPEECH_MODELS, VOICES_FILES } from '../../shared/speechModels'
 import type { SpeechModelId } from '../../shared/types'
 import { log } from '../log'
 import { speechModelFiles } from './models'
@@ -101,15 +101,48 @@ export function prepareSpeech(model: SpeechModelId): Promise<void> {
   return promise
 }
 
-/** Transcrit un son en 16 kHz mono. Le texte n'est jamais journalisé. */
-export async function transcribeSpeech(model: SpeechModelId, samples: Float32Array): Promise<string> {
+/** Transcrit un son en 16 kHz mono. Le texte n'est jamais journalisé. `quiet` : pas de ligne au journal (phrases d'un appel). */
+export async function transcribeSpeech(model: SpeechModelId, samples: Float32Array, quiet = false): Promise<string> {
   await prepareSpeech(model)
   const seconds = samples.length / 16_000
   const r = await request({ type: 'transcribe', samples }, 20_000 + seconds * 1000)
   touch()
   if (r.type !== 'text') return ''
-  log('info', `dictée partout : ${seconds.toFixed(1)} s de parole transcrites en ${r.ms} ms`)
+  if (!quiet) log('info', `dictée partout : ${seconds.toFixed(1)} s de parole transcrites en ${r.ms} ms`)
   return r.text
+}
+
+/**
+ * Sépare les voix d'une piste d'appel (pack des voix), dans un processus à part
+ * arrêté juste après : la dictée reste disponible pendant ce long calcul, et la
+ * mémoire est rendue. Délai large : ~1 s de calcul par minute d'appel.
+ */
+export function diarizeTrack(path: string, seconds: number, speakers?: number): Promise<{ start: number; end: number; speaker: number }[]> {
+  const files = speechModelFiles('voices')
+  if (!files) return Promise.reject(new Error('Le pack des voix n’est pas téléchargé.'))
+  const c = utilityProcess.fork(join(__dirname, 'speechWorker.js'), [], { serviceName: 'Compi - voix', stdio: 'ignore' })
+  return new Promise<{ start: number; end: number; speaker: number }[]>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('La séparation des voix met trop de temps.')), 120_000 + seconds * 1000)
+    c.on('message', (r: SpeechResponse) => {
+      clearTimeout(timer)
+      if (r.type === 'voices') {
+        log('info', `réunions : voix séparées en ${r.ms} ms (${Math.round(seconds / 60)} min d'appel, ${new Set(r.segments.map((s) => s.speaker)).size} voix)`)
+        resolve(r.segments)
+      } else reject(new Error(r.type === 'error' ? r.message : 'Réponse inattendue du moteur.'))
+    })
+    c.on('exit', (code) => {
+      clearTimeout(timer)
+      reject(new Error(`Le moteur des voix s’est arrêté (code ${code}).`))
+    })
+    c.postMessage({
+      type: 'diarize',
+      id: 1,
+      segmentation: files[VOICES_FILES.segmentation],
+      embedding: files[VOICES_FILES.embedding],
+      path,
+      speakers
+    } as SpeechRequest)
+  }).finally(() => c.kill())
 }
 
 /** Arrête le processus annexe (mémoire rendue). */

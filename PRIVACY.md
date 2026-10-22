@@ -21,6 +21,7 @@ Tout est dans le dossier `%APPDATA%\Compi`.
 | Index de la recherche par le sens                        | `semantic\`                                                       | seulement si tu l'actives                                                                      |
 | Modèles de dictée (Whisper, Parakeet, tamoul)            | `models\`                                                         | seulement si tu les télécharges                                                                |
 | Temps gagné (dictée partout)                             | `dictation-stats.json`                                            | par jour et par programme : dictées, mots, temps de parole ; **jamais le texte**               |
+| Appels enregistrés                                       | `meetings\`                                                       | transcriptions, noms des voix, résumés ; le son, le temps de la transcription                  |
 | Journal des rangements                                   | `moves\`                                                          | noms des fichiers déplacés, pour pouvoir annuler ; les 20 derniers rangements                  |
 | Utilisation                                              | `usage-claude-code.json`, `usage-compi.json`                      | des totaux seulement, aucun texte                                                              |
 | Messages en attente                                      | `messages-reminders.json`                                         | identifiants de notification et heures, **jamais le texte**                                    |
@@ -39,7 +40,7 @@ Sauf les deux lignes chiffrées, ces fichiers sont lisibles par ton compte Windo
 
 **Le garde-fou des cerveaux en ligne**
 
-- Pour chaque type de donnée (écran, fichiers, e-mails, agenda, presse-papier, fenêtres, mémoire), tu choisis **Me demander** (par défaut), **Toujours** ou **Jamais**, dans Réglages › Confidentialité. Pour tes messages reçus, une carte demande ton accord à chaque fois, sans « Toujours ».
+- Pour chaque type de donnée (écran, fichiers, e-mails, agenda, presse-papier, fenêtres, mémoire, réunions), tu choisis **Me demander** (par défaut), **Toujours** ou **Jamais**, dans Réglages › Confidentialité. Pour tes messages reçus, une carte demande ton accord à chaque fois, sans « Toujours ».
 - Les IBAN, cartes bancaires, n° de sécurité sociale, mots de passe, codes et clés d'API sont masqués avant l'envoi.
 - Ta mémoire n'est pas envoyée, sauf si tu choisis « Toujours » pour elle.
 - Sous chaque réponse, une puce dit ce qui est parti et vers qui.
@@ -55,7 +56,7 @@ Sauf les deux lignes chiffrées, ces fichiers sont lisibles par ton compte Windo
 - Les pages web que tu demandes de lire ou d'ouvrir.
 - La météo : seule ta ville part vers Open-Meteo.
 - La recherche de connecteurs dans le registre MCP officiel.
-- Les téléchargements de modèles, toujours après ton clic : Hugging Face pour la dictée, Ollama pour les modèles locaux.
+- Les téléchargements de modèles, toujours après ton clic : Hugging Face pour la dictée et la séparation des voix, Ollama pour les modèles locaux.
 
 Chaque service applique sa propre politique de confidentialité (Anthropic, Google, OpenRouter…).
 
@@ -69,6 +70,18 @@ Désactivée par défaut (Réglages › Dictée partout).
 - **Le style Soigné** fait réécrire le texte par ton cerveau. Sur ce PC, rien ne part. Avec un cerveau en ligne, seulement si tu l'autorises, et seulement le texte, jamais la voix.
 - **« Compi, … »** : une dictée qui commence ainsi devient une demande à Compi, avec les règles habituelles.
 - Compi retient le nom du programme (« outlook »), jamais le titre de la fenêtre.
+
+## Appels et réunions
+
+Rien ne commence sans ton clic (Historique › Réunions › Enregistrer un appel), et Compi ne propose jamais d'enregistrer tout seul.
+
+- **Prévenir les participants est obligatoire.** Compi te le rappelle avant chaque appel, avec une phrase à lire ou à envoyer. Un point rouge reste visible pendant tout l'enregistrement.
+- **Le son** : ton micro et, si tu le choisis, le son de l'ordinateur (ce que tu entends des autres participants), capté par Windows sur ta sortie audio. En secours seulement, Chromium le fournit, mais il exige aussi une image de l'écran : elle est arrêtée aussitôt, jamais lue ni gardée.
+- **Sur le disque** : le son est écrit dans `meetings\` le temps de l'appel et de sa mise au propre, puis effacé ; seul le texte reste. Sauf si tu coches « Garder le son », ou si l'enregistrement est interrompu : le son reste alors pour que tu puisses reprendre, jusqu'à ce que tu supprimes la réunion.
+- **La transcription et la séparation des voix** se font sur ton PC. Le son n'est jamais envoyé.
+- **Le résumé** est fait par ton cerveau. Sur ce PC, rien ne part. Avec un cerveau en ligne, la catégorie « Réunions » s'applique (Me demander par défaut) : seul le texte part, secrets masqués, et le résumé automatique n'a lieu qu'avec « Toujours ».
+- **« Suite avec Compi »** ouvre une discussion à partir de la transcription. Elle est traitée comme un contenu venu d'ailleurs : toute action vers l'extérieur demande ton accord.
+- Aucune reconnaissance d'émotions.
 
 ## Routines
 

@@ -8,5 +8,10 @@ declare module 'sherpa-onnx-node' {
     createStream(): OfflineStream
     decodeAsync(stream: OfflineStream): Promise<{ text: string; lang?: string }>
   }
+  export class OfflineSpeakerDiarization {
+    constructor(config: unknown)
+    readonly sampleRate: number
+    process(samples: Float32Array): { start: number; end: number; speaker: number }[]
+  }
   export const version: string
 }

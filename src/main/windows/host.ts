@@ -29,14 +29,14 @@ export type HostFn =
   | 'ocr_image'
   | 'ocr_pdf'
 
-const END = '#COMPI-END#'
+export const END = '#COMPI-END#'
 
 /**
  * Amorce passée en ligne de commande : lit le script sur l'entrée standard
  * jusqu'au marqueur de fin, puis l'exécute. Le script complet dépasserait la
  * longueur maximale d'une ligne de commande.
  */
-const BOOTSTRAP =
+export const BOOTSTRAP =
   "$ProgressPreference='SilentlyContinue';[Console]::InputEncoding=[Text.UTF8Encoding]::new($false);$b=New-Object Text.StringBuilder;" +
   `while((($l=[Console]::In.ReadLine()) -ne $null) -and ($l -ne '${END}')){[void]$b.AppendLine($l)};` +
   '. ([ScriptBlock]::Create($b.ToString()))'

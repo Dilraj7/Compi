@@ -34,8 +34,12 @@ import type {
   MessagesStatus,
   SkillDraft,
   SkillInfo,
-  SpeechModelId,
+  SpeechPackId,
   SpeechModelStatus,
+  Meeting,
+  MeetingEvent,
+  MeetingMeta,
+  MeetingSummary,
   TimerState,
   TodayInfo,
   VoiceInfo,
@@ -45,7 +49,8 @@ import type {
 } from '@shared/types'
 import { VOICE_MODELS } from '@shared/voice'
 import { addDictation, DEFAULT_DICTATION } from '@shared/dictation'
-import { SPEECH_MODELS } from '@shared/speechModels'
+import { DEFAULT_MEETINGS, defaultMeetingTitle, nameVoice } from '@shared/meetings'
+import { SPEECH_PACKS } from '@shared/speechModels'
 import type { OllamaFolder } from '@shared/ollamaFolder'
 import { newPomodoro, newTimer, paused, resumed } from '@shared/timer'
 import { cleanFact, sameFact } from '@shared/memory'
@@ -332,7 +337,17 @@ export function createMockApi(): CompiApi {
     shortcutActive: true,
     quickShortcutActive: true,
     connectorSecrets: {},
-    privacy: { screen: 'ask', files: 'always', mail: 'ask', calendar: 'always', clipboard: 'ask', window: 'ask', memory: 'never', messages: 'ask' },
+    privacy: {
+      screen: 'ask',
+      files: 'always',
+      mail: 'ask',
+      calendar: 'always',
+      clipboard: 'ask',
+      window: 'ask',
+      memory: 'never',
+      messages: 'ask',
+      meetings: 'ask'
+    },
     hasGoogleClient: params.get('google') !== 'none',
     google:
       params.get('google') === 'none' || params.get('google') === 'client'
@@ -357,6 +372,7 @@ export function createMockApi(): CompiApi {
     voiceShortcutActive: true,
     dictation: { ...DEFAULT_DICTATION, enabled: params.get('dictation') === 'on' },
     dictationKeyActive: params.get('dictation') === 'on',
+    meetings: DEFAULT_MEETINGS,
     clipboardHistory: params.get('clip') === 'on',
     semantic: { enabled: params.get('semantic') === 'ready', model: 'qwen3-embedding:0.6b' },
     messages: {
@@ -537,15 +553,31 @@ export function createMockApi(): CompiApi {
   })
   // Dictée partout (scénarios ?speech=installed, ?stats=demo) : rien n'est téléchargé.
   const speechCh = channel<SpeechModelStatus>()
-  let speechInstalled: Partial<Record<SpeechModelId, boolean>> = params.get('speech') === 'installed' ? { parakeet: true } : {}
+  let speechInstalled: Partial<Record<SpeechPackId, boolean>> = params.get('speech') === 'installed' ? { parakeet: true } : {}
   let speechDl: SpeechModelStatus['downloading'] | null = null
   let speechCancelled = false
-  const speechStatus = (model: SpeechModelId): SpeechModelStatus => ({
+  const speechStatus = (model: SpeechPackId): SpeechModelStatus => ({
     model,
     installed: Boolean(speechInstalled[model]),
-    sizeBytes: speechInstalled[model] ? SPEECH_MODELS[model].approxMb * 1e6 : undefined,
+    sizeBytes: speechInstalled[model] ? SPEECH_PACKS[model].approxMb * 1e6 : undefined,
     downloading: speechDl ?? undefined
   })
+  // Réunions (scénario ?meetings=demo) : rien n'est enregistré ; un appel simulé à « Commencer ».
+  const meetingCh = channel<MeetingEvent>()
+  const meetingsCh = channel<MeetingMeta[]>()
+  const demoMeetings: Meeting[] = params.get('meetings') === 'demo' ? DEMO_MEETINGS() : []
+  const metaOf = (m: Meeting): MeetingMeta => {
+    const { lines: _l, names: _n, summary, ...meta } = m
+    return { ...meta, hasSummary: Boolean(summary) }
+  }
+  const meetingList = (): MeetingMeta[] => demoMeetings.map(metaOf).sort((a, b) => b.startedAt - a.startedAt)
+  let recording: { meeting: Meeting; timer: ReturnType<typeof setInterval> } | null = null
+  const DEMO_LIVE = [
+    { who: 'others', text: 'Bonjour à tous, on commence par le point sur le lancement.' },
+    { who: 'me', text: 'Oui, la page est prête, il manque juste les captures.' },
+    { who: 'others', text: 'Parfait. Tu peux les envoyer à Léa avant jeudi ?' },
+    { who: 'me', text: 'Je m’en occupe demain matin.' }
+  ]
   const statsCh = channel<DictationStatRow[]>()
   let dictationRows: DictationStatRow[] = []
   if (params.get('stats') === 'demo') {
@@ -1205,7 +1237,7 @@ export function createMockApi(): CompiApi {
     onVoiceModelProgress: voiceCh.on,
     speechModelStatus: async (model) => speechStatus(model),
     speechModelDownload: async (model) => {
-      const total = SPEECH_MODELS[model].approxMb * 1e6
+      const total = SPEECH_PACKS[model].approxMb * 1e6
       for (let received = 0; received <= total; received += total / 25) {
         if (speechCancelled) {
           speechCancelled = false
@@ -1230,6 +1262,104 @@ export function createMockApi(): CompiApi {
       return speechStatus(model)
     },
     onSpeechModelProgress: speechCh.on,
+    meetingStart: async (opts) => {
+      if (recording) throw new Error('Un enregistrement est déjà en cours.')
+      const startedAt = Date.now()
+      const meeting: Meeting = {
+        id: crypto.randomUUID(),
+        title: defaultMeetingTitle(startedAt),
+        startedAt,
+        durationMs: 0,
+        status: 'recording',
+        engine: opts.engine,
+        others: opts.others,
+        hasSummary: false,
+        audio: true,
+        lines: [],
+        names: {}
+      }
+      let i = 0
+      const timer = setInterval(() => {
+        const next = DEMO_LIVE[i++ % DEMO_LIVE.length]
+        const t = (Date.now() - startedAt) / 1000
+        const line = { start: Math.max(0, t - 3), end: t, who: opts.others || next.who === 'me' ? next.who : 'me', text: next.text }
+        meeting.lines.push(line)
+        meetingCh.emit({ type: 'line', id: meeting.id, line })
+      }, 3500)
+      recording = { meeting, timer }
+      demoMeetings.push(meeting)
+      meetingsCh.emit(meetingList())
+      return { id: meeting.id, startedAt, systemAudio: opts.others ? 'windows' : 'none' }
+    },
+    meetingAudio: () => undefined,
+    meetingStop: async () => {
+      if (!recording) return null
+      const { meeting, timer } = recording
+      clearInterval(timer)
+      recording = null
+      meeting.durationMs = Date.now() - meeting.startedAt
+      meeting.status = 'processing'
+      meetingCh.emit({ type: 'processing', id: meeting.id, step: 'Je termine la transcription…' })
+      await new Promise((r) => setTimeout(r, 1200))
+      meeting.status = 'done'
+      meeting.audio = false
+      meetingsCh.emit(meetingList())
+      meetingCh.emit({ type: 'done', id: meeting.id, meta: metaOf(meeting) })
+      return metaOf(meeting)
+    },
+    meetingDiscard: async () => {
+      if (!recording) return
+      clearInterval(recording.timer)
+      const id = recording.meeting.id
+      demoMeetings.splice(
+        demoMeetings.findIndex((m) => m.id === id),
+        1
+      )
+      recording = null
+      meetingsCh.emit(meetingList())
+      meetingCh.emit({ type: 'stopped', id, message: 'Enregistrement annulé : rien n’a été gardé.' })
+    },
+    onMeetingEvent: meetingCh.on,
+    meetings: async () => meetingList(),
+    meeting: async (id) => demoMeetings.find((m) => m.id === id) ?? null,
+    deleteMeeting: async (id) => {
+      const i = demoMeetings.findIndex((m) => m.id === id)
+      if (i >= 0) demoMeetings.splice(i, 1)
+      meetingsCh.emit(meetingList())
+      return meetingList()
+    },
+    renameMeeting: async (id, title) => {
+      const m = demoMeetings.find((x) => x.id === id)
+      if (m && title.trim()) m.title = title.trim()
+      meetingsCh.emit(meetingList())
+      return m ? { ...m } : null
+    },
+    nameMeetingVoice: async (id, who, name) => {
+      const i = demoMeetings.findIndex((x) => x.id === id)
+      if (i < 0) return null
+      demoMeetings[i] = nameVoice(demoMeetings[i], who, name.trim())
+      return { ...demoMeetings[i] }
+    },
+    resumeMeeting: async (id) => {
+      const m = demoMeetings.find((x) => x.id === id)
+      if (!m) return null
+      await new Promise((r) => setTimeout(r, 1500))
+      m.status = 'done'
+      m.audio = false
+      meetingsCh.emit(meetingList())
+      return metaOf(m)
+    },
+    summarizeMeeting: async (id) => {
+      const m = demoMeetings.find((x) => x.id === id)
+      if (!m) throw new Error('Réunion introuvable.')
+      await new Promise((r) => setTimeout(r, 1500))
+      m.summary = DEMO_SUMMARY
+      m.hasSummary = true
+      meetingsCh.emit(meetingList())
+      return { ...m }
+    },
+    exportMeeting: async () => true,
+    onMeetings: meetingsCh.on,
     onDictationCommand: () => () => undefined,
     dictationTranscribe: async () => '',
     dictationPrepare: () => undefined,
@@ -1600,4 +1730,59 @@ export function createMockApi(): CompiApi {
     openExternal: async (url) => void window.open(url, '_blank'),
     quit: () => undefined
   }
+}
+
+const DEMO_SUMMARY: MeetingSummary = {
+  title: 'Lancement de la nouvelle page',
+  summary:
+    'Point d’équipe sur le lancement de la page produit. La page est prête ; il manque les captures d’écran. Le lancement est maintenu au lundi 3 novembre si les captures arrivent jeudi.',
+  points: ['La page produit est prête', 'Les captures d’écran manquent encore', 'Lancement maintenu au lundi 3 novembre'],
+  tasks: [
+    { text: 'Envoyer les captures d’écran à Léa', owner: 'Alex', due: 'jeudi' },
+    { text: 'Relire le texte de la page', owner: 'Léa', due: 'vendredi' }
+  ],
+  brain: 'Gemma 4 · sur ce PC',
+  at: Date.now() - 3 * 3600_000
+}
+
+/** Réunions de démonstration (persona Alex) : une résumée, une interrompue. */
+function DEMO_MEETINGS(): Meeting[] {
+  const t0 = Date.now() - 3 * 3600_000
+  return [
+    {
+      id: '6f1c2a10-0000-4000-8000-000000000001',
+      title: 'Lancement de la nouvelle page',
+      startedAt: t0,
+      durationMs: 23 * 60_000,
+      status: 'done',
+      engine: 'parakeet',
+      others: true,
+      speakers: 2,
+      hasSummary: true,
+      audio: false,
+      names: { s1: 'Léa' },
+      summary: DEMO_SUMMARY,
+      lines: [
+        { start: 2, end: 6, who: 's1', text: 'Bonjour à tous, on commence par le point sur le lancement.' },
+        { start: 7, end: 11, who: 'me', text: 'Oui, la page est prête, il manque juste les captures.' },
+        { start: 12, end: 16, who: 's2', text: 'On garde la date du lundi 3 novembre ?' },
+        { start: 17, end: 21, who: 's1', text: 'Oui, si les captures arrivent jeudi. Alex, tu me les envoies ?' },
+        { start: 22, end: 25, who: 'me', text: 'Je m’en occupe demain matin.' },
+        { start: 26, end: 30, who: 's1', text: 'Super. Moi je relis le texte de la page d’ici vendredi.' }
+      ]
+    },
+    {
+      id: '6f1c2a10-0000-4000-8000-000000000002',
+      title: 'Appel du 20 oct., 17 h 40',
+      startedAt: t0 - 26 * 3600_000,
+      durationMs: 9 * 60_000,
+      status: 'interrupted',
+      engine: 'parakeet',
+      others: true,
+      hasSummary: false,
+      audio: true,
+      names: {},
+      lines: [{ start: 1, end: 4, who: 'others', text: 'Merci d’avoir pris le temps de m’appeler.' }]
+    }
+  ]
 }

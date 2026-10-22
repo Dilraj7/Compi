@@ -3,8 +3,10 @@ import { copyFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { app } from 'electron'
 import { DEFAULT_DICTATION, isDictationKey, isDictationStyle } from '../../shared/dictation'
+import { DEFAULT_MEETINGS } from '../../shared/meetings'
 import { DEFAULT_PRIVACY } from '../../shared/privacy'
-import type { DictationSettings, Settings } from '../../shared/types'
+import { isSpeechModel } from '../../shared/speechModels'
+import type { DictationSettings, MeetingSettings, Settings } from '../../shared/types'
 import { readJson, writeJson } from './jsonFile'
 
 export const DEFAULT_SHORTCUT = 'Alt+Shift+Space'
@@ -25,8 +27,9 @@ export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
  * v10 : sons, raccourcis des autorisations, activité du PC, durée de chargement du modèle local.
  * v11 : sources de l'agenda (agendas Google choisis, connecteurs, liens .ics).
  * v12 : dictée partout (désactivée par défaut). Copie settings.v11.bak.json avant la migration.
+ * v13 : enregistreur d'appels (lancé seulement à la main), catégorie « réunions ».
  */
-export const SETTINGS_VERSION = 12
+export const SETTINGS_VERSION = 13
 
 /** Modèle d'Ollama pour la recherche par le sens : multilingue, bon en français, ~640 Mo. */
 export const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b'
@@ -65,6 +68,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showMusic: true,
   voice: { speak: 'voice', voice: '', rate: 1, shortcut: DEFAULT_VOICE_SHORTCUT, model: 'small' },
   dictation: DEFAULT_DICTATION,
+  meetings: DEFAULT_MEETINGS,
   clipboardHistory: false,
   semantic: { enabled: false, model: DEFAULT_EMBED_MODEL },
   messages: { enabled: false, apps: [], remindAfterMin: 60, quietStart: '22:00', quietEnd: '08:00', preview: false, readByCompi: false },
@@ -111,6 +115,17 @@ function dictationFrom(raw: Partial<DictationSettings> | undefined): DictationSe
   }
 }
 
+/** Réglages des réunions, vérifiés (fichier modifié à la main). */
+function meetingsFrom(raw: Partial<MeetingSettings> | undefined): MeetingSettings {
+  const m = { ...DEFAULT_MEETINGS, ...raw }
+  return {
+    engine: isSpeechModel(m.engine) ? m.engine : DEFAULT_MEETINGS.engine,
+    voices: m.voices !== false,
+    keepAudio: m.keepAudio === true,
+    autoSummary: m.autoSummary !== false
+  }
+}
+
 /** Avant d'écrire un format plus récent : copie de l'ancien fichier, une seule fois par version. */
 function backupBeforeMigration(path: string, from: number): void {
   const bak = join(dirname(path), `settings.v${from}.bak.json`)
@@ -146,6 +161,7 @@ class SettingsStore {
       },
       voice: { ...DEFAULT_SETTINGS.voice, ...raw.voice },
       dictation: dictationFrom(raw.dictation),
+      meetings: meetingsFrom(raw.meetings),
       semantic: { ...DEFAULT_SETTINGS.semantic, ...raw.semantic },
       messages: { ...DEFAULT_SETTINGS.messages, ...raw.messages },
       sounds: { ...DEFAULT_SETTINGS.sounds, ...raw.sounds },
@@ -182,6 +198,7 @@ class SettingsStore {
       agenda: { ...this.data.agenda, ...patch.agenda },
       voice: { ...this.data.voice, ...patch.voice },
       dictation: dictationFrom({ ...this.data.dictation, ...patch.dictation }),
+      meetings: meetingsFrom({ ...this.data.meetings, ...patch.meetings }),
       semantic: { ...this.data.semantic, ...patch.semantic },
       messages: { ...this.data.messages, ...patch.messages },
       sounds: { ...this.data.sounds, ...patch.sounds },

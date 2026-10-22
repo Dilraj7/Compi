@@ -7,6 +7,7 @@ import { useMood } from '../mascot/useMood'
 import { IconButton } from './ui'
 import { CommandPalette } from './CommandPalette'
 import { NoticeBanner } from './Notice'
+import { CallBanner } from './CallLive'
 import { ChatView } from '../views/ChatView'
 import { ActivityView } from '../views/ActivityView'
 import { HistoryView } from '../views/HistoryView'
@@ -102,6 +103,8 @@ export function Panel({ eyes }: { eyes: ReactNode }) {
           </IconButton>
         </nav>
       </header>
+
+      <CallBanner />
 
       <div className="relative min-h-0 flex-1">
         <AnimatePresence mode="wait" initial={false}>

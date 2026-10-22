@@ -10,6 +10,9 @@ import type {
   IslandMode,
   IslandNotice,
   MediaInfo,
+  MeetingEvent,
+  MeetingLine,
+  MeetingStartOptions,
   ModelId,
   PanelView,
   PublicSettings,
@@ -24,6 +27,8 @@ import type { PerfSnapshot } from '@shared/perf'
 import { noticeDuration } from '@shared/notice'
 import { onSpeaking, speak, speakStream, stopSpeaking, type SpeechStream } from './lib/speech'
 import { cancelListening, isRecording, loadModel, startListening, stopListening, TOO_SHORT, type VoicePhase } from './lib/voice'
+import { startCallCapture, type CallCapture } from './lib/callCapture'
+import { formatDuration } from '@shared/meetings'
 
 const api = () => window.compi
 
@@ -111,6 +116,12 @@ interface CompiState {
   palette: boolean
   /** Activité : faire défiler jusqu'à « Ce PC ». */
   activityFocus: 'perf' | null
+  /** Appel en cours d'enregistrement (bandeau rouge de l'îlot). */
+  call: CallState | null
+  /** Historique : discussions ou réunions. */
+  historyTab: 'chats' | 'meetings'
+  /** Réunion à ouvrir dans l'historique (fin d'un enregistrement). */
+  openMeetingId: string | null
 
   setSettings(s: PublicSettings): void
   open(view?: PanelView, opts?: { focus?: boolean; attention?: boolean }): void
@@ -130,8 +141,8 @@ interface CompiState {
   /** Choisit un cerveau : devient celui par défaut, et celui de la discussion si le fournisseur est le même. */
   pickBrain(brain: Brain, extra?: Partial<Settings>): Promise<void>
   focusSettings(focus: SettingsFocus | null): void
-  /** `voice` : message dicté (la réponse pourra être lue à voix haute). */
-  send(text: string, opts?: { voice?: boolean }): Promise<void>
+  /** `voice` : message dicté (la réponse pourra être lue à voix haute). `external` : texte venu d'autres personnes (résumé d'appel). */
+  send(text: string, opts?: { voice?: boolean; external?: boolean }): Promise<void>
   stop(): void
   addAttachments(paths: string[]): void
   removeAttachment(path: string): void
@@ -164,6 +175,27 @@ interface CompiState {
   focusPending(): void
   setPalette(on: boolean): void
   focusActivity(f: 'perf' | null): void
+  /** Commence l'enregistrement d'un appel (après « Commencer »). */
+  startCall(opts: MeetingStartOptions): Promise<void>
+  stopCall(): Promise<void>
+  /** Annule l'enregistrement : rien n'est gardé. */
+  discardCall(): Promise<void>
+  onMeetingEvent(e: MeetingEvent): void
+  setHistoryTab(tab: 'chats' | 'meetings'): void
+  openMeeting(id: string | null): void
+}
+
+/** Enregistrement d'un appel, vu par l'îlot. */
+export interface CallState {
+  id: string
+  startedAt: number
+  /** Le son de l'appel est capté (sinon : le micro seul). */
+  others: boolean
+  phase: 'starting' | 'recording' | 'processing'
+  /** Dernières phrases transcrites (3 au plus). */
+  lines: MeetingLine[]
+  /** Étape de la mise au propre, après l'arrêt. */
+  step?: string
 }
 
 /** Dictée partout en cours : mode, touche, application visée (connue juste après le début). */
@@ -188,6 +220,8 @@ let hintTimer: ReturnType<typeof setTimeout> | undefined
 let dictationErrorTimer: ReturnType<typeof setTimeout> | undefined
 /** Dictée partout : arrêt demandé avant que le micro soit ouvert. */
 let pendingEnd: 'stop' | 'cancel' | null = null
+/** Capture du micro et du son de l'appel en cours. */
+let callCapture: CallCapture | null = null
 
 const SLEEP_AFTER_MS = 4 * 60_000
 
@@ -287,6 +321,9 @@ export const useCompi = create<CompiState>((set, get) => {
     focusPendingAt: 0,
     palette: false,
     activityFocus: null,
+    call: null,
+    historyTab: 'chats',
+    openMeetingId: null,
 
     setSettings: (settings) => {
       set({ settings })
@@ -422,7 +459,7 @@ export const useCompi = create<CompiState>((set, get) => {
       stopSpeaking()
       liveSpeech = null
       set({ attachments: [], spokenInput: opts.voice ?? false })
-      const res = await api().send({ conversationId: get().conversationId ?? undefined, text: prompt, attachments })
+      const res = await api().send({ conversationId: get().conversationId ?? undefined, text: prompt, attachments, external: opts.external })
       const settings = get().settings
       set((s) => ({
         conversationId: res.conversationId,
@@ -675,6 +712,93 @@ export const useCompi = create<CompiState>((set, get) => {
     setPerf: (perf) => set({ perf }),
     focusPending: () => set({ focusPendingAt: Date.now() }),
     setPalette: (palette) => set({ palette }),
-    focusActivity: (activityFocus) => set({ activityFocus })
+    focusActivity: (activityFocus) => set({ activityFocus }),
+
+    startCall: async (opts) => {
+      if (get().call) return
+      set({ call: { id: '', startedAt: Date.now(), others: opts.others, phase: 'starting', lines: [] } })
+      let id = ''
+      try {
+        const started = await api().meetingStart(opts)
+        id = started.id
+        // Le son de l'ordinateur vient de Windows ; l'îlot ne le demande qu'en secours.
+        callCapture = await startCallCapture(id, started.systemAudio === 'browser', (message) => {
+          get().showNotice({ pill: 'meeting', text: message, duration: 8000 })
+          void get().stopCall()
+        })
+        const others = started.systemAudio === 'windows' || callCapture.others
+        set({ call: { id, startedAt: started.startedAt, others, phase: 'recording', lines: [] } })
+        if (opts.others && !others) {
+          get().showNotice({ pill: 'meeting', text: 'Son de l’appel indisponible : seul ton micro est enregistré.', duration: 8000 })
+        }
+      } catch (e) {
+        callCapture?.stop()
+        callCapture = null
+        if (id) await api().meetingDiscard()
+        set({ call: null })
+        const message = (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+        get().showNotice({
+          pill: 'meeting',
+          text: /Permission|NotAllowed/i.test(message) ? 'Micro refusé : enregistrement impossible.' : message,
+          duration: 8000
+        })
+      }
+    },
+    stopCall: async () => {
+      const c = get().call
+      if (!c || c.phase !== 'recording') return
+      callCapture?.stop()
+      callCapture = null
+      set({ call: { ...c, phase: 'processing', step: 'Je termine la transcription…' } })
+      try {
+        await api().meetingStop()
+      } catch {
+        // La fin arrive aussi par onMeetingEvent ; au pire, l'îlot se libère.
+        set({ call: null })
+      }
+    },
+    discardCall: async () => {
+      callCapture?.stop()
+      callCapture = null
+      await api().meetingDiscard()
+      set({ call: null })
+    },
+    onMeetingEvent: (e) => {
+      const c = get().call
+      if (e.type === 'line') {
+        if (c?.id === e.id) set({ call: { ...c, lines: [...c.lines, e.line].slice(-3) } })
+        return
+      }
+      if (e.type === 'processing') {
+        if (c?.id === e.id) set({ call: { ...c, phase: 'processing', step: e.step } })
+        return
+      }
+      if (e.type === 'notice') {
+        get().showNotice({ pill: 'meeting', text: e.message, duration: 8000 })
+        return
+      }
+      if (e.type === 'stopped') {
+        // Arrêt décidé par Compi (plus de son, 4 h, veille, annulation) : le micro se coupe.
+        if (c?.id === e.id && c.phase === 'recording') {
+          callCapture?.stop()
+          callCapture = null
+          set({ call: { ...c, phase: 'processing' } })
+        }
+        get().showNotice({ pill: 'meeting', text: e.message, duration: 8000 })
+        if (/annulé/.test(e.message)) set({ call: null })
+        return
+      }
+      // Terminé : la réunion est dans l'historique.
+      if (c?.id === e.id) set({ call: null })
+      set({ historyTab: 'meetings', openMeetingId: e.id })
+      get().showNotice({
+        pill: 'meeting',
+        text: `Appel enregistré · ${formatDuration(e.meta.durationMs)} : clique pour le relire`,
+        view: 'history',
+        duration: 9000
+      })
+    },
+    setHistoryTab: (historyTab) => set({ historyTab }),
+    openMeeting: (openMeetingId) => set({ openMeetingId })
   }
 })

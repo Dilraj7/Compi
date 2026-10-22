@@ -5,7 +5,7 @@
 
 import type { ProviderId } from './types'
 
-export type PrivacyCategory = 'screen' | 'files' | 'mail' | 'calendar' | 'clipboard' | 'window' | 'memory' | 'messages'
+export type PrivacyCategory = 'screen' | 'files' | 'mail' | 'calendar' | 'clipboard' | 'window' | 'memory' | 'messages' | 'meetings'
 export type PrivacyChoice = 'ask' | 'always' | 'never'
 export type PrivacySettings = Record<PrivacyCategory, PrivacyChoice>
 
@@ -17,7 +17,8 @@ export const DEFAULT_PRIVACY: PrivacySettings = {
   clipboard: 'ask',
   window: 'ask',
   memory: 'ask',
-  messages: 'ask'
+  messages: 'ask',
+  meetings: 'ask'
 }
 
 /** `noAlways` : pas de « Toujours » possible, une carte à chaque fois. */
@@ -29,7 +30,8 @@ export const PRIVACY_CATEGORIES: { id: PrivacyCategory; label: string; what: str
   { id: 'clipboard', label: 'Presse-papier', what: 'ce que tu as copié' },
   { id: 'window', label: 'Fenêtres', what: 'titres des fenêtres ouvertes et état du PC' },
   { id: 'memory', label: 'Mémoire', what: 'ce que Compi a retenu sur toi' },
-  { id: 'messages', label: 'Messages', what: 'tes messages reçus (WhatsApp, SMS…) : une carte à chaque fois', noAlways: true }
+  { id: 'messages', label: 'Messages', what: 'tes messages reçus (WhatsApp, SMS…) : une carte à chaque fois', noAlways: true },
+  { id: 'meetings', label: 'Réunions', what: 'les transcriptions de tes appels enregistrés' }
 ]
 
 /** Libellé court pour la puce « Envoyé à … ». */
@@ -41,7 +43,8 @@ export const CATEGORY_SENT_LABEL: Record<PrivacyCategory, string> = {
   clipboard: 'presse-papier',
   window: 'fenêtres',
   memory: 'mémoire',
-  messages: 'messages'
+  messages: 'messages',
+  meetings: 'réunions'
 }
 
 const compi = (t: string): string => `mcp__compi__${t}`

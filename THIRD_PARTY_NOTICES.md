@@ -82,6 +82,8 @@ Ils ne sont pas dans le dépôt ni dans l'installateur : chacun est télécharg�
 - **Whisper** (OpenAI), version ONNX de `onnx-community` : MIT. Dictée vers Compi.
 - **Parakeet TDT 0.6B v3** (NVIDIA), version sherpa-onnx de `csukuangfj` : **CC-BY-4.0**, attribution obligatoire. Dictée partout, français, anglais et 23 autres langues.
 - **Omnilingual ASR 300M** (Meta), version sherpa-onnx de `csukuangfj` : Apache-2.0. Dictée partout, tamoul.
+- **pyannote segmentation 3.0** (pyannote.audio, Hervé Bredin), version sherpa-onnx de `csukuangfj` : MIT. Appels enregistrés : repère qui parle quand.
+- **CAM++** (3D-Speaker, Alibaba), entraîné sur VoxCeleb, version sherpa-onnx de `csukuangfj` : Apache-2.0. Appels enregistrés : reconnaît les voix.
 
 ## Texte de la SIL Open Font License 1.1
 

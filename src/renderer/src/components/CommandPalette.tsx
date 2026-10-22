@@ -15,6 +15,7 @@ import {
   MessagesSquare,
   Mic,
   MonitorCog,
+  Phone,
   Plug,
   Settings2,
   ShieldCheck,
@@ -86,6 +87,18 @@ function useItems(conversations: ConversationMeta[]): Item[] {
         run: () => void window.compi.startTimer(25)
       },
       { id: 'pomodoro', group: 'Actions', label: 'Pomodoro', icon: Timer, keywords: 'concentration focus pause', run: () => void window.compi.startPomodoro() },
+      {
+        id: 'call',
+        group: 'Actions',
+        label: 'Enregistrer un appel',
+        icon: Phone,
+        keywords: 'reunion visio teams zoom meet transcription resume compte rendu',
+        run: () => {
+          s().setHistoryTab('meetings')
+          s().openMeeting(null)
+          go('history')
+        }
+      },
       {
         id: 'perf',
         group: 'Actions',
