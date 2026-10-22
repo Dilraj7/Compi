@@ -719,7 +719,13 @@ export interface VoiceSettings {
   shortcut: string
   /** Modèle Whisper choisi. */
   model: VoiceModelId
+  /** Lecture à voix haute : la voix de Windows, ou la voix naturelle (téléchargée sur un clic). */
+  engine: SpeakEngine
+  /** Voix naturelle choisie (« F1 »… « M5 »). */
+  naturalVoice: string
 }
+
+export type SpeakEngine = 'windows' | 'natural'
 
 export type VoiceModelId = 'small' | 'base'
 /** Carte graphique (WebGPU) ou processeur. */
@@ -743,8 +749,8 @@ export type DictationStyle = 'raw' | 'natural' | 'polished'
 export type SpeechModelId = 'parakeet' | 'omnilingual'
 /** Moteur de la dictée partout : un modèle sherpa-onnx, ou le Whisper de « Me parler ». */
 export type DictationEngine = SpeechModelId | 'whisper'
-/** Ce qui se télécharge : un modèle de reconnaissance, ou le pack des voix (séparer les participants d'un appel). */
-export type SpeechPackId = SpeechModelId | 'voices'
+/** Ce qui se télécharge : un modèle de reconnaissance, le pack des voix (séparer les participants d'un appel) ou la voix naturelle. */
+export type SpeechPackId = SpeechModelId | 'voices' | 'supertonic'
 
 export interface DictationAppStyle {
   /** Nom du processus, sans « .exe » (« outlook », « code »). */

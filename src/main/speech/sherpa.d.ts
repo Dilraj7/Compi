@@ -13,5 +13,18 @@ declare module 'sherpa-onnx-node' {
     readonly sampleRate: number
     process(samples: Float32Array): { start: number; end: number; speaker: number }[]
   }
+  export class GenerationConfig {
+    constructor(opts: { sid: number; speed: number; numSteps?: number; extra?: Record<string, string | number> })
+  }
+  export class OfflineTts {
+    static createAsync(config: unknown): Promise<OfflineTts>
+    readonly sampleRate: number
+    readonly numSpeakers: number
+    generateAsync(req: {
+      text: string
+      enableExternalBuffer?: boolean
+      generationConfig: GenerationConfig
+    }): Promise<{ samples: Float32Array; sampleRate: number }>
+  }
   export const version: string
 }

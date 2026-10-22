@@ -84,6 +84,7 @@ Ils ne sont pas dans le dépôt ni dans l'installateur : chacun est télécharg�
 - **Omnilingual ASR 300M** (Meta), version sherpa-onnx de `csukuangfj` : Apache-2.0. Dictée partout, tamoul.
 - **pyannote segmentation 3.0** (pyannote.audio, Hervé Bredin), version sherpa-onnx de `csukuangfj` : MIT. Appels enregistrés : repère qui parle quand.
 - **CAM++** (3D-Speaker, Alibaba), entraîné sur VoxCeleb, version sherpa-onnx de `csukuangfj` : Apache-2.0. Appels enregistrés : reconnaît les voix.
+- **Supertonic 3** (Supertone Inc.), version sherpa-onnx int8 de `csukuangfj2` : poids sous **BigScience OpenRAIL-M**, code MIT. Voix naturelle de la lecture à voix haute. La licence s'applique à chaque personne qui télécharge le modèle et fixe des règles d'usage : notamment, ne pas imiter quelqu'un sans son accord, ne pas faire passer un contenu généré pour humain, ne pas s'en servir pour des avis médicaux. Texte complet : https://huggingface.co/Supertone/supertonic-3/blob/main/LICENSE
 
 ## Texte de la SIL Open Font License 1.1
 

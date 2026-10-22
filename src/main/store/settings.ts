@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { app } from 'electron'
 import { DEFAULT_DICTATION, isDictationKey, isDictationStyle } from '../../shared/dictation'
 import { DEFAULT_MEETINGS } from '../../shared/meetings'
+import { DEFAULT_NATURAL_VOICE } from '../../shared/naturalVoice'
 import { DEFAULT_PRIVACY } from '../../shared/privacy'
 import { isSpeechModel } from '../../shared/speechModels'
 import type { DictationSettings, MeetingSettings, Settings } from '../../shared/types'
@@ -28,8 +29,9 @@ export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
  * v11 : sources de l'agenda (agendas Google choisis, connecteurs, liens .ics).
  * v12 : dictée partout (désactivée par défaut). Copie settings.v11.bak.json avant la migration.
  * v13 : enregistreur d'appels (lancé seulement à la main), catégorie « réunions ».
+ * v14 : voix naturelle pour la lecture à voix haute (voix de Windows par défaut).
  */
-export const SETTINGS_VERSION = 13
+export const SETTINGS_VERSION = 14
 
 /** Modèle d'Ollama pour la recherche par le sens : multilingue, bon en français, ~640 Mo. */
 export const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b'
@@ -66,7 +68,7 @@ export const DEFAULT_SETTINGS: Settings = {
   day: { morning: true, morningTime: '08:30', city: '', meetingAlerts: true, meetingMinutes: 5 },
   agenda: { googleCalendars: null, sources: [] },
   showMusic: true,
-  voice: { speak: 'voice', voice: '', rate: 1, shortcut: DEFAULT_VOICE_SHORTCUT, model: 'small' },
+  voice: { speak: 'voice', voice: '', rate: 1, shortcut: DEFAULT_VOICE_SHORTCUT, model: 'small', engine: 'windows', naturalVoice: DEFAULT_NATURAL_VOICE },
   dictation: DEFAULT_DICTATION,
   meetings: DEFAULT_MEETINGS,
   clipboardHistory: false,

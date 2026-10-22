@@ -19,7 +19,7 @@ Tout est dans le dossier `%APPDATA%\Compi`.
 | Journal « Envoyé en ligne »                              | `privacy-log.json`                                                | destination, types de données et titre de la discussion ; 100 entrées                          |
 | Copies de travail du moteur                              | `agent\`                                                          | le moteur les garde 30 jours, **même après la suppression d'une discussion** (à corriger)      |
 | Index de la recherche par le sens                        | `semantic\`                                                       | seulement si tu l'actives                                                                      |
-| Modèles de dictée (Whisper, Parakeet, tamoul)            | `models\`                                                         | seulement si tu les télécharges                                                                |
+| Modèles de dictée et voix naturelle                      | `models\`                                                         | seulement si tu les télécharges                                                                |
 | Temps gagné (dictée partout)                             | `dictation-stats.json`                                            | par jour et par programme : dictées, mots, temps de parole ; **jamais le texte**               |
 | Appels enregistrés                                       | `meetings\`                                                       | transcriptions, noms des voix, résumés ; le son, le temps de la transcription                  |
 | Journal des rangements                                   | `moves\`                                                          | noms des fichiers déplacés, pour pouvoir annuler ; les 20 derniers rangements                  |
@@ -56,7 +56,7 @@ Sauf les deux lignes chiffrées, ces fichiers sont lisibles par ton compte Windo
 - Les pages web que tu demandes de lire ou d'ouvrir.
 - La météo : seule ta ville part vers Open-Meteo.
 - La recherche de connecteurs dans le registre MCP officiel.
-- Les téléchargements de modèles, toujours après ton clic : Hugging Face pour la dictée et la séparation des voix, Ollama pour les modèles locaux.
+- Les téléchargements de modèles, toujours après ton clic : Hugging Face pour la dictée, la séparation des voix et la voix naturelle, Ollama pour les modèles locaux.
 
 Chaque service applique sa propre politique de confidentialité (Anthropic, Google, OpenRouter…).
 
@@ -82,6 +82,11 @@ Rien ne commence sans ton clic (Historique › Réunions › Enregistrer un appe
 - **Le résumé** est fait par ton cerveau. Sur ce PC, rien ne part. Avec un cerveau en ligne, la catégorie « Réunions » s'applique (Me demander par défaut) : seul le texte part, secrets masqués, et le résumé automatique n'a lieu qu'avec « Toujours ».
 - **« Suite avec Compi »** ouvre une discussion à partir de la transcription. Elle est traitée comme un contenu venu d'ailleurs : toute action vers l'extérieur demande ton accord.
 - Aucune reconnaissance d'émotions.
+
+## Lecture à voix haute
+
+- **La voix de Windows** (par défaut) ou **la voix naturelle** (Réglages › Voix), téléchargée seulement après ton clic. Les deux lisent sur ton PC : le texte n'est jamais envoyé, et le son n'est pas écrit sur le disque.
+- La voix naturelle tourne dans un processus séparé, arrêté après 3 minutes sans lecture. Ce qu'elle ne sait pas lire (le tamoul) passe par la voix de Windows.
 
 ## Routines
 

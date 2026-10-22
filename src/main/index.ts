@@ -86,6 +86,7 @@ import {
 } from './voice/model'
 import { isVoiceModel } from '../shared/voice'
 import { isSpeechModel, isSpeechPack } from '../shared/speechModels'
+import { NATURAL_VOICES } from '../shared/naturalVoice'
 import {
   applyDictationSettings,
   deliverDictation,
@@ -101,6 +102,7 @@ import {
 import { clearDictationStats, dictationStats } from './dictation/stats'
 import { unloadSpeech } from './speech/engine'
 import { cancelSpeechDownload, cleanPartialSpeechDownloads, deleteSpeechModel, downloadSpeechModel, speechModelStatus } from './speech/models'
+import { naturalSpeech, unloadNaturalSpeech } from './speech/tts'
 import { allowCallAudio, restrictPermissions } from './permissions'
 import {
   discardMeeting,
@@ -202,6 +204,8 @@ function cleanVoice(v: Partial<VoiceSettings>): Partial<VoiceSettings> {
   if (typeof v.voice === 'string' && v.voice.length < 300) out.voice = v.voice
   if (typeof v.rate === 'number' && v.rate >= 0.5 && v.rate <= 2) out.rate = Math.round(v.rate * 100) / 100
   if (isVoiceModel(v.model)) out.model = v.model
+  if (v.engine === 'windows' || v.engine === 'natural') out.engine = v.engine
+  if (NATURAL_VOICES.some((x) => x.id === v.naturalVoice)) out.naturalVoice = v.naturalVoice
   return out
 }
 
@@ -691,8 +695,18 @@ function registerIpc(): void {
   ipcMain.handle(IPC.timerStop, () => stopTimer())
   ipcMain.handle(IPC.voices, () => listVoices())
   ipcMain.handle(IPC.speak, async (_e, text: string) => {
-    const { voice, rate } = settings.get().voice
-    return new Uint8Array(await synthesize(String(text ?? ''), voice, rate))
+    const v = settings.get().voice
+    const t = String(text ?? '')
+    if (v.engine === 'natural') {
+      try {
+        // `null` : pack absent ou texte qu'elle ne sait pas lire (tamoul…).
+        const wav = await naturalSpeech(t, v.naturalVoice, v.rate)
+        if (wav) return new Uint8Array(wav)
+      } catch (e) {
+        log('warn', 'voix naturelle : lecture impossible, voix de Windows à la place', (e as Error).message)
+      }
+    }
+    return new Uint8Array(await synthesize(t, v.voice, v.rate))
   })
   const modelId = (id: unknown): VoiceModelId => (isVoiceModel(id) ? id : settings.get().voice.model)
   ipcMain.handle(IPC.voiceModelStatus, (_e, id?: VoiceModelId) => voiceModelStatus(modelId(id)))
@@ -713,6 +727,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.speechModelDelete, (_e, id: SpeechPackId) => {
     // Le moteur de reconnaissance garde son modèle ouvert : on le libère avant d'effacer.
     if (isSpeechModel(id)) unloadSpeech()
+    if (id === 'supertonic') unloadNaturalSpeech()
     return deleteSpeechModel(speechId(id))
   })
   ipcMain.handle(IPC.dictationTranscribe, (_e, audio: Float32Array) => transcribeDictation(audio))
@@ -971,6 +986,7 @@ app.on('before-quit', () => {
   cancelSpeechDownload()
   stopDictationEverywhere()
   unloadSpeech()
+  unloadNaturalSpeech()
   stopHost()
   stopMeetings()
   stopTimers()

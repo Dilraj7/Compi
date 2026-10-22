@@ -84,6 +84,35 @@ export const VOICES_PACK: SpeechPackDef = {
   ]
 }
 
+/** Fichiers de la voix naturelle, par rôle (configuration « supertonic » de sherpa-onnx). */
+export const SUPERTONIC_FILES = {
+  durationPredictor: 'duration_predictor.int8.onnx',
+  textEncoder: 'text_encoder.int8.onnx',
+  vectorEstimator: 'vector_estimator.int8.onnx',
+  vocoder: 'vocoder.int8.onnx',
+  ttsJson: 'tts.json',
+  unicodeIndexer: 'unicode_indexer.bin',
+  voiceStyle: 'voice.bin'
+} as const
+
+/**
+ * Voix naturelle : lit les réponses à voix haute sur le PC. Supertonic 3, dix voix,
+ * français, anglais et 29 autres langues (pas le tamoul, lu par la voix de Windows).
+ */
+export const SUPERTONIC_PACK: SpeechPackDef = {
+  label: 'Voix naturelle',
+  license: 'Supertonic 3 de Supertone, licence OpenRAIL-M (usage responsable)',
+  dir: 'supertonic-3-tts-int8',
+  approxMb: 146,
+  sources: [
+    {
+      repo: 'csukuangfj2/sherpa-onnx-supertonic-3-tts-int8-2026-05-11',
+      revision: 'cca5a0e6c96e1d2c720986bf7e75fcc81dee3ae4',
+      files: Object.values(SUPERTONIC_FILES)
+    }
+  ]
+}
+
 export const SPEECH_PACKS: Record<SpeechPackId, SpeechPackDef> = {
   parakeet: {
     ...SPEECH_MODELS.parakeet,
@@ -93,7 +122,8 @@ export const SPEECH_PACKS: Record<SpeechPackId, SpeechPackDef> = {
     ...SPEECH_MODELS.omnilingual,
     sources: [{ repo: SPEECH_MODELS.omnilingual.repo, revision: SPEECH_MODELS.omnilingual.revision, files: SPEECH_MODELS.omnilingual.files }]
   },
-  voices: VOICES_PACK
+  voices: VOICES_PACK,
+  supertonic: SUPERTONIC_PACK
 }
 
 export const isSpeechPack = (id: unknown): id is SpeechPackId => typeof id === 'string' && Object.hasOwn(SPEECH_PACKS, id)

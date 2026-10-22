@@ -2,15 +2,19 @@
 // y charge le modèle et transcrit. Isolé de Compi : un plantage du moteur ne
 // ferme pas l'application, et sa mémoire est rendue quand il s'arrête. Le son
 // arrive par message (ou, pour séparer les voix d'un appel, depuis le fichier
-// de l'enregistrement) ; rien n'est écrit ni envoyé ailleurs.
+// de l'enregistrement) ; rien n'est écrit ni envoyé ailleurs. Lancé à part, il
+// sert aussi la voix naturelle : le texte arrive, le son repart, rien n'est gardé.
 
 import { readFileSync } from 'node:fs'
 import { cpus } from 'node:os'
-import { OfflineRecognizer, OfflineSpeakerDiarization } from 'sherpa-onnx-node'
+import { GenerationConfig, OfflineRecognizer, OfflineSpeakerDiarization, OfflineTts } from 'sherpa-onnx-node'
+import { SUPERTONIC_FILES } from '../../shared/speechModels'
 import type { SpeechRequest, SpeechResponse } from './protocol'
 
 let recognizer: OfflineRecognizer | null = null
 let loadedKey = ''
+let tts: OfflineTts | null = null
+let ttsKey = ''
 
 const reply = (r: SpeechResponse): void => process.parentPort.postMessage(r)
 
@@ -54,11 +58,42 @@ function diarize(req: Extract<SpeechRequest, { type: 'diarize' }>): Extract<Spee
   return { type: 'voices', id: req.id, segments, ms: Date.now() - t }
 }
 
+/** Un morceau de réponse dit par la voix naturelle. Le moteur reste chargé pour la suite. */
+async function speak(req: Extract<SpeechRequest, { type: 'speak' }>): Promise<Extract<SpeechResponse, { type: 'audio' }>> {
+  const key = Object.values(req.files).join('|')
+  let loadMs: number | undefined
+  if (!tts || ttsKey !== key) {
+    const t = Date.now()
+    const f = (name: string): string => req.files[name]
+    tts = null
+    tts = await OfflineTts.createAsync({
+      model: {
+        supertonic: Object.fromEntries(Object.entries(SUPERTONIC_FILES).map(([role, name]) => [role, f(name)])),
+        numThreads: threads(),
+        provider: 'cpu',
+        debug: false
+      },
+      maxNumSentences: 1
+    })
+    ttsKey = key
+    loadMs = Date.now() - t
+  }
+  const t = Date.now()
+  // Pas de mémoire externe : Electron la refuse, le son est copié une fois.
+  const audio = await tts.generateAsync({
+    text: req.text,
+    enableExternalBuffer: false,
+    generationConfig: new GenerationConfig({ sid: req.sid, speed: req.speed, numSteps: 8, extra: { lang: req.lang } })
+  })
+  return { type: 'audio', id: req.id, samples: audio.samples, sampleRate: audio.sampleRate, ms: Date.now() - t, loadMs }
+}
+
 process.parentPort.on('message', (e: Electron.MessageEvent) => {
   const req = e.data as SpeechRequest
   void (async () => {
     try {
       if (req.type === 'diarize') return reply(diarize(req))
+      if (req.type === 'speak') return reply(await speak(req))
       if (req.type === 'load') {
         const key = `${req.model}|${Object.values(req.files).join('|')}`
         if (recognizer && loadedKey === key) return reply({ type: 'ok', id: req.id, ms: 0 })

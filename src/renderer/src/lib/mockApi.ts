@@ -51,6 +51,7 @@ import { VOICE_MODELS } from '@shared/voice'
 import { addDictation, DEFAULT_DICTATION } from '@shared/dictation'
 import { DEFAULT_MEETINGS, defaultMeetingTitle, nameVoice } from '@shared/meetings'
 import { SPEECH_PACKS } from '@shared/speechModels'
+import { DEFAULT_NATURAL_VOICE } from '@shared/naturalVoice'
 import type { OllamaFolder } from '@shared/ollamaFolder'
 import { newPomodoro, newTimer, paused, resumed } from '@shared/timer'
 import { cleanFact, sameFact } from '@shared/memory'
@@ -368,7 +369,16 @@ export function createMockApi(): CompiApi {
       meetingMinutes: 5
     },
     showMusic: true,
-    voice: { speak: 'voice', voice: '', rate: 1, shortcut: 'Alt+Shift+V', model: 'small' },
+    // ?tts=natural : la voix naturelle choisie et téléchargée (l'aperçu lit en silence).
+    voice: {
+      speak: 'voice',
+      voice: '',
+      rate: 1,
+      shortcut: 'Alt+Shift+V',
+      model: 'small',
+      engine: params.get('tts') === 'natural' ? 'natural' : 'windows',
+      naturalVoice: DEFAULT_NATURAL_VOICE
+    },
     voiceShortcutActive: true,
     dictation: { ...DEFAULT_DICTATION, enabled: params.get('dictation') === 'on' },
     dictationKeyActive: params.get('dictation') === 'on',
@@ -553,7 +563,10 @@ export function createMockApi(): CompiApi {
   })
   // Dictée partout (scénarios ?speech=installed, ?stats=demo) : rien n'est téléchargé.
   const speechCh = channel<SpeechModelStatus>()
-  let speechInstalled: Partial<Record<SpeechPackId, boolean>> = params.get('speech') === 'installed' ? { parakeet: true } : {}
+  let speechInstalled: Partial<Record<SpeechPackId, boolean>> = {
+    ...(params.get('speech') === 'installed' && { parakeet: true }),
+    ...(params.get('tts') === 'natural' && { supertonic: true })
+  }
   let speechDl: SpeechModelStatus['downloading'] | null = null
   let speechCancelled = false
   const speechStatus = (model: SpeechPackId): SpeechModelStatus => ({
