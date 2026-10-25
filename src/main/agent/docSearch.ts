@@ -1,7 +1,7 @@
 // Recherche plein texte dans les dossiers que l'utilisateur a confiés à Compi,
 // y compris à l'intérieur des PDF, Word, Excel et PowerPoint (ce que Grep ne
 // sait pas faire). Le texte extrait est gardé en cache tant que le fichier ne
-// change pas.
+// change pas, dans une limite de taille, et oublié 10 min après la dernière recherche.
 
 import { readdir, stat } from 'node:fs/promises'
 import { extname, isAbsolute, join, relative, resolve } from 'node:path'
@@ -12,6 +12,45 @@ const MAX_FILES = 3000
 const searchable = new Set(DOCUMENT_EXTENSIONS)
 
 const cache = new Map<string, { mtime: number; text: string }>()
+/** Au plus 32 millions de caractères (64 Mo au pire) : au-delà, les documents suivants ne sont plus gardés. */
+export const CACHE_MAX_CHARS = 32_000_000
+const CACHE_IDLE_MS = 10 * 60_000
+let cachedChars = 0
+let idleTimer: NodeJS.Timeout | null = null
+
+/**
+ * Garde le texte d'un document. Cache plein : rien n'est chassé, le document n'est
+ * simplement pas gardé. Une recherche lit les documents dans l'ordre : chasser les
+ * plus anciens viderait le cache à chaque passage, sans rien gagner.
+ */
+export function remember(file: string, mtime: number, text: string, max = CACHE_MAX_CHARS): boolean {
+  const old = cache.get(file)
+  const grown = cachedChars - (old?.text.length ?? 0) + text.length
+  if (grown > max) {
+    if (old) {
+      cache.delete(file)
+      cachedChars -= old.text.length
+    }
+    return false
+  }
+  cache.set(file, { mtime, text })
+  cachedChars = grown
+  return true
+}
+
+/** Oublie tout le texte gardé (10 min sans recherche). */
+export function forgetDocuments(): void {
+  cache.clear()
+  cachedChars = 0
+}
+
+export const cachedDocumentChars = (): number => cachedChars
+
+function touchCache(): void {
+  if (idleTimer) clearTimeout(idleTimer)
+  idleTimer = setTimeout(forgetDocuments, CACHE_IDLE_MS)
+  idleTimer.unref?.()
+}
 
 /** Vrai si `path` est `root` ou se trouve dedans (insensible à la casse sous Windows). */
 export function isInside(path: string, root: string): boolean {
@@ -51,7 +90,7 @@ async function textOf(file: string): Promise<string> {
   const hit = cache.get(file)
   if (hit && hit.mtime === mtimeMs) return hit.text
   const text = size > 30 * 1024 * 1024 ? '' : (await extractDocument(file).catch(() => ({ text: '' }))).text
-  cache.set(file, { mtime: mtimeMs, text })
+  remember(file, mtimeMs, text)
   return text
 }
 
@@ -76,6 +115,7 @@ export async function searchDocuments(roots: string[], query: string, limit = 15
   const files: string[] = []
   for (const root of roots) await walk(root, files)
 
+  touchCache()
   const hits: SearchHit[] = []
   for (const file of files) {
     const text = await textOf(file)
@@ -103,5 +143,6 @@ export async function searchDocuments(roots: string[], query: string, limit = 15
     hits.push({ file, score, snippets })
   }
   hits.sort((a, b) => b.score - a.score)
+  touchCache()
   return { hits: hits.slice(0, limit), scanned: files.length }
 }

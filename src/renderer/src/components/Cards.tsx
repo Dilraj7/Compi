@@ -116,7 +116,9 @@ export const ApprovalCard = forwardRef<HTMLDivElement, { a: ApprovalRequest; onD
               </div>
             )}
             {a.detail && !cloud && (
-              <div className="mt-2 max-h-24 overflow-auto rounded-xl bg-black/60 px-2.5 py-2 font-mono text-[11.5px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap text-fog-300 ring-1 ring-inset ring-white/[0.06] select-text">
+              <div
+                className={`mt-2 ${a.toolName === 'mcp__compi__write_text_file' ? 'max-h-52' : 'max-h-24'} overflow-auto rounded-xl bg-black/60 px-2.5 py-2 font-mono text-[11.5px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap text-fog-300 ring-1 ring-inset ring-white/[0.06] select-text`}
+              >
                 {a.detail}
               </div>
             )}

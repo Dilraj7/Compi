@@ -131,29 +131,41 @@ export function LedEyes(props: EyesProps) {
   )
 }
 
+/** Le regard suit la souris au plus 20 fois par seconde (la transition CSS lisse le reste). */
+const LOOK_EVERY_MS = 50
+/** Regard arrondi au quart de pixel : un geste minuscule ne redessine rien. */
+const quarter = (v: number): number => Math.round(v * 4) / 4
+
 /** Suivi du regard : renvoie un décalage (px) vers la souris. */
 export function useLook(max = 1.6) {
   const ref = useRef<HTMLDivElement>(null)
   const [look, setLook] = useState({ x: 0, y: 0 })
   useEffect(() => {
-    let raf = 0
-    const onMove = (e: MouseEvent): void => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        const el = ref.current
-        if (!el) return
-        const b = el.getBoundingClientRect()
-        const dx = e.clientX - (b.left + b.width / 2)
-        const dy = e.clientY - (b.top + b.height / 2)
-        const dist = Math.hypot(dx, dy) || 1
-        const k = Math.min(1, dist / 220)
-        setLook({ x: (dx / dist) * max * k, y: (dy / dist) * max * k })
-      })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let last = 0
+    let pointer: { x: number; y: number } | null = null
+    const apply = (): void => {
+      timer = undefined
+      last = performance.now()
+      const el = ref.current
+      if (!pointer || !el) return
+      const b = el.getBoundingClientRect()
+      const dx = pointer.x - (b.left + b.width / 2)
+      const dy = pointer.y - (b.top + b.height / 2)
+      const dist = Math.hypot(dx, dy) || 1
+      const k = Math.min(1, dist / 220)
+      const x = quarter((dx / dist) * max * k)
+      const y = quarter((dy / dist) * max * k)
+      setLook((prev) => (prev.x === x && prev.y === y ? prev : { x, y }))
     }
-    window.addEventListener('mousemove', onMove)
+    const onMove = (e: MouseEvent): void => {
+      pointer = { x: e.clientX, y: e.clientY }
+      if (timer === undefined) timer = setTimeout(apply, Math.max(0, LOOK_EVERY_MS - (performance.now() - last)))
+    }
+    window.addEventListener('mousemove', onMove, { passive: true })
     return () => {
       window.removeEventListener('mousemove', onMove)
-      cancelAnimationFrame(raf)
+      clearTimeout(timer)
     }
   }, [max])
   return { ref, look }

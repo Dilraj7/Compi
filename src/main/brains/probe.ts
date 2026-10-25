@@ -1,7 +1,7 @@
 // Bouton « Tester » : une petite réponse (délai, vitesse) puis un appel d'outil
 // factice, pour vérifier qu'un cerveau est utilisable par Compi.
 
-import Anthropic from '@anthropic-ai/sdk'
+import type Anthropic from '@anthropic-ai/sdk'
 import { normalizeBaseUrl } from '../../shared/brains'
 import type { Brain, BrainTestResult, Effort } from '../../shared/types'
 import { describeAgentError, normalizeWorkspaceId } from '../agent/errors'
@@ -24,6 +24,8 @@ export interface BrainClient {
  * à utiliser. `effort` remplace le style réglé (les actions rapides veulent du Vif).
  */
 export async function clientFor(brain: Brain, override: { effort?: Effort } = {}): Promise<BrainClient> {
+  // Chargé au premier besoin : beaucoup de sessions ne s'en servent jamais.
+  const { default: Anthropic } = await import('@anthropic-ai/sdk')
   const s = settings.get()
   const common = { maxRetries: 0, timeout: 180_000 }
   if (brain.provider === 'anthropic') {

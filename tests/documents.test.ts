@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { extractDocument, htmlToText, paginate, UnsupportedDocumentError } from '../src/main/agent/documents'
-import { isInside, searchDocuments } from '../src/main/agent/docSearch'
+import { cachedDocumentChars, forgetDocuments, isInside, remember, searchDocuments } from '../src/main/agent/docSearch'
 
 let dir = ''
 const at = (name: string): string => join(dir, name)
@@ -146,6 +146,22 @@ describe('recherche dans les documents', () => {
   it('cherche aussi dans les tableurs et les PDF', async () => {
     expect((await searchDocuments([dir], 'février')).hits.map((h) => h.file)).toContain(at('ventes.xlsx'))
     expect((await searchDocuments([dir], 'annuel')).hits.map((h) => h.file)).toContain(at('rapport.pdf'))
+  })
+
+  it('texte gardé borné : cache plein, rien n’est chassé, le suivant n’est pas gardé ; tout s’oublie ensuite', async () => {
+    await searchDocuments([dir], 'loyer')
+    const used = cachedDocumentChars()
+    expect(used).toBeGreaterThan(0)
+    forgetDocuments()
+    expect(cachedDocumentChars()).toBe(0)
+    expect(remember('a', 1, 'x'.repeat(60), 100)).toBe(true)
+    expect(remember('b', 1, 'y'.repeat(30), 100)).toBe(true)
+    expect(remember('c', 1, 'z'.repeat(20), 100)).toBe(false)
+    expect(cachedDocumentChars()).toBe(90)
+    // Un document qui grossit au-delà de la place : retiré plutôt que gardé à moitié.
+    expect(remember('b', 2, 'y'.repeat(50), 100)).toBe(false)
+    expect(cachedDocumentChars()).toBe(60)
+    forgetDocuments()
   })
 
   it('isInside ne laisse pas sortir d’un dossier', () => {

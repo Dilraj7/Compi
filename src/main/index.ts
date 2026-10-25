@@ -28,6 +28,7 @@ import type {
 } from '../shared/types'
 import { runRoutineAgent, sendMessage, stopAll, stopConversation } from './agent/assistant'
 import { searchWeb } from './agent/webSearch'
+import { undoEdit } from './agent/textTools'
 import { normalizeWorkspaceId } from './agent/errors'
 import { cancelReminder, listReminders, restoreReminders, snoozeReminder } from './day/reminders'
 import { inMeeting, startMeetings, stopMeetings } from './day/meetings'
@@ -131,8 +132,8 @@ import {
   ignoreMessage,
   messagesStatus,
   openMessageApp,
-  refreshAccess,
   snoozeMessage,
+  statusWhileOff,
   stopMessages,
   syncMessages
 } from './messages/watch'
@@ -433,6 +434,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.send, (_e, req) => sendMessage(req))
   ipcMain.handle(IPC.stop, (_e, id: string) => stopConversation(id))
+  ipcMain.handle(IPC.undoTextEdit, (_e, id: string) => undoEdit(String(id)))
 
   ipcMain.handle(IPC.decide, (_e, id: string, decision) => approvals.decide(id, decision))
   ipcMain.handle(IPC.answer, (_e, answer) => approvals.answer(answer))
@@ -627,7 +629,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.compiUsage, () => compiUsage())
 
   // Messages en attente (notifications des messageries)
-  ipcMain.handle(IPC.messagesStatus, () => (settings.get().messages.enabled ? messagesStatus() : refreshAccess()))
+  ipcMain.handle(IPC.messagesStatus, () => (settings.get().messages.enabled ? messagesStatus() : statusWhileOff()))
   ipcMain.handle(IPC.messagesActivate, () => activateMessages())
   ipcMain.handle(IPC.messagesOpen, (_e, key: string) => openMessageApp(String(key)))
   ipcMain.handle(IPC.messagesSnooze, (_e, key: string) => snoozeMessage(String(key)))

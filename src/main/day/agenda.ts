@@ -28,7 +28,6 @@ import { calendarChoices, listEvents } from '../google/calendar'
 import { log } from '../log'
 import { secrets } from '../store/secrets'
 import { settings } from '../store/settings'
-import { parseIcs } from './ics'
 
 const MAX_SOURCES = 8
 const CACHE_MS = 5 * 60_000
@@ -36,6 +35,8 @@ const ICS_MAX_BYTES = 5 * 1024 * 1024
 /** Outils d'une passerelle dont Compi demande le schéma (les plus probables du catalogue). */
 const MAX_LEARNED = 12
 const icsKey = (id: string): string => `agenda-ics:${id}`
+/** Lecteur iCal (ical.js), chargé seulement quand un lien iCal est lu. */
+const ics = (): Promise<typeof import('./ics')> => import('./ics')
 
 /** Événements par source et par jours entiers, gardés 5 minutes (les alertes relisent toutes les 5 minutes). */
 const cache = new Map<string, { at: number; events: DayEvent[] }>()
@@ -154,7 +155,7 @@ async function sourceEvents(src: AgendaSource, from: Date, to: Date): Promise<Da
     if (src.kind === 'ics') {
       const url = secrets.get(icsKey(src.id))
       if (!url) throw new Error('lien introuvable : retire la source et ajoute-la de nouveau')
-      events = parseIcs(await fetchIcs(url), dayFrom, dayTo, src.name)
+      events = (await ics()).parseIcs(await fetchIcs(url), dayFrom, dayTo, src.name)
     } else {
       events = await withConnector(
         src.connectorId,
@@ -252,7 +253,7 @@ async function tryDraft(d: AgendaDraft): Promise<AgendaPreview & { args?: Agenda
     if ('problem' in u) return { ok: false, message: u.problem, events: [], count: 0 }
     const text = await fetchIcs(u.url)
     const name = label || calendarName(text) || new URL(u.url).hostname
-    const events = parseIcs(text, from, to, name)
+    const events = (await ics()).parseIcs(text, from, to, name)
     return { ok: true, message: summary(events.length), events: events.slice(0, 5), count: events.length, name, url: u.url }
   }
   const c = settings.get().connectors.find((x) => x.id === d.connectorId)

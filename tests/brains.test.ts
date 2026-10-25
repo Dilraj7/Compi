@@ -93,7 +93,8 @@ describe('brainEnv', () => {
       expect(env[k]).toBe('qwen3.5:9b-compi')
     }
     expect(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBe('1')
-    expect(env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe('65536')
+    // Le moteur résume à « fenêtre annoncée − réponse − 13 000 » : avec la marge, à « vraie fenêtre − réponse ».
+    expect(Number(env.CLAUDE_CODE_MAX_CONTEXT_TOKENS) - Number(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS) - 13_000).toBe(65536 - 8192)
     // Requête standard : pas d'effort (Ollama le traduirait en réflexion), pas de bêta Claude.
     expect(env.CLAUDE_CODE_EFFORT_LEVEL).toBe('auto')
     expect(env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS).toBe('1')

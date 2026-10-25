@@ -1,12 +1,7 @@
-# Quatrième hôte Windows, en lecture seule : activité de la carte graphique
-# (mémoire vidéo et utilisation, par application) lue dans les compteurs de
-# performances de Windows, applications les plus gourmandes en mémoire, et état
-# « plein écran » (pour couper les sons). Rien n'est modifié.
-# Même règles que les autres hôtes : fonctions nommées, paramètres vérifiés.
+# Activité du PC, en lecture seule : carte graphique (mémoire vidéo et utilisation,
+# par application) lue dans les compteurs de performances de Windows, applications
+# les plus gourmandes en mémoire, et état « plein écran » (pour couper les sons).
 
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 Add-Type -Namespace CompiPerf -Name Shell -MemberDefinition '[DllImport("shell32.dll")] public static extern int SHQueryUserNotificationState(out int state);'
 
 # Échantillons précédents des moteurs (l'utilisation se calcule entre deux relevés).
@@ -31,10 +26,6 @@ function Proc($table, [int]$id) {
   if (-not $table.ContainsKey($id)) { $table[$id] = @{ pid = $id; dedicated = 0.0; util = 0.0 } }
   $table[$id]
 }
-
-$Fns = @{}
-
-$Fns.ping = { @{ pong = $true } }
 
 # Mémoire vidéo par carte et par application, utilisation des moteurs (3D, calcul…).
 $Fns.sample = {
@@ -103,27 +94,4 @@ $Fns.quns = {
   $q = 0
   [void][CompiPerf.Shell]::SHQueryUserNotificationState([ref]$q)
   @{ state = $q }
-}
-
-# ─── Boucle de commandes ─────────────────────────────────────────────────────
-
-[Console]::Out.WriteLine('{"ready":true}')
-[Console]::Out.Flush()
-
-while ($true) {
-  $line = [Console]::In.ReadLine()
-  if ($null -eq $line) { break }
-  if ($line.Trim().Length -eq 0) { continue }
-  $id = 0
-  try {
-    $req = ConvertFrom-Json $line
-    $id = [int]$req.id
-    $fn = $Fns[[string]$req.fn]
-    if ($null -eq $fn) { throw 'Fonction inconnue.' }
-    $out = @{ id = $id; ok = $true; result = (& $fn $req.args) }
-  } catch {
-    $out = @{ id = $id; ok = $false; error = $_.Exception.Message }
-  }
-  [Console]::Out.WriteLine((ConvertTo-Json $out -Compress -Depth 6))
-  [Console]::Out.Flush()
 }

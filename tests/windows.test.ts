@@ -62,32 +62,66 @@ describe('pont PowerShell', () => {
     expect(parseHostLine('{"id":"1","ok":true}')).toBeNull()
   })
 
-  it('le script n’expose que des fonctions nommées, sans exécution libre', () => {
-    const script = readFileSync('src/main/windows/host.ps1', 'utf8')
-    expect(script).not.toMatch(/Invoke-Expression|\biex\b|ScriptBlock\]::Create|Start-Process\s+\$|-Command\s/i)
-    // Rien d'irréversible : ni arrêt, ni verrouillage, ni suppression.
-    expect(script).not.toMatch(/Stop-Computer|Restart-Computer|LockWorkStation|SetSuspendState|Remove-Item|shutdown/i)
-    const fns = [...script.matchAll(/^\$Fns\.(\w+) =/gm)].map((m) => m[1])
-    expect(fns.sort()).toEqual([
-      'apps',
-      'clip_text',
-      'copy',
-      'focus',
-      'foreground',
-      'launch',
-      'media',
-      'ocr_image',
-      'ocr_languages',
-      'ocr_pdf',
-      'paste',
-      'ping',
-      'search',
-      'status',
-      'theme',
-      'volume',
-      'windows'
-    ])
+  const ps1 = (name: string): string => readFileSync(`src/main/windows/${name}.ps1`, 'utf8')
+  const fnsOf = (...names: string[]): string[] => names.flatMap((n) => [...ps1(n).matchAll(/^\$Fns\.(\w+) =/gm)].map((m) => m[1])).sort()
+
+  it('les scripts n’exposent que des fonctions nommées, sans exécution libre', () => {
+    for (const name of ['prelude', 'loop', 'host', 'winrt', 'voice', 'music', 'notifications', 'perf']) {
+      const script = ps1(name)
+      expect(script, name).not.toMatch(/Invoke-Expression|\biex\b|ScriptBlock\]::Create|Start-Process\s+\$|-Command\s/i)
+      // Rien d'irréversible : ni arrêt, ni verrouillage, ni suppression.
+      expect(script, name).not.toMatch(/Stop-Computer|Restart-Computer|LockWorkStation|SetSuspendState|Remove-Item|shutdown/i)
+      // Une seule boucle de commandes et une seule table de fonctions, communes.
+      if (name !== 'loop') expect(script, name).not.toMatch(/ReadLine\(\)/)
+      if (name !== 'prelude') expect(script, name).not.toMatch(/^\$Fns = /m)
+    }
+    // Hôte Windows : ce que l'utilisateur demande.
+    expect(fnsOf('prelude', 'host', 'winrt', 'voice')).toEqual(
+      [
+        'apps',
+        'clip_text',
+        'copy',
+        'focus',
+        'foreground',
+        'launch',
+        'media',
+        'ocr_image',
+        'ocr_languages',
+        'ocr_pdf',
+        'paste',
+        'ping',
+        'search',
+        'speak',
+        'status',
+        'theme',
+        'voices',
+        'volume',
+        'windows'
+      ].sort()
+    )
+    // Hôte de veille : les relevés réguliers, en lecture seule (plus les touches multimédias).
+    expect(fnsOf('prelude', 'winrt', 'music', 'notifications', 'perf')).toEqual(
+      ['access', 'health', 'list', 'media_art', 'media_control', 'media_now', 'ping', 'quns', 'ram_top', 'request_access', 'sample'].sort()
+    )
   })
+
+  it.runIf(process.platform === 'win32')(
+    'les deux hôtes réunis démarrent et répondent (fonctions sans données privées)',
+    async () => {
+      const { callHost, callWatch, stopHost } = await import('../src/main/windows/host')
+      try {
+        expect(await callHost('ping', {}, 20_000)).toEqual({ pong: true })
+        const { voices } = await callHost<{ voices: Array<{ id: string }> }>('voices', {}, 20_000)
+        expect(Array.isArray(voices)).toBe(true)
+        expect(await callWatch('ping', {}, 20_000)).toEqual({ pong: true })
+        expect(typeof (await callWatch<{ state: number }>('quns', {}, 20_000)).state).toBe('number')
+        expect((await callWatch<{ status: string }>('access', {}, 20_000)).status).toMatch(/^(Allowed|Denied|Unspecified)$/)
+      } finally {
+        stopHost()
+      }
+    },
+    60_000
+  )
 })
 
 describe('pont PowerShell : appel trop lent', () => {
@@ -131,6 +165,44 @@ describe('pont PowerShell : appel trop lent', () => {
         expect(vi.mocked(log)).toHaveBeenCalledWith('warn', expect.stringContaining('« slow » toujours sans réponse'))
         const after = await host.call<{ pid: number }>('fast', {}, 15_000)
         expect(after.pid).not.toBe(first.pid)
+      } finally {
+        host.stop()
+      }
+    },
+    30_000
+  )
+
+  it.runIf(process.platform === 'win32')(
+    'un appel qui attend derrière un plus long ne relance pas PowerShell',
+    async () => {
+      const host = new PowerShellHost<'slow' | 'fast'>('hôte test', script)
+      try {
+        const first = await host.call<{ pid: number }>('fast', {}, 15_000)
+        const slow = host.call<{ pid: number }>('slow', {}, 5000)
+        // « fast » attend que « slow » finisse (1,2 s) : délai et grâce passent avant.
+        await expect(host.call('fast', {}, 100, 200)).rejects.toThrow('pas répondu à temps')
+        expect((await slow).pid).toBe(first.pid)
+        const after = await host.call<{ pid: number }>('fast', {}, 15_000)
+        expect(after.pid).toBe(first.pid)
+        expect(vi.mocked(log)).not.toHaveBeenCalledWith('warn', expect.stringContaining('« fast » toujours sans réponse'))
+      } finally {
+        host.stop()
+      }
+    },
+    30_000
+  )
+
+  it.runIf(process.platform === 'win32')(
+    'démarré d’avance, PowerShell s’arrête quand même après le délai sans appel',
+    async () => {
+      const host = new PowerShellHost<'slow' | 'fast'>('hôte test', script, 400)
+      try {
+        host.warm()
+        for (let i = 0; i < 100 && !host.running; i++) await sleep(50)
+        expect(host.running).toBe(true)
+        // Le minuteur n'est armé qu'une fois PowerShell prêt.
+        for (let i = 0; i < 200 && host.running; i++) await sleep(50)
+        expect(host.running).toBe(false)
       } finally {
         host.stop()
       }

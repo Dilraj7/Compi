@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { MotionConfig } from 'motion/react'
 import { attentionView } from '@shared/attention'
 import { soundFor } from '@shared/sounds'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -235,9 +236,12 @@ export function App() {
   useVoiceRelease()
   usePanelKeys()
   useIslandMonitor()
+  // Animations réduites quand Windows le demande (Accessibilité › Effets d'animation).
   return (
-    <ErrorBoundary>
-      <Island />
-    </ErrorBoundary>
+    <MotionConfig reducedMotion="user">
+      <ErrorBoundary>
+        <Island />
+      </ErrorBoundary>
+    </MotionConfig>
   )
 }

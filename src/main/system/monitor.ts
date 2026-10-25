@@ -5,8 +5,7 @@
 
 import { cpus, freemem, totalmem } from 'node:os'
 import { powerMonitor } from 'electron'
-import script from '../windows/perf.ps1?raw'
-import { PowerShellHost } from '../windows/host'
+import { callWatch } from '../windows/host'
 import { IPC } from '../../shared/ipc'
 import {
   cpuPercent,
@@ -38,9 +37,6 @@ import { ollamaCacheState } from '../brains/ollamaCache'
 import { healthBook } from '../store/modelHealth'
 import { FAIL_MEMORY_MS, healthKey, reliableModels, unreliable } from '../../shared/modelHealth'
 
-type PerfFn = 'ping' | 'sample' | 'ram_top' | 'quns'
-const host = new PowerShellHost<PerfFn>('hôte performances', script, 5 * 60_000)
-
 const GB = 1024 ** 3
 const RAM_TOP_MS = 10_000
 const RUNS_MAX = 20
@@ -62,7 +58,7 @@ let hw: Awaited<ReturnType<typeof hardwareInfo>> | null = null
 async function gpuSample(): Promise<{ adapters: GpuAdapterSample[]; processes: GpuProcessSample[] } | null> {
   if (process.platform !== 'win32' || gpuFailures >= 5) return null
   try {
-    const r = await host.call<{ adapters?: GpuAdapterSample[]; processes?: GpuProcessSample[] }>('sample', {}, 8000)
+    const r = await callWatch<{ adapters?: GpuAdapterSample[]; processes?: GpuProcessSample[] }>('sample', {}, 8000)
     gpuFailures = 0
     return { adapters: Array.isArray(r.adapters) ? r.adapters : [], processes: Array.isArray(r.processes) ? r.processes : [] }
   } catch (e) {
@@ -75,7 +71,7 @@ async function gpuSample(): Promise<{ adapters: GpuAdapterSample[]; processes: G
 async function topRam(): Promise<typeof ramTop> {
   if (Date.now() - ramTop.at < RAM_TOP_MS || process.platform !== 'win32') return ramTop
   try {
-    const r = await host.call<{ top?: Array<{ name: string; bytes: number }> }>('ram_top', {}, 8000)
+    const r = await callWatch<{ top?: Array<{ name: string; bytes: number }> }>('ram_top', {}, 8000)
     ramTop = { at: Date.now(), ...groupRamTop(r.top ?? []) }
   } catch {
     ramTop = { ...ramTop, at: Date.now() }
@@ -298,7 +294,7 @@ export async function unloadLocal(which: 'all' | 'embed'): Promise<PerfSnapshot 
 export async function fullscreenNow(): Promise<boolean> {
   if (process.platform !== 'win32') return false
   try {
-    const r = await host.call<{ state: number }>('quns', {}, 1500)
+    const r = await callWatch<{ state: number }>('quns', {}, 1500)
     // 2 : application en plein écran, 3 : jeu Direct3D, 4 : présentation.
     return r.state === 2 || r.state === 3 || r.state === 4
   } catch {
@@ -371,5 +367,4 @@ export function stopPerf(): void {
   timer = null
   if (alertTimer) clearInterval(alertTimer)
   alertTimer = null
-  host.stop()
 }

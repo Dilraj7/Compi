@@ -2,7 +2,7 @@
 // texte) et description d'images pour les modèles locaux qui ne voient pas.
 // Utilise la clé API de l'utilisateur.
 
-import Anthropic from '@anthropic-ai/sdk'
+import type Anthropic from '@anthropic-ai/sdk'
 import { secrets } from '../store/secrets'
 import { settings } from '../store/settings'
 import { normalizeWorkspaceId } from './errors'
@@ -13,10 +13,12 @@ export const VISION_MAX_PAGES = 100
 
 const TRANSCRIBE_MODEL = 'claude-haiku-5-5'
 
-function client(): Anthropic {
+/** SDK chargé au premier besoin (lecture d'un document scanné par Claude). */
+async function client(): Promise<Anthropic> {
   const apiKey = secrets.getApiKey()
   if (!apiKey) throw new Error('clé API absente')
   const workspaceId = normalizeWorkspaceId(settings.get().workspaceId)
+  const { default: Anthropic } = await import('@anthropic-ai/sdk')
   return new Anthropic({
     apiKey,
     defaultHeaders: workspaceId ? { 'anthropic-workspace-id': workspaceId } : undefined
@@ -30,7 +32,7 @@ const textOf = (message: Anthropic.Message): string =>
     .trim()
 
 export async function transcribePdf(pdf: Buffer): Promise<string> {
-  const message = await client().messages
+  const message = await (await client()).messages
     .stream({
       model: TRANSCRIBE_MODEL,
       max_tokens: 16000,
@@ -58,7 +60,7 @@ type ImageType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
 
 /** Description d'une image, pour un modèle local qui ne voit pas. */
 export async function describeImage(base64: string, mimeType: string): Promise<string> {
-  const message = await client().messages.create({
+  const message = await (await client()).messages.create({
     model: TRANSCRIBE_MODEL,
     max_tokens: 3000,
     messages: [

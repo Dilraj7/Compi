@@ -261,12 +261,20 @@ const GENERIC = new Set([
   'commande'
 ])
 
-/** Mots qui désignent un connecteur dans une demande : son nom (entier et par mots) et ses synonymes. */
+/** Singulier d'un mot au pluriel (« fichiers » → « fichier », « tableaux » → « tableau »), sinon rien. */
+const singular = (w: string): string | null => (w.length >= 5 && /eaux$/.test(w) ? w.slice(0, -1) : w.length >= 5 && /[^s]s$/.test(w) ? w.slice(0, -1) : null)
+
+/**
+ * Mots qui désignent un connecteur dans une demande : son nom (entier et par mots), le
+ * singulier d'un nom au pluriel (« Fichiers » se charge pour « le fichier ») et ses synonymes.
+ * Jamais le pluriel d'un nom au singulier : « les notions » ne charge pas Notion.
+ */
 export function connectorKeywords(name: string, templateId?: string): string[] {
   const n = fold(name).replace(/\(.*?\)/g, ' ')
   const words = n.split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !GENERIC.has(w))
+  const singulars = words.map(singular).filter((w): w is string => w !== null && !GENERIC.has(w))
   const joined = words.join('')
-  return [...new Set([...words, ...(joined.length >= 4 ? [joined] : []), ...(templateId ? (SYNONYMS[templateId] ?? []) : [])])]
+  return [...new Set([...words, ...singulars, ...(joined.length >= 4 ? [joined] : []), ...(templateId ? (SYNONYMS[templateId] ?? []) : [])])]
 }
 
 /** Clé du connecteur d'un outil (`mcp__<clé>__nom`), ou null pour un outil du moteur. */
@@ -343,17 +351,21 @@ const textsOf = (content: unknown): string[] =>
 /** Nom court d'un outil de connecteur : « mcp__notion-741c__notion-search » → « notion-search ». */
 export const shortToolName = (name: string): string => name.replace(/^mcp__.+?__/, '')
 
+/** Résumé de la conversation écrit par le moteur quand il la raccourcit (il parle de tout ce qui s'est dit). */
+const ENGINE_SUMMARY = /^This session is being continued from a previous conversation/
+
 /**
- * Ce que l'utilisateur a écrit dans un message (replié) : sans les rappels du moteur, les
- * résultats d'outils ni les blocs <contexte> et <reglages> ajoutés par Compi (une source
- * d'agenda qui porte le nom d'un connecteur ne doit pas le charger).
+ * Ce que l'utilisateur a écrit dans un message (replié) : sans les rappels ni le résumé du
+ * moteur, les résultats d'outils, ni les blocs <contexte>, <reglages> et <verification> ajoutés
+ * par Compi (une source d'agenda qui porte le nom d'un connecteur ne doit pas le charger ; le
+ * mot « mémoire » d'une vérification chargeait « Graphe de mémoire »).
  */
 const saidIn = (content: unknown): string =>
   fold(
     textsOf(content)
-      .filter((t) => !t.trimStart().startsWith('<system-reminder>'))
+      .filter((t) => !t.trimStart().startsWith('<system-reminder>') && !ENGINE_SUMMARY.test(t.trimStart()))
       .join('\n')
-      .replace(/<(contexte|reglages)>[\s\S]*?<\/\1>/g, ' ')
+      .replace(/<(contexte|reglages|verification)>[\s\S]*?<\/\1>/g, ' ')
   ).trim()
 
 /** Messages de l'utilisateur (voir saidIn). */

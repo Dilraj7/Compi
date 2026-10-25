@@ -89,6 +89,10 @@ export function activityLabel(name: string, input: Input = {}): string {
         return `Rangement : ${moveList(input).length} élément(s)`
       case 'undo_moves':
         return 'Annulation du rangement'
+      case 'write_text_file':
+        return `${input.mode === 'append' ? 'Ajout dans' : 'Écriture de'} ${basename(str(input.path))}`
+      case 'undo_text_edit':
+        return `Annulation de la modification${str(input.path) ? ` de ${basename(str(input.path))}` : ''}`
       case 'open_folder':
         return `Ouverture du dossier ${basename(str(input.path))}`
       case 'notify':
@@ -327,6 +331,14 @@ export function approvalTitle(name: string, input: Input = {}): { title: string;
       }
       case 'undo_moves':
         return { title: 'Compi veut annuler le dernier rangement', detail: 'Chaque élément retourne à sa place d’origine, sans rien écraser.' }
+      // La carte de write_text_file (avec les changements) est faite par canUseTool.
+      case 'write_text_file':
+        return { title: `Compi veut écrire dans « ${basename(str(input.path))} »`, detail: str(input.path) }
+      case 'undo_text_edit':
+        return {
+          title: 'Compi veut annuler sa dernière modification de fichier',
+          detail: `${str(input.path) ? `${str(input.path)}\n\n` : ''}La version d’avant revient, seulement si le fichier n’a pas changé depuis.`
+        }
       case 'read_document':
         return { title: 'Compi veut lire un document hors de tes dossiers', detail: str(input.path) }
       case 'fetch_page':

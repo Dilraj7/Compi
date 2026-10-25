@@ -196,6 +196,14 @@ describe('minuteur et pomodoro', () => {
     expect(privacyDecision('anthropic', 'mcp__compi__folder_inventory', { files: 'ask' })).toBe('ask')
     expect(privacyDecision('local', 'mcp__compi__folder_inventory', { files: 'never' })).toBeNull()
   })
+
+  it('fichiers texte : écrire et annuler demandent une carte à chaque fois, jamais en routine', () => {
+    for (const t of ['write_text_file', 'undo_text_edit']) {
+      expect(CONFIRM_EACH_TIME).toContain(`mcp__compi__${t}`)
+      expect(SAFE_COMPI_TOOLS).not.toContain(`mcp__compi__${t}`)
+      expect(HEADLESS_BLOCKED).toContain(`mcp__compi__${t}`)
+    }
+  })
 })
 
 describe('lecture à voix haute', () => {

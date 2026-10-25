@@ -1,4 +1,8 @@
-// Pont vers Windows : un processus PowerShell permanent, piloté en JSON (host.ps1).
+// Pont vers Windows : deux processus PowerShell, pilotés en JSON.
+// - L'hôte Windows (host.ps1, voice.ps1) : ce que l'utilisateur demande (fenêtres,
+//   collage, lecture de texte, voix de Windows). Arrêté après 10 min sans appel.
+// - L'hôte de veille (music.ps1, notifications.ps1, perf.ps1) : les relevés réguliers
+//   (musique, messages, Ce PC). Il ne vit que tant que l'un d'eux est actif.
 // Seules des fonctions nommées existent de l'autre côté, avec des paramètres
 // vérifiés : aucune commande libre ne passe. Chaque appel a un délai maximal :
 // au-delà, il échoue tout de suite pour Compi. Les scripts ont leurs propres délais
@@ -7,7 +11,14 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface } from 'node:readline'
+import prelude from './prelude.ps1?raw'
+import loop from './loop.ps1?raw'
 import script from './host.ps1?raw'
+import winrt from './winrt.ps1?raw'
+import voice from './voice.ps1?raw'
+import music from './music.ps1?raw'
+import notifications from './notifications.ps1?raw'
+import perf from './perf.ps1?raw'
 import { log } from '../log'
 
 export type HostFn =
@@ -28,8 +39,29 @@ export type HostFn =
   | 'ocr_languages'
   | 'ocr_image'
   | 'ocr_pdf'
+  | 'voices'
+  | 'speak'
+
+/** Fonctions de l'hôte de veille : musique, notifications, activité du PC. */
+export type WatchFn =
+  | 'ping'
+  | 'media_now'
+  | 'media_art'
+  | 'media_control'
+  | 'access'
+  | 'request_access'
+  | 'list'
+  | 'health'
+  | 'sample'
+  | 'ram_top'
+  | 'quns'
 
 export const END = '#COMPI-END#'
+
+/** Script complet d'un hôte : début commun, scripts de fonctions, boucle de commandes. */
+export function composeHost(...parts: string[]): string {
+  return [prelude, ...parts, loop].join('\n')
+}
 
 /**
  * Amorce passée en ligne de commande : lit le script sur l'entrée standard
@@ -80,8 +112,8 @@ const START_TIMEOUT_MS = 20_000
  * délai de 8 s des deux côtés).
  */
 export const STUCK_GRACE_MS = 45_000
-/** Après 30 min sans appel, PowerShell est arrêté (relancé au besoin). */
-const IDLE_MS = 30 * 60_000
+/** Après 10 min sans appel, PowerShell est arrêté (relancé au besoin). */
+const IDLE_MS = 10 * 60_000
 
 const hosts = new Set<PowerShellHost<string>>()
 
@@ -97,7 +129,7 @@ export class PowerShellHost<F extends string> {
   private pending = new Map<number, Pending>()
 
   constructor(
-    /** Nom dans le journal : « hôte Windows », « hôte musique »… */
+    /** Nom dans le journal : « hôte Windows », « hôte de veille »… */
     private readonly name: string,
     private readonly source: string,
     private readonly idleMs = IDLE_MS
@@ -183,32 +215,64 @@ export class PowerShellHost<F extends string> {
     await this.start()
     const child = this.proc
     if (!child) throw new HostError('Windows a interrompu l’action.')
-    if (this.idleTimer) clearTimeout(this.idleTimer)
-    this.idleTimer = setTimeout(() => {
-      if (!this.pending.size) this.reset('inactif')
-    }, this.idleMs)
+    this.touch()
     const id = this.nextId++
     return new Promise<T>((resolve, reject) => {
+      // PowerShell traite les appels dans l'ordre : un appel qui attend derrière un
+      // plus ancien (lecture d'un long PDF…) ne relance pas l'hôte. Seul l'appel en
+      // cours le peut, s'il reste muet bien après son propre délai.
+      const stuck = (): void => {
+        const q = this.pending.get(id)
+        if (!q) return
+        if ([...this.pending.keys()].some((k) => k < id)) {
+          q.timer = setTimeout(stuck, graceMs)
+          return
+        }
+        this.pending.delete(id)
+        log('warn', `${this.name} : « ${fn} » toujours sans réponse après ${Math.round((Date.now() - (q.late?.since ?? Date.now())) / 1000)} s, relance`)
+        if (this.proc === child) this.reset('Windows a été relancé.')
+      }
       const timer = setTimeout(() => {
         const q = this.pending.get(id)
         if (!q) return
         reject(new HostError('Windows n’a pas répondu à temps : action abandonnée.'))
         q.late = { fn, since: Date.now() - timeoutMs }
-        q.timer = setTimeout(() => {
-          if (!this.pending.has(id)) return
-          this.pending.delete(id)
-          log('warn', `${this.name} : « ${fn} » toujours sans réponse après ${Math.round((timeoutMs + graceMs) / 1000)} s, relance`)
-          if (this.proc === child) this.reset('Windows a été relancé.')
-        }, graceMs)
+        q.timer = setTimeout(stuck, graceMs)
       }, timeoutMs)
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer })
       child.stdin.write(`${JSON.stringify({ id, fn, args })}\n`)
     })
   }
 
-  /** Démarre l'hôte d'avance, sans attendre. */
+  /** Arme l'arrêt après `idleMs` sans appel (repoussé tant qu'un appel est en cours). */
+  private touch(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer)
+    const idle = (): void => {
+      this.idleTimer = null
+      if (this.pending.size) this.idleTimer = setTimeout(idle, this.idleMs)
+      else if (this.proc) this.reset('inactif')
+    }
+    this.idleTimer = setTimeout(idle, this.idleMs)
+  }
+
+  /** Démarre l'hôte d'avance, sans attendre. Il s'arrête ensuite comme après un appel. */
   warm(): void {
-    this.start().catch((e) => log('warn', `${this.name} indisponible`, (e as Error).message))
+    this.start().then(
+      () => this.touch(),
+      (e) => log('warn', `${this.name} indisponible`, (e as Error).message)
+    )
+  }
+
+  /** PowerShell tourne en ce moment. */
+  get running(): boolean {
+    return this.proc !== null
+  }
+
+  /** Relance PowerShell à neuf s'il n'a aucun appel en cours (mémoire qui grossit). */
+  recycle(): boolean {
+    if (!this.proc || this.pending.size) return false
+    this.reset('relancé à neuf')
+    return true
   }
 
   stop(): void {
@@ -218,11 +282,23 @@ export class PowerShellHost<F extends string> {
   }
 }
 
-const main = new PowerShellHost<HostFn>('hôte Windows', script)
+const main = new PowerShellHost<HostFn>('hôte Windows', composeHost(script, winrt, voice))
+/** Arrêté 5 min après le dernier relevé. */
+const watch = new PowerShellHost<WatchFn>('hôte de veille', composeHost(winrt, music, notifications, perf), 5 * 60_000)
 
 /** Appelle une fonction de l'hôte Windows principal. */
 export function callHost<T>(fn: HostFn, args: Record<string, unknown> = {}, timeoutMs = 5000): Promise<T> {
   return main.call<T>(fn, args, timeoutMs)
+}
+
+/** Appelle une fonction de l'hôte de veille (relevés réguliers). */
+export function callWatch<T>(fn: WatchFn, args: Record<string, unknown> = {}, timeoutMs = 5000): Promise<T> {
+  return watch.call<T>(fn, args, timeoutMs)
+}
+
+/** Relance l'hôte de veille à neuf, s'il est libre (voir PowerShellHost.recycle). */
+export function recycleWatch(): boolean {
+  return watch.recycle()
 }
 
 /** Démarre l'hôte d'avance (ouverture de l'îlot), sans attendre. */

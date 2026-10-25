@@ -21,6 +21,8 @@ export const IPC = {
   agentEvent: 'chat:event',
   /** Ouvre une discussion dans le panneau (clic sur la notification d'une routine). */
   openConversation: 'chat:open',
+  /** Annule une modification de fichier texte (bouton « Annuler » sous l'action). */
+  undoTextEdit: 'chat:undo-text-edit',
   // approbations / questions
   approvals: 'approvals:list',
   decide: 'approvals:decide',

@@ -95,3 +95,56 @@ describe('action annoncée sans outil', () => {
     expect(unverifiedClaim('C’est fait, j’ai créé la page.', [{ name: 'ListMcpResourcesTool', status: 'done' }])).toBe('no-action')
   })
 })
+
+describe('écriture demandée dans un fichier', () => {
+  const none: Array<{ name: string; status: string }> = []
+  // Cas réel du 24/10 : « OK remplis le », réponse « C'est noté. Voici le contenu mis à jour… » sans outil.
+  const shown = 'C’est noté. Voici le contenu mis à jour pour ton fichier **Essai Compi.md** :\n\n---\ntype: idee\n---\n# Essai Compi'
+
+  it('texte seulement affiché après « remplis-le » : rien d’écrit, avant « c’est noté »', () => {
+    expect(unverifiedClaim(shown, none, { asked: 'OK remplis le' })).toBe('not-written')
+    for (const asked of [
+      'ok remplis-le',
+      'Modifie-le stp',
+      'écris-la dans le fichier',
+      'Mets-le à jour',
+      'Ajoute ça dans le fichier Essai.md',
+      'peux-tu compléter notes.txt avec ça',
+      'remplis le maintenant'
+    ])
+      expect(unverifiedClaim('Voici le texte :\n\nBonjour', none, { asked })).toBe('not-written')
+  })
+
+  it('écrit pour de vrai (outil d’écriture ou d’un connecteur) : rien à signaler', () => {
+    expect(unverifiedClaim(shown, [{ name: 'mcp__compi__write_text_file', status: 'done' }], { asked: 'OK remplis le' })).toBeNull()
+    expect(unverifiedClaim(shown, [{ name: 'mcp__fichiers-482c__write_file', status: 'done' }], { asked: 'OK remplis le' })).toBeNull()
+    expect(unverifiedClaim(shown, [{ name: 'mcp__compi__write_text_file', status: 'error' }], { asked: 'OK remplis le' })).toBe('not-written')
+  })
+
+  it('pas de fausse alerte : texte à rédiger ici, refus, question ou phrase négative', () => {
+    for (const asked of [
+      'écris le mail à Paul',
+      'Écris-moi un poème',
+      'remplis le formulaire avec moi, je te dicte',
+      'ne modifie pas le fichier',
+      'mets la musique',
+      'corrige les fautes de ce texte : bonjour'
+    ])
+      expect(unverifiedClaim('Voici :\n\nBonjour', none, { asked })).toBeNull()
+    expect(unverifiedClaim('Je remplace tout le contenu, ou j’ajoute à la fin ?', none, { asked: 'remplis-le' })).toBeNull()
+    // Les blocs de Compi ne sont pas la demande de l'utilisateur.
+    const settings = '<reglages>\n- Ajoute le fichier joint à tes notes : exemple.md\n</reglages>\n<contexte>Nous sommes le samedi.</contexte>\n\nBonjour'
+    expect(unverifiedClaim('Bonjour Alex !', none, { asked: settings })).toBeNull()
+  })
+
+  it('« j’ai mis à jour le fichier » sans outil : action annoncée', () => {
+    expect(unverifiedClaim('J’ai mis à jour ton fichier avec le plan.', none)).toBe('no-action')
+    expect(unverifiedClaim('Le fichier a été complété.', none)).toBe('no-action')
+    expect(unverifiedClaim('J’ai modifié le texte comme demandé :\n\nBonjour', none)).toBeNull()
+  })
+
+  it('relances : écrire avec l’outil, le contenu complet, ou dire pourquoi', () => {
+    expect(autoFollowUp('not-written')).toMatch(/^<verification>[\s\S]*write_text_file[\s\S]*pourquoi tu ne peux pas[\s\S]*<\/verification>$/)
+    expect(followUpFor('not-written')).toMatch(/rien n’a été écrit dans le fichier/)
+  })
+})

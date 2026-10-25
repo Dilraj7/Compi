@@ -9,7 +9,7 @@
 import http from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { net, shell } from 'electron'
-import { auth, type OAuthClientProvider, type OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js'
+import type { auth as mcpAuth, OAuthClientProvider, OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { log } from '../log'
@@ -18,6 +18,9 @@ import { secrets } from '../store/secrets'
 const CONSENT_TIMEOUT_MS = 5 * 60_000
 /** Un jeton qui expire dans moins de 5 minutes est renouvelé avant d'être utilisé. */
 const REFRESH_MARGIN_MS = 5 * 60_000
+
+/** Connexion OAuth du SDK MCP, chargée seulement quand un jeton est à obtenir ou à renouveler. */
+const auth: typeof mcpAuth = async (...args) => (await import('@modelcontextprotocol/sdk/client/auth.js')).auth(...args)
 
 /** Ce qui est gardé (chiffré) pour un connecteur. */
 export interface StoredOAuth {

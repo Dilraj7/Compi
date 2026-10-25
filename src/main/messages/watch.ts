@@ -11,8 +11,7 @@
 import { readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, powerMonitor, shell } from 'electron'
-import script from '../windows/notifications.ps1?raw'
-import { PowerShellHost } from '../windows/host'
+import { callWatch, recycleWatch } from '../windows/host'
 import { IPC } from '../../shared/ipc'
 import {
   appKeyOf,
@@ -41,11 +40,8 @@ import { readJson, writeJson } from '../store/jsonFile'
 import { settings } from '../store/settings'
 import { launchApp } from '../windows/system'
 
-type NotifFn = 'ping' | 'access' | 'request_access' | 'list' | 'health'
-const host = new PowerShellHost<NotifFn>('hôte notifications', script, 5 * 60_000)
-
 const POLL_MS = 3000
-/** L'hôte est relancé toutes les 2 h : une longue interrogation de WinRT peut grossir. */
+/** L'hôte de veille est relancé toutes les 2 h (s'il est libre) : une longue interrogation de WinRT peut grossir. */
 const RECYCLE_MS = 2 * 3600_000
 /** Les réglages de notification de Windows sont relus toutes les 5 min. */
 const HEALTH_MS = 5 * 60_000
@@ -83,20 +79,17 @@ async function list(apps: string[], text: boolean): Promise<RawNotification[]> {
       return { ...n, body: text ? n.body : undefined }
     })
   }
-  if (hostSince && Date.now() - hostSince > RECYCLE_MS) {
-    host.stop()
-    hostSince = 0
-  }
+  if (hostSince && Date.now() - hostSince > RECYCLE_MS && recycleWatch()) hostSince = 0
   if (!hostSince) hostSince = Date.now()
-  const r = await host.call<{ items: RawNotification[] }>('list', { apps, text }, 8000)
+  const r = await callWatch<{ items: RawNotification[] }>('list', { apps, text }, 8000)
   return Array.isArray(r.items) ? r.items : []
 }
 
 async function checkAccess(request: boolean): Promise<MessagesStatus['access']> {
   if (testFile()) return (access = 'allowed')
   try {
-    let r = await host.call<{ status: string }>('access', {}, 8000)
-    if (request && r.status !== 'Allowed' && r.status !== 'Denied') r = await host.call<{ status: string }>('request_access', {}, 70_000)
+    let r = await callWatch<{ status: string }>('access', {}, 8000)
+    if (request && r.status !== 'Allowed' && r.status !== 'Denied') r = await callWatch<{ status: string }>('request_access', {}, 70_000)
     access = r.status === 'Allowed' ? 'allowed' : r.status === 'Denied' ? 'denied' : 'unknown'
   } catch (e) {
     log('warn', 'notifications : accès impossible à vérifier', (e as Error).message)
@@ -116,7 +109,7 @@ async function checkHealth(): Promise<boolean> {
     health = { toastEnabled: process.env.COMPI_NOTIF_TEST_TOASTS === '0' ? 0 : 1, apps: [] }
   } else {
     try {
-      const r = await host.call<{ toastEnabled?: number; apps?: AppNotificationSetting[] }>('health', {}, 8000)
+      const r = await callWatch<{ toastEnabled?: number; apps?: AppNotificationSetting[] }>('health', {}, 8000)
       health = { toastEnabled: r.toastEnabled, apps: Array.isArray(r.apps) ? r.apps : [] }
     } catch (e) {
       log('warn', 'notifications : réglages de Windows illisibles', (e as Error).message)
@@ -242,7 +235,6 @@ export function syncMessages(): void {
 export function stopMessages(forget = false): void {
   if (timer) clearTimeout(timer)
   timer = null
-  host.stop()
   hostSince = 0
   if (forget) {
     pending.clear()
@@ -270,6 +262,16 @@ export async function refreshAccess(): Promise<MessagesStatus> {
   await checkAccess(false)
   await checkHealth()
   return messagesStatus()
+}
+
+/**
+ * Messages désactivés (Réglages ouverts) : accès accordé, l'état est revérifié au plus
+ * toutes les 5 min, pour ne pas relancer l'hôte de veille à chaque ouverture. Refusé, il
+ * l'est à chaque fois (l'utilisateur est peut-être en train de le corriger).
+ */
+export function statusWhileOff(): Promise<MessagesStatus> {
+  if (access === 'allowed' && Date.now() - healthAt < HEALTH_MS) return Promise.resolve(messagesStatus())
+  return refreshAccess()
 }
 
 /** « Ouvrir » : lance l'application du message (clic de l'utilisateur). */

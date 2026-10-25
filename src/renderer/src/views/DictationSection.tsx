@@ -28,11 +28,7 @@ export function DictationSection({ s, update }: Props) {
   const focus = useCompi((st) => st.settingsFocus)
   const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    void detectVariant().then(setVariant)
-    const off = window.compi.onVoiceModelProgress((st) => st.model === v.model && setStatus(st))
-    return off
-  }, [v.model])
+  useEffect(() => window.compi.onVoiceModelProgress((st) => st.model === v.model && setStatus(st)), [v.model])
 
   useEffect(() => {
     void window.compi.voiceModelStatus(v.model).then(setStatus)
@@ -57,6 +53,12 @@ export function DictationSection({ s, update }: Props) {
   const speechPending = Boolean(speechId) && speech?.model !== speechId
   const installed = status?.installed || useSpeech
   const chosen = installed && status?.variant ? status.variant : variant ?? 'gpu'
+  // La carte graphique n'est interrogée (WebGPU) que si Whisper est à proposer : ce test
+  // réveille le pilote et garde de la mémoire dans le processus graphique.
+  const offerWhisper = Boolean(status) && !installed && !speechPending
+  useEffect(() => {
+    if (offerWhisper && !variant) void detectVariant().then(setVariant)
+  }, [offerWhisper, variant])
   const def = VOICE_MODELS[v.model]
   const approx = def.variants[chosen].approxMb
 

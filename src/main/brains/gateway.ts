@@ -476,8 +476,9 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
  * Version 5 : les réglages (prénom, Google, dossiers…) quittent les consignes pour le message.
  * Version 6 : une partie des outils de Compi passe en groupes chargés à la demande.
  * Version 7 : avec une fenêtre d'au moins 32 000 jetons, tous les outils de Compi passent toujours.
+ * Version 8 : outils d'écriture des fichiers texte (write_text_file, undo_text_edit) et leur consigne.
  */
-const WARM_VERSION = 7
+const WARM_VERSION = 8
 
 /** Début de la dernière requête lue par le modèle local : c'est ce qu'il a en cache. */
 let lastPrefix: (PromptPrefix & { key: string }) | null = null

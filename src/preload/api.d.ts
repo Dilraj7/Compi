@@ -94,6 +94,8 @@ export interface CompiApi {
   deleteConversation(id: string): Promise<void>
   send(req: SendRequest): Promise<SendResult>
   stop(conversationId: string): Promise<void>
+  /** Annule une modification de fichier texte faite par Compi (numéro de la modification) : phrase à afficher. */
+  undoTextEdit(id: string): Promise<{ ok: boolean; message: string }>
   onAgentEvent(cb: (e: AgentEvent) => void): Unsubscribe
   /** Ouvrir une discussion (clic sur la notification d'une routine). */
   onOpenConversation(cb: (conversationId: string) => void): Unsubscribe

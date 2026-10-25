@@ -27,6 +27,7 @@ import { searchDocuments } from './docSearch'
 import { extractDocument, htmlToText, IMAGE_EXTENSIONS, paginate, UnsupportedDocumentError } from './documents'
 import { allowedFolders, insideAny } from './folders'
 import { folderTools, isNetworkPath } from './folderTools'
+import { textTools } from './textTools'
 import { describeImage, transcribePdf, VISION_MAX_BYTES, VISION_MAX_PAGES } from './vision'
 import { redact } from '../privacy/redact'
 import { semanticSearch } from '../semantic'
@@ -103,8 +104,12 @@ export const WINDOWS_ACTIONS = ['open_app', 'focus_window', 'sound_control', 'se
 /** Rangement des dossiers confiés : une carte à chaque fois, jamais « Toujours ». */
 export const FOLDER_ACTIONS = ['create_folders', 'move_items', 'undo_moves'].map((t) => `mcp__${COMPI_SERVER}__${t}`)
 
-/** Tout ce qui demande un OK à chaque fois : actions sur Windows, rangement, événements et brouillons Google, routines. */
-export const CONFIRM_EACH_TIME = [...WINDOWS_ACTIONS, ...FOLDER_ACTIONS, ...GOOGLE_ACTIONS, ...ROUTINE_ACTIONS]
+/** Écriture des fichiers texte des dossiers confiés : une carte à chaque fois (avec les changements), jamais « Toujours ». */
+export const WRITE_TEXT_FILE = `mcp__${COMPI_SERVER}__write_text_file`
+export const TEXT_ACTIONS = [WRITE_TEXT_FILE, `mcp__${COMPI_SERVER}__undo_text_edit`]
+
+/** Tout ce qui demande un OK à chaque fois : actions sur Windows, rangement, fichiers texte, événements et brouillons Google, routines. */
+export const CONFIRM_EACH_TIME = [...WINDOWS_ACTIONS, ...FOLDER_ACTIONS, ...TEXT_ACTIONS, ...GOOGLE_ACTIONS, ...ROUTINE_ACTIONS]
 
 /**
  * Pendant une routine (sans l'utilisateur) : aucune action ni écriture durable,
@@ -120,6 +125,8 @@ export const HEADLESS_BLOCKED = [
   'create_folders',
   'move_items',
   'undo_moves',
+  'write_text_file',
+  'undo_text_edit',
   'routine_create',
   'routine_delete',
   'messages_recent'
@@ -819,7 +826,7 @@ export function createCompiServer(sdk: SdkModule, ctx: CompiToolContext): Return
     name: COMPI_SERVER,
     version: app.getVersion(),
     instructions:
-      'Outils du bureau Windows de l’utilisateur : documents, fichiers du PC, rangement des dossiers confiés, presse-papier, écran, fenêtres, état du PC, son et musique, applications, liens, notifications, mémoire, rappels, météo, et (si son compte Google est connecté) agenda et e-mails.',
+      'Outils du bureau Windows de l’utilisateur : documents, fichiers du PC, rangement des dossiers confiés, écriture des fichiers texte, presse-papier, écran, fenêtres, état du PC, son et musique, applications, liens, notifications, mémoire, rappels, météo, et (si son compte Google est connecté) agenda et e-mails.',
     alwaysLoad: true,
     tools: [
       ...tools,
@@ -830,6 +837,7 @@ export function createCompiServer(sdk: SdkModule, ctx: CompiToolContext): Return
       ...dayTools(tool, ctx, { text, fail, personal }),
       ...liveTools(tool, { text, fail }),
       ...folderTools(tool, ctx, { text, fail, personal }),
+      ...textTools(tool, ctx, { text, fail, personal }),
       // Aussi dans une routine (créer ou supprimer y est refusé) : la liste d'outils reste
       // celle des discussions, que le modèle local garde en cache.
       ...routineTools(tool, { text, fail })

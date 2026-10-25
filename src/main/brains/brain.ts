@@ -40,6 +40,17 @@ export function hostEnv(env: NodeJS.ProcessEnv): Record<string, string | undefin
   return Object.fromEntries(Object.entries(env).filter(([k]) => !INHERITED_AGENT_VARS.test(k)))
 }
 
+/** Longueur maximale d'une réponse du modèle local, en jetons. */
+export const LOCAL_MAX_OUTPUT = 8192
+
+/**
+ * Marge que le moteur garde avant de résumer la conversation : il résume dès que la
+ * conversation dépasse « fenêtre − réponse − 13 000 ». Mesuré le 24/10 (moteur 0.3.296, banc
+ * avec un faux serveur) : 32 768 → résumé dès 11 576 jetons, soit à chaque message avec les
+ * outils de Compi (31 min de résumés en une journée). Sans elle : résumé à « fenêtre − réponse ».
+ */
+export const ENGINE_COMPACT_MARGIN = 13_000
+
 /** Variables d'environnement à imposer au moteur pour ce cerveau. `undefined` retire la variable. */
 export function brainEnv(brain: Brain, ctx: BrainEnvContext): Record<string, string | undefined> {
   if (brain.provider === 'anthropic') {
@@ -84,9 +95,11 @@ export function brainEnv(brain: Brain, ctx: BrainEnvContext): Record<string, str
     // Demander de réfléchir à un modèle qui ne sait pas le faire est refusé par Ollama.
     if (!ctx.thinking) env.CLAUDE_CODE_DISABLE_THINKING = '1'
     env.API_TIMEOUT_MS = '600000'
-    // Le moteur résume la conversation à temps pour rester dans la vraie fenêtre du modèle.
-    if (ctx.contextTokens) env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(ctx.contextTokens)
-    env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = '8192'
+    // Le moteur résume la conversation quand elle approche de la fenêtre annoncée, moins la
+    // réponse et une marge fixe prévue pour Claude (ENGINE_COMPACT_MARGIN). Fenêtre annoncée =
+    // vraie fenêtre + cette marge : il résume quand il ne reste plus que la place d'une réponse.
+    if (ctx.contextTokens) env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(ctx.contextTokens + ENGINE_COMPACT_MARGIN)
+    env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(LOCAL_MAX_OUTPUT)
   }
   return env
 }

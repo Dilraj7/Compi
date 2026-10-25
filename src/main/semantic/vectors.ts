@@ -89,8 +89,11 @@ export interface Scored<T> {
   score: number
 }
 
+/** En dessous, un passage n'a pas assez de rapport avec la question. */
+export const MIN_SCORE = 0.3
+
 /** Les `k` meilleurs, au plus `perGroup` par groupe (par fichier), au-dessus de `min`. */
-export function topK<T>(items: T[], score: (t: T) => number, k: number, group: (t: T) => string, perGroup = 2, min = 0.3): Scored<T>[] {
+export function topK<T>(items: T[], score: (t: T) => number, k: number, group: (t: T) => string, perGroup = 2, min = MIN_SCORE): Scored<T>[] {
   const scored = items.map((item) => ({ item, score: score(item) })).filter((s) => s.score >= min)
   scored.sort((a, b) => b.score - a.score)
   const counts = new Map<string, number>()

@@ -1,8 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { chunkText, dot, embedPrefix, IDLE_SEC, indexPace, MAX_PASSAGES_PER_FILE, toUnit, topK } from '../src/main/semantic/vectors'
+import * as store from '../src/main/semantic/store'
 
 describe('recherche par le sens : rythme de l’indexation', () => {
   it('à fond au repos, doucement pendant qu’on travaille, en pause sur batterie', () => {
@@ -88,6 +89,96 @@ describe('recherche par le sens : vecteurs', () => {
     expect(embedPrefix('nomic-embed-text', 'passage')).toBe('search_document: ')
     expect(embedPrefix('embeddinggemma', 'query')).toBe('task: search result | query: ')
     expect(embedPrefix('bge-m3', 'query')).toBe('')
+  })
+})
+
+// ─── Stockage sur le disque (store.ts) ───────────────────────────────────────
+
+describe('recherche par le sens : stockage hors de la mémoire', () => {
+  const base = mkdtempSync(join(tmpdir(), 'compi-semstore-'))
+  afterAll(() => rmSync(base, { recursive: true, force: true }))
+  const unit = (...v: number[]): Float32Array => toUnit(v, 4)
+  const v1Entries = [
+    { file: 'C:\\docs\\bail.txt', text: 'Article 3 : le loyer est de 800 euros.', vec: unit(0, 1, 0, 0) },
+    { file: 'C:\\docs\\bail.txt', text: 'Article 9 : fin du contrat, préavis de trois mois.', vec: unit(1, 0, 0, 0) },
+    { file: 'C:\\docs\\notes.md', page: 2, text: 'Nourrir le chat – « vacances » été.', vec: unit(0, 0, 1, 0) }
+  ]
+  const writeV1 = (dir: string): void => {
+    mkdirSync(dir, { recursive: true })
+    const all = new Float32Array(v1Entries.length * 4)
+    v1Entries.forEach((e, i) => all.set(e.vec, i * 4))
+    writeFileSync(join(dir, 'vectors.bin'), Buffer.from(all.buffer))
+    writeFileSync(
+      join(dir, 'index.json'),
+      JSON.stringify({
+        version: 1,
+        model: 'm',
+        dims: 4,
+        files: { 'C:\\docs\\bail.txt': { mtime: 1, size: 2 }, 'C:\\docs\\notes.md': { mtime: 3, size: 4 } },
+        entries: v1Entries.map(({ file, page, text }) => ({ file, ...(page ? { page } : {}), text }))
+      })
+    )
+  }
+  const search = async (dir: string, m: store.IndexMeta, q: Float32Array): Promise<Array<{ file: string; page?: number; text: string }>> => {
+    const found = await store.scanVectors(dir, m, q, () => false, 0.5)
+    const texts = await store.readTexts(
+      dir,
+      m,
+      found.map((f) => f.row)
+    )
+    return found.map((f) => ({ file: store.rowPath(m, f.row), page: store.rowPage(m, f.row), text: texts.get(f.row)! }))
+  }
+
+  it('convertit l’ancien index sans rien recalculer, avec les mêmes résultats', async () => {
+    const dir = join(base, 'v1')
+    writeV1(dir)
+    const m = store.readIndex(dir, 'm')!
+    expect(m).not.toBeNull()
+    expect(store.rowCount(m)).toBe(3)
+    expect(m.paths).toEqual(['C:\\docs\\bail.txt', 'C:\\docs\\notes.md'])
+    expect(await search(dir, m, unit(1, 0, 0, 0))).toEqual([{ file: 'C:\\docs\\bail.txt', page: undefined, text: v1Entries[1].text }])
+    expect(await search(dir, m, unit(0, 0, 1, 0))).toEqual([{ file: 'C:\\docs\\notes.md', page: 2, text: v1Entries[2].text }])
+    // Nouveau format sur le disque ; relu tel quel ensuite.
+    expect(existsSync(join(dir, 'vectors.bin'))).toBe(false)
+    expect(JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8')).version).toBe(2)
+    expect(store.readIndex(dir, 'm')?.rows).toEqual(m.rows)
+    // Autre modèle : pas d'index.
+    expect(store.readIndex(dir, 'autre')).toBeNull()
+  })
+
+  it('reprend une conversion interrompue après le changement de nom des vecteurs', () => {
+    const dir = join(base, 'v1-reprise')
+    writeV1(dir)
+    renameSync(join(dir, 'vectors.bin'), join(dir, 'vectors.1.bin'))
+    expect(store.rowCount(store.readIndex(dir, 'm')!)).toBe(3)
+  })
+
+  it('enregistre une nouvelle génération : documents retirés ôtés, les autres intacts, passages frais ajoutés', async () => {
+    const dir = join(base, 'v1')
+    const m1 = store.readIndex(dir, 'm')!
+    const m2 = store.writeIndex(dir, m1, {
+      model: 'm',
+      dims: 4,
+      files: { 'C:\\docs\\notes.md': { mtime: 3, size: 4 }, 'C:\\docs\\neuf.txt': { mtime: 5, size: 6 } },
+      removed: new Set(['C:\\docs\\bail.txt']),
+      fresh: [{ file: 'C:\\docs\\neuf.txt', text: 'Le loyer augmente en janvier.', vec: unit(0, 1, 0, 0) }]
+    })
+    expect(m2.gen).toBe(m1.gen + 1)
+    expect(store.rowCount(m2)).toBe(2)
+    expect(await search(dir, m2, unit(0, 0, 1, 0))).toEqual([{ file: 'C:\\docs\\notes.md', page: 2, text: v1Entries[2].text }])
+    expect(await search(dir, m2, unit(0, 1, 0, 0))).toEqual([{ file: 'C:\\docs\\neuf.txt', page: undefined, text: 'Le loyer augmente en janvier.' }])
+    expect(await search(dir, m2, unit(1, 0, 0, 0))).toEqual([])
+    store.removeOtherGenerations(dir, m2.gen)
+    expect(readdirSync(dir).sort()).toEqual(['index.json', `texts.${m2.gen}.bin`, `vectors.${m2.gen}.bin`])
+    expect(store.readIndex(dir, 'm')?.gen).toBe(m2.gen)
+  })
+
+  it('fichiers incomplets (Compi fermé pendant l’écriture) : l’index n’est pas utilisé', () => {
+    const dir = join(base, 'v1')
+    const m = store.readIndex(dir, 'm')!
+    const file = join(dir, `vectors.${m.gen}.bin`)
+    writeFileSync(file, readFileSync(file).subarray(0, 8))
+    expect(store.readIndex(dir, 'm')).toBeNull()
   })
 })
 

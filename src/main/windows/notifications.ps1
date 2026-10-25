@@ -1,41 +1,29 @@
-# Troisième hôte Windows, en lecture seule : les notifications des autres
-# applications, telles qu'elles sont dans le centre de notifications
-# (UserNotificationListener). Sert aux rappels de messages en attente.
-# Même règles que les autres hôtes : fonctions nommées, paramètres vérifiés.
-# Rien n'est modifié ni fermé dans le centre de notifications.
+# Notifications des autres applications, en lecture seule, telles qu'elles sont
+# dans le centre de notifications (UserNotificationListener). Sert aux rappels de
+# messages en attente. Rien n'est modifié ni fermé dans le centre de notifications.
 
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-$methods = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 }
-$script:AsTaskOp = $methods | Where-Object { $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' } | Select-Object -First 1
-$null = [Windows.UI.Notifications.Management.UserNotificationListener, Windows.UI.Notifications, ContentType = WindowsRuntime]
-$null = [Windows.UI.Notifications.UserNotification, Windows.UI.Notifications, ContentType = WindowsRuntime]
-$null = [Windows.UI.Notifications.KnownNotificationBindings, Windows.UI.Notifications, ContentType = WindowsRuntime]
-
-function Await($op, [Type]$type, [int]$ms = 8000) {
-  $task = $script:AsTaskOp.MakeGenericMethod($type).Invoke($null, @($op))
-  if (-not $task.Wait($ms)) { throw 'Windows met trop de temps à répondre.' }
-  $task.Result
+$script:NotifReady = $false
+function Use-Notifications {
+  if ($script:NotifReady) { return }
+  Use-AsTask
+  $null = [Windows.UI.Notifications.Management.UserNotificationListener, Windows.UI.Notifications, ContentType = WindowsRuntime]
+  $null = [Windows.UI.Notifications.UserNotification, Windows.UI.Notifications, ContentType = WindowsRuntime]
+  $null = [Windows.UI.Notifications.KnownNotificationBindings, Windows.UI.Notifications, ContentType = WindowsRuntime]
+  $script:NotifReady = $true
 }
 
-function Listener { [Windows.UI.Notifications.Management.UserNotificationListener]::Current }
+function Listener { Use-Notifications; [Windows.UI.Notifications.Management.UserNotificationListener]::Current }
 
 function Cut([string]$s, [int]$max) {
   if ($s.Length -gt $max) { $s.Substring(0, $max) } else { $s }
 }
-
-$Fns = @{}
-
-$Fns.ping = { @{ pong = $true } }
 
 # Accès aux notifications : Allowed, Denied ou Unspecified. Ne montre rien.
 $Fns.access = { @{ status = [string](Listener).GetAccessStatus() } }
 
 # Demande l'accès (Windows peut afficher une fenêtre) : seulement après un clic de l'utilisateur.
 $Fns.request_access = {
-  $s = Await ((Listener).RequestAccessAsync()) ([Windows.UI.Notifications.Management.UserNotificationListenerAccessStatus]) 60000
+  $s = AwaitOp ((Listener).RequestAccessAsync()) ([Windows.UI.Notifications.Management.UserNotificationListenerAccessStatus]) 60000
   @{ status = [string]$s }
 }
 
@@ -68,8 +56,9 @@ $Fns.list = {
   $want = @{}
   foreach ($k in @($a.apps)) { if ($k) { $want[[string]$k] = $true } }
   $withText = [bool]$a.text
+  Use-Notifications
   $type = [System.Collections.Generic.IReadOnlyList[Windows.UI.Notifications.UserNotification]]
-  $list = Await ((Listener).GetNotificationsAsync([Windows.UI.Notifications.NotificationKinds]::Toast)) $type
+  $list = AwaitOp ((Listener).GetNotificationsAsync([Windows.UI.Notifications.NotificationKinds]::Toast)) $type
   $out = New-Object System.Collections.ArrayList
   foreach ($n in $list) {
     $aumid = ''
@@ -94,27 +83,4 @@ $Fns.list = {
     [void]$out.Add($item)
   }
   @{ items = @($out) }
-}
-
-# ─── Boucle de commandes ─────────────────────────────────────────────────────
-
-[Console]::Out.WriteLine('{"ready":true}')
-[Console]::Out.Flush()
-
-while ($true) {
-  $line = [Console]::In.ReadLine()
-  if ($null -eq $line) { break }
-  if ($line.Trim().Length -eq 0) { continue }
-  $id = 0
-  try {
-    $req = ConvertFrom-Json $line
-    $id = [int]$req.id
-    $fn = $Fns[[string]$req.fn]
-    if ($null -eq $fn) { throw 'Fonction inconnue.' }
-    $out = @{ id = $id; ok = $true; result = (& $fn $req.args) }
-  } catch {
-    $out = @{ id = $id; ok = $false; error = $_.Exception.Message }
-  }
-  [Console]::Out.WriteLine((ConvertTo-Json $out -Compress -Depth 6))
-  [Console]::Out.Flush()
 }

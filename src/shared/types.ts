@@ -289,6 +289,8 @@ export interface ToolActivity {
   name: string
   label: string
   status: 'running' | 'done' | 'error'
+  /** Fichier texte écrit : numéro de la modification, pour le bouton « Annuler ». */
+  undo?: string
 }
 
 /** Vitesse mesurée d'une réponse (cerveaux local et « Autre », via la passerelle). */

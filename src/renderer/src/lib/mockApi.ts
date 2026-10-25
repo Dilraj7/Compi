@@ -1459,6 +1459,7 @@ export function createMockApi(): CompiApi {
       return { conversationId, userMessage, assistantMessageId }
     },
     stop: async () => undefined,
+    undoTextEdit: async () => ({ ok: true, message: 'Idées.md est revenu à sa version d’avant.' }),
     onAgentEvent: agent.on,
     onOpenConversation: openConvCh.on,
 

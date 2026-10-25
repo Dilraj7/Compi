@@ -1,11 +1,7 @@
-# Hôte Windows de Compi. Lit une commande JSON par ligne sur l'entrée standard
-# ({ id, fn, args }) et répond par une ligne JSON ({ id, ok, result | error }).
-# Seules les fonctions de la table $Fns existent, et chacune revérifie ses
-# paramètres : aucune commande libre ne peut passer par ici.
-
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+# Fonctions de l'hôte Windows de Compi : fenêtres, applications, recherche,
+# volume, thème, presse-papier, lecture de texte. Seules les fonctions de la
+# table $Fns existent, et chacune revérifie ses paramètres : aucune commande
+# libre ne peut passer par ici. Protocole et boucle : prelude.ps1, loop.ps1.
 
 Add-Type -TypeDefinition @'
 using System;
@@ -297,10 +293,6 @@ function Open-File([string]$path) {
 
 # ─── Fonctions disponibles ───────────────────────────────────────────────────
 
-$Fns = @{}
-
-$Fns.ping = { @{ pong = $true } }
-
 $Fns.foreground = { @{ window = (WinOut ([Compi.Win]::Foreground())) } }
 
 $Fns.windows = { @{ windows = @([Compi.Win]::List() | ForEach-Object { WinOut $_ }) } }
@@ -485,27 +477,4 @@ $Fns.ocr_pdf = {
     } finally { $stream.Dispose(); $page.Dispose() }
   }
   @{ pages = @($pages); pageCount = $count; lang = $engine.RecognizerLanguage.LanguageTag }
-}
-
-# ─── Boucle de commandes ─────────────────────────────────────────────────────
-
-[Console]::Out.WriteLine('{"ready":true}')
-[Console]::Out.Flush()
-
-while ($true) {
-  $line = [Console]::In.ReadLine()
-  if ($null -eq $line) { break }
-  if ($line.Trim().Length -eq 0) { continue }
-  $id = 0
-  try {
-    $req = ConvertFrom-Json $line
-    $id = [int]$req.id
-    $fn = $Fns[[string]$req.fn]
-    if ($null -eq $fn) { throw 'Fonction inconnue.' }
-    $out = @{ id = $id; ok = $true; result = (& $fn $req.args) }
-  } catch {
-    $out = @{ id = $id; ok = $false; error = $_.Exception.Message }
-  }
-  [Console]::Out.WriteLine((ConvertTo-Json $out -Compress -Depth 8))
-  [Console]::Out.Flush()
 }

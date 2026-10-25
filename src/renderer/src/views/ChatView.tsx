@@ -80,19 +80,42 @@ function Hero() {
 
 function ToolRow({ tool }: { tool: ToolActivity }) {
   const Icon = tool.name === 'WebSearch' || tool.name === 'WebFetch' ? Globe : FileText
+  // Fichier texte écrit : « Annuler » remet la version d'avant (refusé si le fichier a changé depuis).
+  const [undo, setUndo] = useState<{ busy: boolean; done?: boolean; message?: string }>({ busy: false })
+  const cancel = (): void => {
+    if (!tool.undo || undo.busy) return
+    setUndo({ busy: true })
+    window.compi
+      .undoTextEdit(tool.undo)
+      .then((r) => setUndo({ busy: false, done: r.ok, message: r.message }))
+      .catch(() => setUndo({ busy: false, message: 'Annulation impossible.' }))
+  }
   return (
-    <motion.div initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-2 text-[11.5px] text-fog-500">
-      <span className="grid size-4.5 place-items-center rounded-md bg-white/[0.05]">
-        {tool.status === 'running' ? (
-          <Loader2 size={11} className="animate-spin text-[var(--led)]" />
-        ) : tool.status === 'error' ? (
-          <X size={11} className="text-led-red" />
-        ) : (
-          <Check size={11} className="text-led-green" />
+    <motion.div initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} className="text-[11.5px] text-fog-500">
+      <div className="flex items-center gap-2">
+        <span className="grid size-4.5 place-items-center rounded-md bg-white/[0.05]">
+          {tool.status === 'running' ? (
+            <Loader2 size={11} className="animate-spin text-[var(--led)]" />
+          ) : tool.status === 'error' ? (
+            <X size={11} className="text-led-red" />
+          ) : (
+            <Check size={11} className="text-led-green" />
+          )}
+        </span>
+        <Icon size={12} className="opacity-60" />
+        <span className="truncate">{tool.label}</span>
+        {tool.undo && tool.status === 'done' && !undo.done && (
+          <button
+            type="button"
+            disabled={undo.busy}
+            onClick={cancel}
+            className="ml-auto shrink-0 rounded-md px-1.5 py-0.5 text-fog-300 ring-1 ring-inset ring-white/[0.08] hover:bg-white/[0.06] hover:text-fog-100 disabled:opacity-50"
+          >
+            Annuler
+          </button>
         )}
-      </span>
-      <Icon size={12} className="opacity-60" />
-      <span className="truncate">{tool.label}</span>
+      </div>
+      {undo.message && <div className={`mt-0.5 pl-6.5 ${undo.done ? 'text-led-green' : 'text-led-amber'}`}>{undo.message}</div>}
     </motion.div>
   )
 }
@@ -239,13 +262,15 @@ function NoticeLine({ m, last }: { m: ChatMessage; last: boolean }) {
       <div className="flex-1">
         {m.notice === 'not-saved'
           ? 'Rien n’a été enregistré dans la mémoire de Compi : il l’aura oublié à la prochaine discussion.'
-          : m.notice === 'no-action'
-            ? 'Aucune action n’a été faite pendant cette réponse : rien n’a changé.'
-            : 'Compi a annoncé une action, puis s’est arrêté sans la faire.'}
+          : m.notice === 'not-written'
+            ? 'Rien n’a été écrit dans le fichier : le texte est seulement affiché ici.'
+            : m.notice === 'no-action'
+              ? 'Aucune action n’a été faite pendant cette réponse : rien n’a changé.'
+              : 'Compi a annoncé une action, puis s’est arrêté sans la faire.'}
         {last && (
           <div className="mt-2">
             <Button size="sm" disabled={busy} onClick={() => void useCompi.getState().send(followUpFor(m.notice!))}>
-              {m.notice === 'not-saved' ? 'L’enregistrer vraiment' : 'Le faire vraiment'}
+              {m.notice === 'not-saved' ? 'L’enregistrer vraiment' : m.notice === 'not-written' ? 'L’écrire vraiment' : 'Le faire vraiment'}
             </Button>
           </div>
         )}

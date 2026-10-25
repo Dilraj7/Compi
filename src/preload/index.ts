@@ -27,6 +27,7 @@ const api: CompiApi = {
   deleteConversation: (id) => ipcRenderer.invoke(IPC.deleteConversation, id),
   send: (req) => ipcRenderer.invoke(IPC.send, req),
   stop: (id) => ipcRenderer.invoke(IPC.stop, id),
+  undoTextEdit: (id) => ipcRenderer.invoke(IPC.undoTextEdit, id),
   onAgentEvent: (cb) => listen(IPC.agentEvent, cb),
   onOpenConversation: (cb) => listen(IPC.openConversation, cb),
 

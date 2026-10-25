@@ -4,9 +4,23 @@ copyright: Compi — MIT
 directories:
   buildResources: resources
   output: dist
+# Seulement ce qui sert à l'app : ni le site GitHub Pages (out/site), ni les cartes de
+# code (.map), ni les sources et déclarations TypeScript des paquets, ni leurs
+# versions pour navigateur (exceljs/dist, mammoth.browser, browser-sdk).
 files:
   - out/**
+  - '!out/site/**'
+  - '!out/site-*'
   - package.json
+  - '!**/*.map'
+  - '!node_modules/**/*.{ts,mts,cts}'
+  - '!node_modules/exceljs/dist/**'
+  - '!node_modules/mammoth/mammoth.browser*.js'
+  - '!node_modules/@anthropic-ai/claude-agent-sdk/browser-sdk.js'
+# Langues de Chromium (menus contextuels, boîtes de dialogue) : l'app est en français.
+electronLanguages:
+  - fr
+  - en-US
 extraResources:
   - from: resources
     to: resources

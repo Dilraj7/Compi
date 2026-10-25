@@ -1,22 +1,16 @@
-// Musique en cours et voix de Windows, par un deuxième hôte PowerShell
-// (media.ps1). Séparé de l'hôte principal : une lecture de l'écran ou une
-// longue synthèse vocale ne fige jamais l'affichage de la musique.
+// Musique en cours (hôte de veille, music.ps1) et voix de Windows (hôte Windows,
+// voice.ps1). Séparées : une longue synthèse vocale ne fige jamais l'affichage
+// de la musique.
 //
 // La musique est relevée régulièrement (toutes les 2,5 s quand ça joue, plus
 // rarement sinon), et l'îlot n'est prévenu que si quelque chose de visible
 // change. Rien n'est relevé quand le réglage est coupé ou le PC verrouillé.
 
 import { powerMonitor } from 'electron'
-import script from './media.ps1?raw'
-import { PowerShellHost } from './host'
+import { callHost, callWatch } from './host'
 import { appLabel, mediaChanged, trackKey } from '../../shared/media'
 import type { MediaAction, MediaInfo, VoiceInfo } from '../../shared/types'
 import { log } from '../log'
-
-type MediaFn = 'ping' | 'media_now' | 'media_art' | 'media_control' | 'voices' | 'speak'
-
-/** Arrêté après 10 min sans appel (relancé au besoin). */
-const host = new PowerShellHost<MediaFn>('hôte musique', script, 10 * 60_000)
 
 interface RawNow {
   status: MediaInfo['status'] | 'none'
@@ -74,7 +68,7 @@ async function tick(): Promise<void> {
   if (running || !enabled || locked) return
   running = true
   try {
-    const raw = await host.call<RawNow>('media_now', {}, 6000)
+    const raw = await callWatch<RawNow>('media_now', {}, 6000)
     failures = 0
     const next = toMediaInfo(raw, Date.now())
     if (next) {
@@ -88,7 +82,7 @@ async function tick(): Promise<void> {
       if (raw.hasArt && !art && artTries < 3) {
         artTries++
         try {
-          const a = await host.call<{ art: string | null; type?: string }>('media_art', {}, 6000)
+          const a = await callWatch<{ art: string | null; type?: string }>('media_art', {}, 6000)
           if (a.art) art = `data:${a.type ?? 'image/png'};base64,${a.art}`
         } catch {
           // Sans pochette, l'îlot affiche une note de musique.
@@ -155,7 +149,7 @@ export const currentMedia = (): MediaInfo | null => current
 /** Lecture/pause, suivant, précédent : clic de l'utilisateur dans l'îlot. */
 export async function controlMedia(action: MediaAction): Promise<boolean> {
   if (action !== 'play_pause' && action !== 'next' && action !== 'previous') return false
-  const r = await host.call<{ done: boolean }>('media_control', { action }, 5000)
+  const r = await callWatch<{ done: boolean }>('media_control', { action }, 5000)
   // L'application met un instant à changer d'état.
   setTimeout(() => void tick(), action === 'play_pause' ? 250 : 700)
   return r.done
@@ -163,7 +157,7 @@ export async function controlMedia(action: MediaAction): Promise<boolean> {
 
 /** Ce qui joue, sans attendre le prochain relevé (outil « now_playing »). */
 export async function nowPlaying(): Promise<MediaInfo | null> {
-  return toMediaInfo(await host.call<RawNow>('media_now', {}, 6000), Date.now())
+  return toMediaInfo(await callWatch<RawNow>('media_now', {}, 6000), Date.now())
 }
 
 // ─── Voix ────────────────────────────────────────────────────────────────────
@@ -173,7 +167,7 @@ let voiceCache: VoiceInfo[] | null = null
 /** Voix installées, françaises d'abord. */
 export async function listVoices(): Promise<VoiceInfo[]> {
   if (voiceCache) return voiceCache
-  const r = await host.call<{ voices: VoiceInfo[] }>('voices', {}, 8000)
+  const r = await callHost<{ voices: VoiceInfo[] }>('voices', {}, 8000)
   const list = (r.voices ?? []).filter((v) => v && typeof v.id === 'string')
   voiceCache = list.sort((a, b) => Number(b.lang.startsWith('fr')) - Number(a.lang.startsWith('fr')) || a.name.localeCompare(b.name))
   return voiceCache
@@ -183,6 +177,6 @@ export async function listVoices(): Promise<VoiceInfo[]> {
 export async function synthesize(text: string, voice: string, rate: number): Promise<Buffer> {
   const t = text.trim().slice(0, 1000)
   if (!t) return Buffer.alloc(0)
-  const r = await host.call<{ audio: string }>('speak', { text: t, voice, rate }, 20_000)
+  const r = await callHost<{ audio: string }>('speak', { text: t, voice, rate }, 20_000)
   return Buffer.from(r.audio ?? '', 'base64')
 }

@@ -43,6 +43,15 @@ describe('connectorKeywords', () => {
     expect(connectorKeywords('Graphe de mémoire', 'memory')).toEqual(expect.arrayContaining(['graphe', 'memoire']))
     expect(connectorKeywords('Notion (clé)')).toEqual(['notion'])
   })
+
+  it('un nom au pluriel se reconnaît aussi au singulier, jamais l’inverse', () => {
+    expect(connectorKeywords('Fichiers')).toEqual(['fichiers', 'fichier'])
+    expect(connectorKeywords('Mes tableaux')).toEqual(expect.arrayContaining(['tableaux', 'tableau']))
+    expect(connectorKeywords('Notion')).not.toContain('notions')
+    expect(connectorKeywords('News')).toEqual(['news'])
+    const files = [{ key: 'fichiers-482c', name: 'Fichiers', keywords: connectorKeywords('Fichiers') }]
+    expect(wantedServers(ask('Analyse le fichier Essai Compi.md'), files)).toEqual(['fichiers-482c'])
+  })
 })
 
 describe('toolServerKey', () => {
@@ -69,6 +78,18 @@ describe('wantedServers', () => {
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'a', content: 'page Notion' }] }
     ]
     expect(wantedServers(messages, servers)).toEqual([])
+  })
+
+  it('ignore les vérifications de Compi et le résumé du moteur', () => {
+    const memory = [{ key: 'graphe-8eb3', name: 'Graphe de mémoire', keywords: connectorKeywords('Graphe de mémoire', 'memory') }, ...servers]
+    const verification = ask('<verification>Vérification automatique de Compi : rien n’a été enregistré dans ta mémoire.</verification>')
+    expect(wantedServers(verification, memory)).toEqual([])
+    const summary = ask(
+      'This session is being continued from a previous conversation that ran out of context.\n\nSummary: recherche sur le web, page Notion, CRM.'
+    )
+    expect(wantedServers(summary, memory)).toEqual([])
+    // Le reste du message compte toujours.
+    expect(wantedServers(ask('<verification>…</verification>\nCherche dans Notion'), memory)).toEqual(['notion-741c'])
   })
 
   it('garde un connecteur déjà utilisé dans la discussion', () => {

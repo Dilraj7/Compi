@@ -6,9 +6,10 @@
 /**
  * `no-action` : action annoncée comme faite ; `stopped` : action annoncée, puis plus
  * rien ; `not-saved` : « c'est noté, je m'en souviendrai », ou une demande de retenir,
- * sans rien enregistré dans la mémoire (memory_save).
+ * sans rien enregistré dans la mémoire (memory_save) ; `not-written` : l'utilisateur a
+ * demandé d'écrire dans un fichier, et le texte est seulement affiché.
  */
-export type MessageNotice = 'no-action' | 'stopped' | 'not-saved'
+export type MessageNotice = 'no-action' | 'stopped' | 'not-saved' | 'not-written'
 
 /** Outils qui ne font que lire : ils ne rendent pas vraie une phrase « j'ai déplacé… ». */
 const READ_ONLY = new Set([
@@ -55,7 +56,10 @@ const DONE = [
   /\b(dossiers?|fichiers?|elements?) (ont ete|a ete|sont) (deplace|cree|range|archive|renomme|classe)e?s?\b/,
   // En titre de liste : « Dossiers déplacés vers CompiDocs : »
   /^[\W\d]*(dossiers?|fichiers?|elements?) (deplace|cree|range|archive|renomme|classe)e?s?\b/m,
-  /\b(c'est|voila,?) (ouvert|cree|range|deplace|lance)e?s?\b/
+  /\b(c'est|voila,?) (ouvert|cree|range|deplace|lance)e?s?\b/,
+  // Fichiers : « j'ai mis à jour ton fichier », « la note a été complétée ».
+  /\bj'ai (bien |deja |maintenant )?(mis a jour|modifie|rempli|complete|ecrit dans|ajoute dans|ajoute au|enregistre dans|sauvegarde dans) (le |la |ton |ta |votre |ce |cette )?(fichier|note|document)\b/,
+  /\b(fichier|note|document) (a ete|est) (bien )?(mis a jour|modifie|rempli|complete|enregistre|sauvegarde)e?s?\b/
 ]
 const PROMISED = [
   /\bje lance\b/,
@@ -87,6 +91,23 @@ const ASKED_TO_REMEMBER = [
   /\ba retenir\b/
 ]
 
+/** Verbes d'écriture, à l'impératif (« remplis ») ou à l'infinitif (« peux-tu remplir »), pas après « ne ». */
+const WRITE_VERB =
+  "(?<!\\bne )(?<!\\bn')\\b(remplis|remplir|modifie|modifier|ecris|ecrire|complete|completer|corrige|corriger|ajoute|ajouter|enregistre|enregistrer|sauvegarde|sauvegarder|remplace|remplacer|insere|inserer|mets|mettre)"
+/**
+ * L'utilisateur demande d'écrire dans un fichier : « OK remplis-le », « modifie le fichier »,
+ * « ajoute ça dans Essai.md ». Pas « écris le mail à Paul » (« le » y est un article, et aucun
+ * fichier n'est nommé) : la réponse attendue est alors un texte.
+ */
+const ASKED_TO_WRITE = [
+  // « remplis-le », « écris-la dans… »
+  new RegExp(`${WRITE_VERB}-(le|la|les)\\b`),
+  // « remplis le », « modifie la maintenant » : pronom en fin de phrase ou avant un complément.
+  new RegExp(`${WRITE_VERB} (le|la|les)\\s*($|[.!?,;]|\\b(dans|stp|svp|s'il|maintenant|directement|alors|tout de suite|a jour|pour moi)\\b)`, 'm'),
+  // Un fichier nommé dans la demande.
+  new RegExp(`${WRITE_VERB}\\b[^.!?\\n]*(\\bfichier\\b|\\.(md|txt|markdown)\\b)`)
+]
+
 /** Ce que l'outil a fait d'utile : une action réussie (pas une simple lecture). */
 const acted = (tools: Array<{ name: string; status: string }>): boolean =>
   tools.some((t) => t.status === 'done' && !READ_ONLY.has(t.name.replace(/^mcp__compi__/, '')))
@@ -106,8 +127,8 @@ export function unverifiedClaim(
   // Une vraie action (rappel, agenda, souvenir…) : « c'est noté » parle d'elle.
   if (acted(tools)) return null
   const t = fold(text.replace(/```[\s\S]*?```/g, ' '))
-  if (o.memory !== false && (REMEMBERED.some((r) => r.test(t)) || ASKED_TO_REMEMBER.some((r) => r.test(fold(o.asked ?? ''))))) return 'not-saved'
-  if (DONE.some((r) => r.test(t))) return 'no-action'
+  // Seulement ce que l'utilisateur a écrit : pas les blocs <contexte> et <reglages> de Compi.
+  const asked = fold((o.asked ?? '').replace(/<(contexte|reglages|verification)>[\s\S]*?<\/\1>/g, ' '))
   const last =
     t
       .trim()
@@ -115,6 +136,13 @@ export function unverifiedClaim(
       .filter((l) => l.trim())
       .at(-1)
       ?.trim() ?? ''
+  if (o.memory !== false && ASKED_TO_REMEMBER.some((r) => r.test(asked))) return 'not-saved'
+  // Avant « c'est noté » : « C'est noté. Voici le contenu mis à jour… » n'écrit rien dans le
+  // fichier, et une relance sur la mémoire avait fait enregistrer un souvenir à la place (24/10).
+  // Une question (« Je remplace tout ? ») n'est pas un oubli.
+  if (ASKED_TO_WRITE.some((r) => r.test(asked)) && !last.endsWith('?')) return 'not-written'
+  if (o.memory !== false && REMEMBERED.some((r) => r.test(t))) return 'not-saved'
+  if (DONE.some((r) => r.test(t))) return 'no-action'
   if (PROMISED.some((r) => r.test(t)) && !last.endsWith('?')) return 'stopped'
   return null
 }
@@ -128,6 +156,8 @@ export function autoFollowUp(notice: MessageNotice): string {
   const end = 'Ne répète pas ce que tu as déjà écrit : continue directement.'
   if (notice === 'not-saved')
     return `<verification>Vérification automatique de Compi : rien n’a été enregistré dans ta mémoire pendant cette réponse, alors que l’utilisateur t’a demandé de retenir une information ou que tu as dit la retenir. Sans memory_save, tu l’oublieras dès la prochaine discussion. Appelle maintenant memory_save avec le fait à retenir, formulé de façon autonome, puis confirme en une phrase. Si rien ne mérite d’être retenu, dis-le simplement. ${end}</verification>`
+  if (notice === 'not-written')
+    return `<verification>Vérification automatique de Compi : l’utilisateur t’a demandé d’écrire dans un fichier, mais rien n’a été écrit pendant cette réponse : afficher le texte ne modifie pas le fichier. Écris-le maintenant avec l’outil adapté (mcp__compi__write_text_file pour un fichier .md ou .txt), avec le contenu complet que vous avez convenu, ou dis en une phrase pourquoi tu ne peux pas. ${end}</verification>`
   return notice === 'stopped'
     ? `<verification>Vérification automatique de Compi : ta réponse annonce une action mais s’arrête avant de la faire. Fais-la maintenant avec l’outil adapté, ou dis en une phrase pourquoi tu ne peux pas. ${end}</verification>`
     : `<verification>Vérification automatique de Compi : ta réponse dit que c’est fait, mais aucun outil n’a agi dans cette réponse. Si l’action a déjà été faite plus tôt dans la discussion, dis-le simplement, sans la refaire. Sinon, fais-la maintenant avec l’outil adapté, ou dis en une phrase que tu ne peux pas. ${end}</verification>`
@@ -137,6 +167,8 @@ export function autoFollowUp(notice: MessageNotice): string {
 export function followUpFor(notice: MessageNotice): string {
   if (notice === 'not-saved')
     return 'Tu as dit que tu t’en souviendrais, mais rien n’a été enregistré dans ta mémoire. Enregistre-le maintenant avec memory_save.'
+  if (notice === 'not-written')
+    return 'Tu as affiché le texte, mais rien n’a été écrit dans le fichier. Écris-le maintenant avec tes outils, ou dis-moi clairement que tu ne peux pas.'
   return notice === 'stopped'
     ? 'Tu as annoncé une action sans la faire. Fais-la maintenant avec tes outils, ou dis-moi clairement que tu ne peux pas.'
     : 'Tu as dit que c’était fait, mais aucun outil n’a été utilisé : rien n’a changé. Fais-le maintenant avec tes outils, ou dis-moi clairement que tu ne peux pas.'

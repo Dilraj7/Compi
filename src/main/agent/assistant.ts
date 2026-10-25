@@ -46,9 +46,11 @@ import { enabledSkillIds, pluginDir } from '../skills/store'
 import { describeAgentError } from './errors'
 import { allowedFolders, insideAny } from './folders'
 import { activityLabel, approvalTitle, auditTarget } from './labels'
-import { COMPI_SERVER, CONFIRM_EACH_TIME, createCompiServer, HEADLESS_BLOCKED, SAFE_COMPI_TOOLS, type CompiToolContext } from './tools'
+import { COMPI_SERVER, CONFIRM_EACH_TIME, createCompiServer, HEADLESS_BLOCKED, SAFE_COMPI_TOOLS, WRITE_TEXT_FILE, type CompiToolContext } from './tools'
 import { closeAllEngines, closeEngine, LiveEngine, registerEngine, reusableEngine } from './liveEngine'
 import { desktopDir, launchesProgram } from './folderTools'
+import { describeTextEdit, planTextEdit } from './textEdits'
+import { editIdIn } from './textTools'
 import { autoFollowUp, unverifiedClaim, type MessageNotice } from '../../shared/claims'
 
 type SdkModule = typeof import('@anthropic-ai/claude-agent-sdk')
@@ -208,6 +210,7 @@ ${webAbilities(brain)}
 - Agenda et e-mails : ce qui est connecté est indiqué dans les réglages de l'utilisateur.
 - Windows : état du PC (windows_status), fenêtres ouvertes (list_windows), fichiers de tout le PC (search_files), texte de l'écran (read_screen_text). Avec l'accord de l'utilisateur : ouvrir une application, afficher une fenêtre, régler le son ou la musique, changer de thème, ouvrir une page des Paramètres. Tu ne peux ni éteindre, ni verrouiller, ni mettre en veille, ni supprimer des fichiers.
 - Ranger les dossiers confiés : folder_inventory montre ce qu'ils contiennent vraiment (avec un plan suggéré) ; avec l'accord de l'utilisateur, move_items déplace (en créant les dossiers manquants) et undo_moves annule ; open_folder ouvre un dossier dans l'Explorateur. Rien n'est jamais supprimé.
+- Écrire dans un fichier texte (.md, .txt) d'un dossier confié : write_text_file, avec une carte qui montre les changements à l'utilisateur ; undo_text_edit annule. Pour remplir, modifier ou compléter un fichier, appelle write_text_file avec le contenu final complet : afficher le texte dans ta réponse ne modifie pas le fichier.
 - Utiliser les connecteurs que l'utilisateur a branchés (autres serveurs MCP).
 - Lire les fichiers que l'utilisateur dépose sur l'îlot (leurs chemins sont indiqués dans le message).
 
@@ -433,6 +436,22 @@ const makeCanUseTool =
         canAlwaysAllow: false
       })
       return outcome === 'deny' ? { behavior: 'deny', message: "L'utilisateur a refusé de lancer ce programme." } : allow(input)
+    }
+
+    // Écriture d'un fichier texte : la carte montre les changements. Un fichier refusé (hors des
+    // dossiers confiés, pas du texte) ne montre pas de carte : le modèle reçoit la raison.
+    if (toolName === WRITE_TEXT_FILE) {
+      const plan = await planTextEdit(String(input.path ?? ''), String(input.content ?? ''), input.mode === 'append' ? 'append' : 'replace', allowedFolders())
+      if ('error' in plan) return { behavior: 'deny', message: plan.error }
+      if (plan.existed && plan.before === plan.after) return allow(input)
+      const outcome = await ask({
+        title: `Compi veut ${plan.existed ? 'modifier' : 'créer'} « ${basename(plan.path)} »`,
+        detail: describeTextEdit(plan),
+        canAlwaysAllow: false
+      })
+      return outcome === 'deny'
+        ? { behavior: 'deny', message: "L'utilisateur a refusé cette écriture. Demande-lui ce qu'il veut changer, sans insister." }
+        : allow(input)
     }
 
     // Actions sur Windows et sur le compte Google : une carte à chaque fois, jamais « Toujours ».
@@ -788,7 +807,11 @@ async function runQuery(
         for (const block of content) {
           if (block.type !== 'tool_result') continue
           const t = tools.get(block.tool_use_id)
-          if (t) setTool({ ...t, status: block.is_error ? 'error' : 'done' })
+          if (!t) continue
+          // Fichier écrit : le numéro de la modification sert au bouton « Annuler » de la discussion.
+          const result = typeof block.content === 'string' ? block.content : (block.content ?? []).map((c) => (c.type === 'text' ? c.text : '')).join(' ')
+          const undo = t.name === WRITE_TEXT_FILE && !block.is_error ? editIdIn(result) : undefined
+          setTool({ ...t, status: block.is_error ? 'error' : 'done', ...(undo ? { undo } : {}) })
         }
         break
       }
