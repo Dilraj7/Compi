@@ -94,6 +94,8 @@ const api: CompiApi = {
   perfWatch: (id, on, everyMs) => ipcRenderer.invoke(IPC.perfWatch, id, on, everyMs),
   onPerf: (cb) => listen(IPC.perfChanged, cb),
   perfUnload: (which) => ipcRenderer.invoke(IPC.perfUnload, which),
+  perfOllamaCache: (mb) => ipcRenderer.invoke(IPC.perfOllamaCache, mb),
+  modelHealth: () => ipcRenderer.invoke(IPC.modelHealth),
   soundAllowed: (kind, pill) => ipcRenderer.invoke(IPC.soundAllowed, kind, pill),
 
   googleImportClient: () => ipcRenderer.invoke(IPC.googleImportClient),

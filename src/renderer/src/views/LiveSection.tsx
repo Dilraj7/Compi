@@ -92,7 +92,17 @@ export function IslandSection({ s, update }: Props) {
           label="Moniteur du PC dans l’îlot"
           hint="Mini-jauges à côté de moi (processeur, mémoire, carte graphique, mémoire vidéo) ; les chiffres au survol."
         >
-          <Toggle checked={s.monitor.island} onChange={(island) => update({ monitor: { island } })} label="Moniteur du PC dans l’îlot" />
+          <Toggle checked={s.monitor.island} onChange={(island) => update({ monitor: { ...s.monitor, island } })} label="Moniteur du PC dans l’îlot" />
+        </Row>
+        <Row
+          label="Prévenir quand la mémoire est pleine"
+          hint="Avec un modèle local chargé, je te préviens quand la mémoire du PC est presque pleine, et Ce PC dit quoi faire (au plus toutes les 2 h)."
+        >
+          <Toggle
+            checked={s.monitor.memoryAlert}
+            onChange={(memoryAlert) => update({ monitor: { ...s.monitor, memoryAlert } })}
+            label="Prévenir quand la mémoire est pleine"
+          />
         </Row>
       </div>
       <div data-settings-focus="sounds" className="scroll-mt-2">

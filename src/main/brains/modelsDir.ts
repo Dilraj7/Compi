@@ -14,7 +14,7 @@ import { ollamaVersion, startOllama } from './ollama'
 
 const GB = 1024 ** 3
 const CACHE_MS = 20_000
-const ollamaData = (): string => join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Ollama')
+export const ollamaData = (): string => join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Ollama')
 
 const run = (file: string, args: string[], timeout = 5000): Promise<string> =>
   new Promise((resolve) => execFile(file, args, { windowsHide: true, timeout }, (err, stdout) => resolve(err ? '' : String(stdout))))

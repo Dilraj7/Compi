@@ -8,6 +8,7 @@ import {
   Brain,
   CheckCircle2,
   FileText,
+  Gauge,
   MessageCircle,
   MessageCircleQuestion,
   MessageSquareText,
@@ -44,6 +45,7 @@ export const PILL_ICONS: Record<PillId, typeof MessageCircle> = {
   routine: Repeat,
   message: MessageSquareText,
   file: FileText,
+  pc: Gauge,
   error: TriangleAlert
 }
 
@@ -56,6 +58,8 @@ export function openFromNotice(notice: IslandNotice | null): void {
   } else if (notice?.view) {
     // Panneau ouvert : le bandeau a servi, il s'efface.
     if (s.mode === 'expanded') s.dismissNotice()
+    // Alerte mémoire : directement sur Ce PC, qui dit quoi faire.
+    if (notice.pill === 'pc') s.focusActivity('perf')
     s.open(notice.view)
   } else s.open('chat', { focus: true })
 }

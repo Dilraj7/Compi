@@ -42,6 +42,7 @@ import type {
 } from '@shared/types'
 import { KEEP_ALIVE_LABEL, gbText } from '@shared/perf'
 import { webSearchReady } from '@shared/webSearch'
+import { healthKey, unreliable, type HealthBook } from '@shared/modelHealth'
 import type { OllamaFolder } from '@shared/ollamaFolder'
 import { useCompi } from '../store'
 import { Badge, Button, Segmented, TextInput, Toggle, cx } from '../components/ui'
@@ -123,6 +124,20 @@ function ProgressBar({ value }: { value?: number }) {
   )
 }
 
+const HEALTH_EVENT = 'compi:model-health'
+
+/** Carnet de fiabilité des modèles locaux (essais d'outil, actions écrites en texte), relu après chaque essai. */
+function useModelHealth(): HealthBook {
+  const [book, setBook] = useState<HealthBook>({})
+  useEffect(() => {
+    const load = (): void => void window.compi.modelHealth().then(setBook)
+    load()
+    window.addEventListener(HEALTH_EVENT, load)
+    return () => window.removeEventListener(HEALTH_EVENT, load)
+  }, [])
+  return book
+}
+
 function TestButton({ brain, disabled }: { brain: Brain; disabled?: boolean }) {
   const [state, setState] = useState<'idle' | 'running'>('idle')
   const [result, setResult] = useState<BrainTestResult | null>(null)
@@ -139,6 +154,8 @@ function TestButton({ brain, disabled }: { brain: Brain; disabled?: boolean }) {
           void window.compi.testBrain(brain).then((r) => {
             setResult(r)
             setState('idle')
+            // Le carnet de fiabilité a changé : la liste des modèles se met à jour.
+            window.dispatchEvent(new Event(HEALTH_EVENT))
           })
         }}
       >
@@ -535,6 +552,7 @@ function LocalStyle({ s, update, info }: { s: PublicSettings; update: Update; in
 function LocalPanel({ s, update, local, onPick }: { s: PublicSettings; update: Update; local: LocalState; onPick: (model: string) => void }) {
   const { status, hw, pull } = local
   const [expert, setExpert] = useState('')
+  const health = useModelHealth()
   const selected = s.local.model
   const ollama = status?.engine === 'ollama' && status.running && !status.outdated
 
@@ -592,6 +610,11 @@ function LocalPanel({ s, update, local, onPick }: { s: PublicSettings; update: U
                       {m.sizeBytes ? gb(m.sizeBytes / GB) : ''}
                     </span>
                   </span>
+                  {unreliable(health[healthKey(m.name)], Date.now()) && (
+                    <span title="Il a écrit ses actions au lieu de les faire, ou raté l’essai d’outil : préfère un modèle qui réussit « Tester ».">
+                      <Badge color="#FBBF24">actions ratées</Badge>
+                    </span>
+                  )}
                   <ModelBadges m={m} />
                 </button>
               )

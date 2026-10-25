@@ -151,7 +151,7 @@ function useItems(conversations: ConversationMeta[]): Item[] {
           label: settings.monitor.island ? 'Masquer le moniteur de l’îlot' : 'Afficher le moniteur dans l’îlot',
           icon: MonitorCog,
           keywords: 'jauges processeur memoire',
-          run: () => void window.compi.updateSettings({ monitor: { island: !settings.monitor.island } }).then(s().setSettings)
+          run: () => void window.compi.updateSettings({ monitor: { ...settings.monitor, island: !settings.monitor.island } }).then(s().setSettings)
         }
       )
     }

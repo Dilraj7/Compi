@@ -1,6 +1,7 @@
 // Activité du PC et du modèle local : instantanés et conseils. Fonctions pures,
 // testées dans tests/perf.test.ts. Tout est mesuré sur le PC, rien ne part en ligne.
 
+import { cacheChoice, SUGGESTED_CACHE_MB, type OllamaCache } from './ollamaCache'
 import type { KeepAlive } from './types'
 
 const GB = 1024 ** 3
@@ -83,6 +84,25 @@ export function friendlyName(processName: string): string {
 
 export const isModelProcess = (processName: string): boolean => friendlyName(processName) === 'Modèle local'
 
+/**
+ * Mémoire par application : les processus d'une même application sont réunis (ollama,
+ * llama-server… font « Modèle local », compté comme les autres). Les 3 plus gourmandes,
+ * et la mémoire du modèle local à part (cache des conversations compris).
+ */
+export function groupRamTop(list: Array<{ name: string; bytes: number }>): { top: Array<{ name: string; gb: number }>; modelGb: number } {
+  const byName = new Map<string, number>()
+  for (const t of list) {
+    if (!t.name || !(t.bytes > 0)) continue
+    const name = friendlyName(t.name)
+    byName.set(name, (byName.get(name) ?? 0) + t.bytes)
+  }
+  const top = [...byName.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([name, bytes]) => ({ name, gb: bytes / GB }))
+  return { top, modelGb: (byName.get('Modèle local') ?? 0) / GB }
+}
+
 export interface VramUse {
   label: string
   gb: number
@@ -128,6 +148,16 @@ export interface LocalModelState {
 /** « gemma4:12b-compi » et « gemma4:12b » désignent le même modèle. */
 export const sameModel = (a: string, b: string): boolean => a.replace(/-compi$/, '') === b.replace(/-compi$/, '')
 
+/** Le modèle de discussion fait mal ses actions (appels écrits en texte, essai d'outil raté). */
+export interface ToolHealth {
+  model: string
+  repaired: number
+  failed: number
+  testFailed: boolean
+  /** Modèles installés qui ont réussi le vrai essai d'outil : les seuls conseillés. */
+  alternatives: string[]
+}
+
 export interface PerfRun {
   at: number
   model: string
@@ -142,7 +172,8 @@ export interface PerfSnapshot {
   at: number
   /** Processeur, en %. */
   cpu: number
-  ram: { usedGb: number; totalGb: number; top: Array<{ name: string; gb: number }> }
+  /** `modelGb` : mémoire du PC prise par le modèle local, cache des conversations compris. */
+  ram: { usedGb: number; totalGb: number; top: Array<{ name: string; gb: number }>; modelGb?: number }
   gpu?: {
     name: string
     util: number
@@ -152,7 +183,7 @@ export interface PerfSnapshot {
     /** Application qui occupe le plus la carte graphique, hors modèle local. */
     busyApp?: { name: string; util: number }
   }
-  local?: { engine: 'ollama' | 'lmstudio'; models: LocalModelState[]; chatModel: string; keepAlive: KeepAlive }
+  local?: { engine: 'ollama' | 'lmstudio'; models: LocalModelState[]; chatModel: string; keepAlive: KeepAlive; cache?: OllamaCache; health?: ToolHealth }
   /** Dernières réponses du modèle local (les plus récentes en dernier). */
   runs: PerfRun[]
   /** Une réponse locale est en cours. */
@@ -167,13 +198,15 @@ export function localPhase(s: PerfSnapshot | null | undefined): 'loading' | 'rea
 
 // ─── Conseils ────────────────────────────────────────────────────────────────
 
-export type AdviceAction = 'smaller-model' | 'unload-embed' | 'keep-longer' | 'new-chat'
+export type AdviceAction = 'smaller-model' | 'unload-embed' | 'keep-longer' | 'new-chat' | 'limit-cache' | 'restart-ollama' | 'use-model' | 'test-models'
 
 export interface PerfAdvice {
   id: string
   level: 'warn' | 'info'
   text: string
   action?: AdviceAction
+  /** « use-model » : le modèle conseillé. */
+  model?: string
 }
 
 export const gbText = (gb: number): string => `${gb.toLocaleString('fr-FR', { maximumFractionDigits: gb < 10 ? 1 : 0 })} Go`
@@ -185,6 +218,24 @@ export const KEEP_ALIVE_LABEL: Record<KeepAlive, string> = { '30m': '30 min', '2
 export function perfAdvice(s: PerfSnapshot): PerfAdvice[] {
   const out: PerfAdvice[] = []
   const chat = s.local?.models.find((m) => m.role === 'chat')
+
+  // 0. Le modèle écrit ses actions au lieu de les faire : rien ne s'exécute.
+  const health = s.local?.health
+  if (health) {
+    const what = health.failed
+      ? `${health.model} a écrit ${health.failed > 1 ? `${health.failed} fois une action` : 'une action'} au lieu de la faire : rien n’a été exécuté.`
+      : `${health.model} n’a pas réussi l’essai d’outil : il risque d’écrire ses actions au lieu de les faire.`
+    const alt = health.alternatives[0]
+    out.push({
+      id: 'tools',
+      level: 'warn',
+      text: alt
+        ? `${what} ${alt} a réussi l’essai et fait ses actions : je te conseille de l’utiliser.`
+        : `${what} Teste un autre modèle installé (Réglages › Cerveau, « Tester ») : je ne conseille que ceux qui réussissent l’essai.`,
+      action: alt ? 'use-model' : 'test-models',
+      model: alt
+    })
+  }
   const others = (s.gpu?.vram ?? []).filter((v) => v.kind === 'app' && v.gb >= 0.3)
   const names = (list: Array<{ label?: string; name?: string; gb: number }>): string =>
     list
@@ -215,6 +266,32 @@ export function perfAdvice(s: PerfSnapshot): PerfAdvice[] {
         `Il reste ${gbText(free)} de mémoire sur ${gbText(s.ram.totalGb)} : charger le modèle passe alors par le disque, ce qui peut prendre plusieurs minutes.` +
         (s.ram.top.length ? ` Les plus gourmands : ${names(s.ram.top)}.` : '')
     })
+  }
+
+  // 2 bis. Ollama garde les dernières discussions en mémoire du PC (8 Go au plus par défaut).
+  const cache = s.local?.cache
+  if (cache) {
+    const choice = cacheChoice(cache)
+    const usedGb = cache.usedMb / 1024
+    const tight = s.ram.totalGb > 0 && s.ram.usedGb / s.ram.totalGb >= 0.85
+    if (choice.restartPending && cache.configuredMb !== undefined) {
+      out.push({
+        id: 'cache-restart',
+        level: 'info',
+        text: `La mémoire des conversations d’Ollama est réglée à ${gbText(cache.configuredMb / 1024)}, mais Ollama tourne encore avec l’ancienne limite : il faut le redémarrer.`,
+        action: 'restart-ollama'
+      })
+    } else if (choice.suggest === 'limit' && (usedGb >= 1 || tight)) {
+      const max = cache.configuredMb === -1 ? 'sans limite' : `jusqu’à ${gbText((cache.configuredMb ?? cache.limitMb ?? 8192) / 1024)}`
+      out.push({
+        id: 'cache',
+        level: tight ? 'warn' : 'info',
+        text:
+          `Ollama garde tes dernières discussions en mémoire du PC pour les reprendre plus vite : ${gbText(usedGb)} en ce moment, ${max}. ` +
+          `Limiter à ${gbText(SUGGESTED_CACHE_MB / 1024)} garde la dernière discussion rapide et rend le reste de la mémoire.`,
+        action: 'limit-cache'
+      })
+    }
   }
 
   // 3. Le modèle de la recherche par le sens occupe aussi la carte graphique.
@@ -262,3 +339,49 @@ export function perfAdvice(s: PerfSnapshot): PerfAdvice[] {
 
 /** Couleur d'une jauge selon son niveau (0 à 1). */
 export const gaugeLevel = (x: number): 'ok' | 'high' | 'full' => (x >= 0.9 ? 'full' : x >= 0.7 ? 'high' : 'ok')
+
+// ─── Ce que coûte le modèle local ────────────────────────────────────────────
+
+/** Mémoire gardée par le modèle local chargé, mesurée sur le PC (pas la taille annoncée par Ollama). */
+export interface ModelFootprint {
+  vramGb: number
+  /** Mémoire du PC, cache des conversations compris. */
+  ramGb: number
+  /** Dont les discussions gardées par Ollama. */
+  cacheGb: number
+}
+
+export function modelFootprint(s: PerfSnapshot | null | undefined): ModelFootprint | null {
+  if (!s?.local?.models.length) return null
+  const vramGb = s.gpu?.vram.find((v) => v.kind === 'model')?.gb ?? 0
+  const ramGb = s.ram.modelGb ?? 0
+  if (vramGb < 0.1 && ramGb < 0.1) return null
+  return { vramGb, ramGb, cacheGb: (s.local.cache?.usedMb ?? 0) / 1024 }
+}
+
+const cachePart = (f: { ramGb: number; cacheGb: number }, min: number): string =>
+  f.cacheGb >= min && f.cacheGb <= f.ramGb + 0.1 ? `, dont ${gbText(f.cacheGb)} de discussions gardées` : ''
+
+/** Sous « Garder le modèle prêt » : ce que le modèle garde pendant ce temps, même sans question. */
+export function keepAliveCost(f: ModelFootprint, keepAlive: KeepAlive): string {
+  const parts = [f.vramGb >= 0.1 && `${gbText(f.vramGb)} de mémoire vidéo`, f.ramGb >= 0.1 && `${gbText(f.ramGb)} de mémoire du PC${cachePart(f, 0.1)}`].filter(
+    Boolean
+  )
+  return `Pendant ${KEEP_ALIVE_LABEL[keepAlive]} après ta dernière question, le modèle garde ${parts.join(' et ')}.`
+}
+
+/** Seuil de l'alerte de l'îlot : mémoire du PC presque pleine. */
+export const MEMORY_ALERT_RATIO = 0.92
+
+/** Texte de l'alerte de l'îlot : la mémoire, puis la cause la plus probable, en clair. */
+export function memoryAlertText(s: Pick<PerfSnapshot, 'ram' | 'local'>): string {
+  const tenth = (gb: number): string => `${gb.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Go`
+  const head = `Mémoire presque pleine : ${tenth(s.ram.usedGb)} sur ${tenth(s.ram.totalGb)}.`
+  const model = s.ram.modelGb ?? 0
+  if (model >= 1) {
+    const cacheGb = (s.local?.cache?.usedMb ?? 0) / 1024
+    return `${head} Le modèle local en prend ${gbText(model)}${cachePart({ ramGb: model, cacheGb }, 0.5)}. Touche pour voir quoi faire.`
+  }
+  const others = s.ram.top.filter((t) => t.name !== 'Modèle local').slice(0, 2)
+  return `${head}${others.length ? ` Les plus gourmands : ${others.map((t) => `${t.name} (${gbText(t.gb)})`).join(', ')}.` : ''} Touche pour voir quoi faire.`
+}

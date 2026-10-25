@@ -20,6 +20,7 @@ import {
   type ToolDef,
   type ToolServer
 } from '../../shared/localTools'
+import { createToolTextRepair, type ToolTextStats } from '../../shared/toolText'
 import type { Effort, RunStats } from '../../shared/types'
 import { log } from '../log'
 
@@ -78,8 +79,8 @@ export function applyStyle(body: Body, o: Pick<RouteOptions, 'effort' | 'canThin
  * Remonte dans les consignes les messages système placés avant la première réponse
  * (environnement, compétences) : le moteur les met après la première question, si bien
  * qu'un modèle local devait les relire à chaque nouvelle discussion. En tête, ils
- * restent dans son cache. Les messages système suivants ne bougent pas, pour que la
- * conversation ne fasse que s'allonger d'un tour à l'autre.
+ * restent dans son cache. Les messages système suivants passent par `keepPrefixStable`,
+ * pour que la conversation ne fasse que s'allonger d'un tour à l'autre.
  */
 export function hoistSystem(body: Body): Body {
   const messages = Array.isArray(body.messages) ? (body.messages as { role?: string; content?: unknown }[]) : null
@@ -95,6 +96,36 @@ export function hoistSystem(body: Body): Body {
   }
 }
 
+/** Note de comptage que le moteur ajoute après chaque question et chaque résultat d'outil. */
+const ENGINE_NOTE = /^\s*<total_tokens>[^<]*<\/total_tokens>\s*$/
+
+/**
+ * Garde fixe le début de ce que lit un modèle local, quel que soit le modèle. Beaucoup de
+ * modèles (qwen3…) reçoivent tous les messages système en tête : la note de comptage
+ * ajoutée par le moteur après chaque question changeait ce début à chaque appel, et le
+ * modèle relisait toute la discussion (~1 min). Cette note ne lui sert à rien : elle part.
+ * Un autre message système arrivé après la première réponse rejoint, en texte, le message
+ * de l'utilisateur qui le précède : il garde sa place et ne touche plus au début.
+ */
+export function keepPrefixStable(body: Body): Body {
+  const messages = Array.isArray(body.messages) ? (body.messages as { role?: string; content?: unknown }[]) : null
+  if (!messages?.some((m) => m.role === 'system')) return body
+  const firstAssistant = messages.findIndex((m) => m.role === 'assistant')
+  const out: { role?: string; content?: unknown }[] = []
+  messages.forEach((m, i) => {
+    if (m.role !== 'system') return void out.push(m)
+    const blocks = textBlocks(m.content)
+    if (blocks.length && ENGINE_NOTE.test(blocks.map((b) => b.text).join(''))) return
+    if (firstAssistant < 0 || i < firstAssistant || !blocks.length) return void out.push(m)
+    const prev = out[out.length - 1]
+    if (prev?.role === 'user') {
+      const content = typeof prev.content === 'string' ? [{ type: 'text', text: prev.content }] : Array.isArray(prev.content) ? prev.content : []
+      out[out.length - 1] = { ...prev, content: [...content, ...blocks] }
+    } else out.push({ role: 'user', content: blocks })
+  })
+  return { ...body, messages: out }
+}
+
 const textBlocks = (c: unknown): { type: 'text'; text: string }[] =>
   typeof c === 'string'
     ? [{ type: 'text', text: c }]
@@ -102,9 +133,12 @@ const textBlocks = (c: unknown): { type: 'text'; text: string }[] =>
       ? (c as { type?: string; text?: string }[]).filter((p) => p.type === 'text' && p.text).map((p) => ({ type: 'text', text: p.text! }))
       : []
 
+/** Fenêtre (en jetons) à partir de laquelle tous les outils de Compi passent d'office (~2 200 jetons de plus). */
+const ALL_COMPI_TOOLS_FROM = 32_768
+
 /**
- * Modèle local : outils essentiels de Compi, plus ceux des groupes de Compi et des
- * connecteurs que la discussion demande, dans la place de sa fenêtre (sinon Ollama coupe le début de la requête,
+ * Modèle local : outils de Compi (seulement les essentiels et les groupes demandés sous
+ * ALL_COMPI_TOOLS_FROM), plus ceux des connecteurs que la discussion demande, dans la place de sa fenêtre (sinon Ollama coupe le début de la requête,
  * consignes comprises). Les instructions des connecteurs quittent les consignes et
  * accompagnent leurs outils ; la liste des extensions branchées les remplace.
  * `allowed` (routine) : seuls ces outils de connecteur peuvent passer.
@@ -125,8 +159,11 @@ export function fitLocalTools(
     Object.assign(sections, split.sections)
     return { type: 'text' as const, text: split.text }
   })
-  const sel = selectLocalTools({ tools: all, system, messages, contextTokens, servers, allowed, groups: true })
-  const note = localToolsNote({ servers, omitted: sel.omitted, groups: presentGroups(all) })
+  // Fenêtre assez grande : tous les outils de Compi passent, toujours. Un groupe chargé en cours
+  // de discussion changeait la liste d'outils, placée avant la discussion : tout était relu (~35 s).
+  const groups = contextTokens < ALL_COMPI_TOOLS_FROM
+  const sel = selectLocalTools({ tools: all, system, messages, contextTokens, servers, allowed, groups })
+  const note = localToolsNote({ servers, omitted: sel.omitted, groups: groups ? presentGroups(all) : [] })
   const out: Body = {
     ...body,
     system: note ? [...system, { type: 'text', text: note }] : system,
@@ -204,6 +241,8 @@ interface RequestMeter {
   /** Premier fragment de texte visible. */
   firstTextAt?: number
   endAt?: number
+  /** Cerveau local : appels d'outils écrits en texte, rattrapés ou non. */
+  toolText?: ToolTextStats
 }
 
 /** Lit un flux SSE de /v1/messages au fil de l'eau et en tire les mesures. */
@@ -244,6 +283,12 @@ export function createSseMeter(now: () => number = Date.now): { feed: (chunk: st
   }
 }
 
+function toolTextTotals(meters: RequestMeter[]): Pick<RunStats, 'toolTextRepaired' | 'toolTextFailed'> {
+  const repaired = meters.reduce((n, m) => n + (m.toolText?.repaired ?? 0), 0)
+  const failed = meters.reduce((n, m) => n + (m.toolText?.failed ?? 0), 0)
+  return { ...(repaired ? { toolTextRepaired: repaired } : {}), ...(failed ? { toolTextFailed: failed } : {}) }
+}
+
 /** Cumule les mesures des appels d'une même réponse. */
 export function summarize(startedAt: number, meters: RequestMeter[]): RunStats {
   const firstText = meters.map((m) => m.firstTextAt).find((t) => t !== undefined)
@@ -259,7 +304,8 @@ export function summarize(startedAt: number, meters: RequestMeter[]): RunStats {
     tokensPerSec: genSeconds > 0.05 ? Math.round(genTokens / genSeconds) : undefined,
     inputTokens: meters.reduce((n, m) => n + m.inputTokens, 0),
     outputTokens: meters.reduce((n, m) => n + m.outputTokens, 0),
-    requests: meters.length
+    requests: meters.length,
+    ...toolTextTotals(meters)
   }
 }
 
@@ -336,7 +382,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     // Identifiants de session et d'appareil du moteur : inutiles au modèle, ils ne partent pas.
     delete body.metadata
     if (route.provider === 'local') {
-      body = hoistSystem(body)
+      body = hoistSystem(keepPrefixStable(body))
       if (route.contextTokens) {
         const fit = fitLocalTools(body, route.contextTokens, route.servers ?? [], route.allowedConnectorTools)
         body = fit.body
@@ -376,16 +422,42 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     }
 
     const meter = isMessages && upstream.ok ? createSseMeter() : null
+    // Modèle local : un appel d'outil écrit en texte devient un vrai appel, s'il est sûr.
+    const offered = Array.isArray(styled?.tools) ? (styled.tools as ToolDef[]).map((t) => t.name).filter((n) => typeof n === 'string') : []
+    const repair =
+      meter && route.provider === 'local' && offered.length && (upstream.headers.get('content-type') ?? '').includes('event-stream')
+        ? createToolTextRepair(new Set(offered), () => `toolu_compi_${randomBytes(12).toString('hex')}`)
+        : null
     const decoder = new TextDecoder()
     const reader = upstream.body.getReader()
+    const pass = (text: string): void => {
+      if (!text) return
+      res.write(text)
+      meter?.feed(text)
+    }
     for (;;) {
       const { done, value } = await reader.read()
       if (done) break
-      res.write(value)
-      meter?.feed(decoder.decode(value, { stream: true }))
+      if (repair) pass(repair.push(decoder.decode(value, { stream: true })))
+      else {
+        res.write(value)
+        meter?.feed(decoder.decode(value, { stream: true }))
+      }
     }
+    if (repair) pass(repair.flush())
     res.end()
-    if (meter) route.meters.push(meter.result())
+    if (meter) {
+      const result = meter.result()
+      const toolText = repair?.stats()
+      if (toolText && (toolText.repaired || toolText.failed)) {
+        result.toolText = toolText
+        log(
+          toolText.failed ? 'warn' : 'info',
+          `modèle local : ${toolText.repaired} appel(s) écrit(s) en texte rattrapé(s), ${toolText.failed} non (${toolText.reason ?? '—'})`
+        )
+      }
+      route.meters.push(result)
+    }
   } catch (e) {
     if (abort.signal.aborted) return
     const message = (e as Error).message ?? String(e)
@@ -403,8 +475,9 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
  * Version 4 : use_extension accepte `tools` (outils précis d'une extension chargée en partie).
  * Version 5 : les réglages (prénom, Google, dossiers…) quittent les consignes pour le message.
  * Version 6 : une partie des outils de Compi passe en groupes chargés à la demande.
+ * Version 7 : avec une fenêtre d'au moins 32 000 jetons, tous les outils de Compi passent toujours.
  */
-const WARM_VERSION = 6
+const WARM_VERSION = 7
 
 /** Début de la dernière requête lue par le modèle local : c'est ce qu'il a en cache. */
 let lastPrefix: (PromptPrefix & { key: string }) | null = null
@@ -430,7 +503,7 @@ function noteLocalPrefix(target: string, body: Body): void {
  * retardait la question suivante d'autant.
  */
 const PRIME_TIMEOUT_MS = 15 * 60_000
-interface WarmPrompt {
+export interface WarmPrompt {
   v?: number
   target: string
   model: string
@@ -440,8 +513,14 @@ interface WarmPrompt {
   output_config?: unknown
 }
 
+/**
+ * Consignes gardées pour les derniers modèles utilisés, le plus récent d'abord : en
+ * revenant à un modèle, il se prépare tout de suite. Elles contiennent le nom du modèle
+ * (environnement du moteur) : celles d'un autre modèle ne lui serviraient pas.
+ */
+const WARM_MODELS = 4
 const warmFile = (): string => join(app.getPath('userData'), 'warm-prompt.json')
-let warmPrompt: WarmPrompt | null | undefined
+let warmPrompts: WarmPrompt[] | undefined
 let warmSaved = ''
 /**
  * Change à chaque modification de la mémoire. Les consignes d'une réponse en cours
@@ -460,8 +539,9 @@ function rememberPrompt(target: string, body: Body): void {
     thinking: body.thinking,
     output_config: body.output_config
   }
-  const json = JSON.stringify(next)
-  warmPrompt = next
+  const others = loadWarmPrompts().filter((p) => p.target !== target || p.model !== next.model)
+  warmPrompts = [next, ...others].slice(0, WARM_MODELS)
+  const json = JSON.stringify({ prompts: warmPrompts })
   if (json === warmSaved) return
   warmSaved = json
   try {
@@ -477,7 +557,7 @@ function rememberPrompt(target: string, body: Body): void {
  */
 export function forgetWarmPrompt(): void {
   memoryVersion++
-  warmPrompt = null
+  warmPrompts = []
   warmSaved = ''
   try {
     rmSync(warmFile(), { force: true })
@@ -486,16 +566,22 @@ export function forgetWarmPrompt(): void {
   }
 }
 
-function loadWarmPrompt(): WarmPrompt | null {
-  if (warmPrompt !== undefined) return warmPrompt
+function loadWarmPrompts(): WarmPrompt[] {
+  if (warmPrompts !== undefined) return warmPrompts
   try {
     warmSaved = readFileSync(warmFile(), 'utf8')
-    const saved = JSON.parse(warmSaved) as WarmPrompt
-    warmPrompt = saved.v === WARM_VERSION ? saved : null
+    warmPrompts = readWarmPrompts(JSON.parse(warmSaved))
   } catch {
-    warmPrompt = null
+    warmPrompts = []
   }
-  return warmPrompt
+  return warmPrompts
+}
+
+/** Contenu de warm-prompt.json : une liste, ou les consignes d'un seul modèle (avant). */
+export function readWarmPrompts(saved: unknown): WarmPrompt[] {
+  const s = saved as { prompts?: unknown } & WarmPrompt
+  const list = Array.isArray(s?.prompts) ? (s.prompts as WarmPrompt[]) : s?.model ? [s] : []
+  return list.filter((p) => p?.v === WARM_VERSION && typeof p.model === 'string' && typeof p.target === 'string').slice(0, WARM_MODELS)
 }
 
 /**
@@ -504,8 +590,8 @@ function loadWarmPrompt(): WarmPrompt | null {
  * suite au lieu de relire plusieurs milliers de jetons. Ne génère qu'un jeton.
  */
 export async function primeLocalCache(target: string, model: string): Promise<boolean> {
-  const p = loadWarmPrompt()
-  if (!p || p.model !== model || p.target !== target.replace(/\/+$/, '')) return false
+  const p = loadWarmPrompts().find((w) => w.model === model && w.target === target.replace(/\/+$/, ''))
+  if (!p) return false
   const started = Date.now()
   const primeBody: Body = {
     model,

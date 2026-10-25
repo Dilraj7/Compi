@@ -4,10 +4,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Cpu, Gauge, Lightbulb, MemoryStick, MonitorCog, TriangleAlert, Zap } from 'lucide-react'
+import { cacheChoice, DEFAULT_CACHE_MB, SUGGESTED_CACHE_MB, type OllamaCache } from '@shared/ollamaCache'
 import {
   KEEP_ALIVE_LABEL,
   gaugeLevel,
   gbText,
+  keepAliveCost,
+  modelFootprint,
   perfAdvice,
   type AdviceAction,
   type LocalModelState,
@@ -125,7 +128,7 @@ function useNowEvery(ms: number): number {
   return now
 }
 
-function ModelRow({ m, now, onUnload, busy }: { m: LocalModelState; now: number; onUnload?: () => void; busy: boolean }) {
+function ModelRow({ m, now, onUnload, busy, vramGb }: { m: LocalModelState; now: number; onUnload?: () => void; busy: boolean; vramGb?: number }) {
   const onGpu = m.gpuShare >= 0.97
   const left = m.expiresAt ? Math.max(0, m.expiresAt - now) : null
   const role = m.role === 'chat' ? 'Discussion' : m.role === 'embed' ? 'Recherche par le sens' : 'Autre modèle'
@@ -135,7 +138,7 @@ function ModelRow({ m, now, onUnload, busy }: { m: LocalModelState; now: number;
         <div className="flex items-baseline gap-2">
           <span className="truncate text-[12.5px] font-medium text-fog-100">{m.name}</span>
           <span className="shrink-0 text-[11px] text-fog-500">
-            {role} · {gbText(m.sizeGb)}
+            {role} · {vramGb !== undefined ? `${gbText(vramGb)} de mémoire vidéo` : gbText(m.sizeGb)}
           </span>
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11.5px]">
@@ -162,12 +165,16 @@ function ModelRow({ m, now, onUnload, busy }: { m: LocalModelState; now: number;
   )
 }
 
-function AdviceCard({ a, onAction, busy }: { a: PerfAdvice; onAction: (x: AdviceAction) => void; busy: boolean }) {
+function AdviceCard({ a, onAction, busy }: { a: PerfAdvice; onAction: (a: PerfAdvice) => void; busy: boolean }) {
   const label: Record<AdviceAction, string> = {
     'smaller-model': 'Modèle plus léger',
     'unload-embed': 'Libérer',
     'keep-longer': 'Garder prêt 2 h',
-    'new-chat': 'Nouvelle discussion'
+    'new-chat': 'Nouvelle discussion',
+    'limit-cache': `Limiter à ${gbText(SUGGESTED_CACHE_MB / 1024)}`,
+    'restart-ollama': 'Redémarrer Ollama',
+    'use-model': `Utiliser ${a.model ?? 'ce modèle'}`,
+    'test-models': 'Tester un modèle'
   }
   const warn = a.level === 'warn'
   return (
@@ -180,10 +187,79 @@ function AdviceCard({ a, onAction, busy }: { a: PerfAdvice; onAction: (x: Advice
       {warn ? <TriangleAlert size={14} className="mt-px shrink-0 text-led-amber" /> : <Lightbulb size={14} className="mt-px shrink-0 text-[var(--led)]" />}
       <span className="flex-1">{a.text}</span>
       {a.action && (
-        <Button size="sm" variant="subtle" disabled={busy} onClick={() => onAction(a.action!)}>
+        <Button size="sm" variant="subtle" disabled={busy} onClick={() => onAction(a)}>
           {label[a.action]}
         </Button>
       )}
+    </div>
+  )
+}
+
+/** Un clic sur « Limiter », « Rétablir » ou « Redémarrer Ollama » : Ollama redémarre seulement après confirmation. */
+type CacheAsk = { mb: number | null | undefined; from: 'row' | 'advice' }
+
+function CacheConfirm({ ask, busy, error, onConfirm, onCancel }: { ask: CacheAsk; busy: boolean; error: string; onConfirm: () => void; onCancel: () => void }) {
+  const what =
+    typeof ask.mb === 'number'
+      ? `Ollama va redémarrer pour garder au plus ${gbText(ask.mb / 1024)} de discussions.`
+      : ask.mb === null
+        ? `Ollama va redémarrer avec sa limite d’origine (${gbText(DEFAULT_CACHE_MB / 1024)}).`
+        : 'Ollama va redémarrer pour appliquer la limite réglée.'
+  return (
+    <div className="space-y-2 rounded-xl bg-white/[0.04] px-3 py-2.5 text-[12px] leading-snug ring-1 ring-inset ring-white/[0.08]">
+      <p className="text-fog-300">
+        {what} Le modèle se recharge à ta prochaine question (quelques secondes). Ton historique n’est pas touché ; tu pourras revenir en arrière ici.
+      </p>
+      {error && <p className="text-led-red">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>
+          Annuler
+        </Button>
+        <Button size="sm" variant="primary" disabled={busy} onClick={onConfirm}>
+          {busy ? 'Redémarrage…' : 'Redémarrer Ollama'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** Discussions gardées par Ollama en mémoire du PC, et sa limite. */
+function CacheRow({ cache, busy, onAsk }: { cache: OllamaCache; busy: boolean; onAsk: (mb: number | null | undefined) => void }) {
+  const choice = cacheChoice(cache)
+  const conf = cache.configuredMb
+  const max = conf === -1 ? 'sans limite' : conf === 0 ? 'coupée' : `max ${gbText((conf ?? DEFAULT_CACHE_MB) / 1024)}`
+  return (
+    <div className="flex items-center gap-3">
+      <div className="min-w-0 flex-1 text-[11.5px]">
+        <div className="text-fog-300">
+          Discussions gardées par Ollama : <span className="tabular-nums text-fog-100">{gbText(cache.usedMb / 1024)}</span>
+          <span className="text-fog-500"> · {max}</span>
+        </div>
+        <div className="text-fog-500">
+          {choice.restartPending
+            ? 'Nouvelle limite réglée : elle s’applique au redémarrage d’Ollama.'
+            : 'Elles reprennent plus vite, mais prennent la mémoire du PC.'}
+        </div>
+      </div>
+      {choice.restartPending ? (
+        <Button size="sm" variant="subtle" disabled={busy} onClick={() => onAsk(undefined)}>
+          Redémarrer Ollama
+        </Button>
+      ) : choice.suggest === 'limit' ? (
+        <Button size="sm" variant="subtle" disabled={busy} onClick={() => onAsk(SUGGESTED_CACHE_MB)}>
+          Limiter à {gbText(SUGGESTED_CACHE_MB / 1024)}
+        </Button>
+      ) : choice.suggest === 'restore' ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => onAsk(null)}
+          title={`Revenir à la limite d’origine d’Ollama (${gbText(DEFAULT_CACHE_MB / 1024)})`}
+        >
+          Rétablir
+        </Button>
+      ) : null}
     </div>
   )
 }
@@ -194,6 +270,8 @@ export function PerfSection() {
   const focus = useCompi((s) => s.activityFocus)
   const ref = useRef<HTMLElement>(null)
   const [busy, setBusy] = useState(false)
+  const [cacheAsk, setCacheAsk] = useState<CacheAsk | null>(null)
+  const [cacheError, setCacheError] = useState('')
   const now = useNowEvery(30_000)
 
   // Mesuré seulement tant que la vue est ouverte.
@@ -222,15 +300,38 @@ export function PerfSection() {
     }
   }
 
+  const askCache = (mb: number | null | undefined, from: CacheAsk['from']): void => {
+    setCacheError('')
+    setCacheAsk({ mb, from })
+  }
+
+  const applyCache = async (): Promise<void> => {
+    if (!cacheAsk) return
+    setBusy(true)
+    setCacheError('')
+    try {
+      const p = await window.compi.perfOllamaCache(cacheAsk.mb)
+      if (p) useCompi.getState().setPerf(p)
+      setCacheAsk(null)
+    } catch (e) {
+      setCacheError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const setKeepAlive = async (keepAlive: KeepAlive): Promise<void> => {
     if (!settings) return
     useCompi.getState().setSettings(await window.compi.updateSettings({ local: { ...settings.local, keepAlive } }))
   }
 
-  const onAction = (a: AdviceAction): void => {
+  const onAction = ({ action: a, model }: PerfAdvice): void => {
     const s = useCompi.getState()
     if (a === 'unload-embed') void unload('embed')
     else if (a === 'keep-longer') void setKeepAlive('2h')
+    else if (a === 'limit-cache') askCache(SUGGESTED_CACHE_MB, 'advice')
+    else if (a === 'restart-ollama') askCache(undefined, 'advice')
+    else if (a === 'use-model' && model) void s.pickBrain({ provider: 'local', model })
     else if (a === 'new-chat') {
       s.newConversation()
       s.open('chat', { focus: true })
@@ -242,6 +343,11 @@ export function PerfSection() {
 
   const advice = perf ? perfAdvice(perf) : []
   const local = perf?.local
+  const footprint = modelFootprint(perf)
+  const confirmCache = (from: CacheAsk['from']) =>
+    cacheAsk?.from === from && (
+      <CacheConfirm ask={cacheAsk} busy={busy} error={cacheError} onConfirm={() => void applyCache()} onCancel={() => setCacheAsk(null)} />
+    )
   const ramFree = perf ? perf.ram.totalGb - perf.ram.usedGb : 0
 
   return (
@@ -335,10 +441,14 @@ export function PerfSection() {
                     m={m}
                     now={now}
                     busy={busy}
+                    // Un seul modèle chargé : sa mémoire vidéo mesurée, plus juste que la taille annoncée par Ollama.
+                    vramGb={local.models.length === 1 && footprint && footprint.vramGb >= 0.1 ? footprint.vramGb : undefined}
                     onUnload={m.role === 'embed' && local.engine === 'ollama' ? () => void unload('embed') : undefined}
                   />
                 ))
               )}
+              {local.cache && <CacheRow cache={local.cache} busy={busy} onAsk={(mb) => askCache(mb, 'row')} />}
+              {confirmCache('row')}
               {local.engine === 'ollama' && (
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[11.5px] text-fog-500">Garder le modèle prêt après ta dernière question</span>
@@ -351,6 +461,9 @@ export function PerfSection() {
                     />
                   </div>
                 </div>
+              )}
+              {local.engine === 'ollama' && footprint && (
+                <div className="text-[11px] leading-snug text-fog-500">{keepAliveCost(footprint, local.keepAlive)}</div>
               )}
             </div>
           )}
@@ -388,6 +501,7 @@ export function PerfSection() {
                   <Lightbulb size={13} /> Rien à signaler : le modèle a la place qu’il lui faut.
                 </div>
               )}
+              {confirmCache('advice')}
             </div>
           )}
         </div>

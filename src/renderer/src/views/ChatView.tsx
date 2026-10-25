@@ -135,6 +135,21 @@ function SpeedLine({ stats }: { stats: RunStats }) {
   )
 }
 
+/** Le modèle local a écrit une action au lieu de la faire : on le dit, et Ce PC dit quoi faire. */
+function ToolTextLine() {
+  return (
+    <div className="flex items-start gap-2 rounded-xl bg-led-amber/[0.06] px-3 py-2 text-[11.5px] leading-snug text-fog-300 ring-1 ring-inset ring-led-amber/20">
+      <TriangleAlert size={13} className="mt-px shrink-0 text-led-amber" />
+      <span className="flex-1">
+        Le modèle a écrit une action au lieu de la faire : rien n’a été exécuté.{' '}
+        <button className="underline decoration-dotted underline-offset-2 hover:text-fog-100" onClick={showPerf}>
+          Que faire ?
+        </button>
+      </span>
+    </div>
+  )
+}
+
 /** Avant le premier mot d'une réponse locale : ce qui se passe, et depuis combien de temps. */
 function LocalWait() {
   const perf = useCompi((s) => s.perf)
@@ -292,6 +307,7 @@ function Message({ m, streaming, last }: { m: ChatMessage; streaming: boolean; l
           {m.stats && <SpeedLine stats={m.stats} />}
         </div>
       )}
+      {!streaming && (m.stats?.toolTextFailed ?? 0) > 0 && <ToolTextLine />}
       {!streaming && <NoticeLine m={m} last={last} />}
       {m.error && (
         <div className="flex items-start gap-2.5 rounded-2xl bg-led-red/[0.08] px-3.5 py-2.5 text-[12.5px] text-led-red ring-1 ring-inset ring-led-red/20">

@@ -193,6 +193,8 @@ export const IPC = {
   perfWatch: 'perf:watch',
   perfChanged: 'perf:changed',
   perfUnload: 'perf:unload',
+  perfOllamaCache: 'perf:ollama-cache',
+  modelHealth: 'brain:model-health',
   soundAllowed: 'sound:allowed',
   // divers
   openExternal: 'app:open-external',

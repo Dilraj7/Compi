@@ -89,11 +89,12 @@ $Fns.sample = {
   @{ adapters = @($alist); processes = @($plist) }
 }
 
-# Applications qui occupent le plus de mémoire (regroupées par nom).
+# Applications qui occupent le plus de mémoire (regroupées par nom ; Compi réunit ensuite
+# les processus d'une même application, comme ceux du modèle local).
 $Fns.ram_top = {
   $top = Get-Process | Group-Object ProcessName | ForEach-Object {
     @{ name = [string]$_.Name; bytes = [double](($_.Group | Measure-Object WorkingSet64 -Sum).Sum) }
-  } | Sort-Object { $_.bytes } -Descending | Select-Object -First 4
+  } | Sort-Object { $_.bytes } -Descending | Select-Object -First 12
   @{ top = @($top) }
 }
 

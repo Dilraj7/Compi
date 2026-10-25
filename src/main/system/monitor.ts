@@ -12,8 +12,11 @@ import {
   cpuPercent,
   cpuTimes,
   friendlyName,
+  groupRamTop,
   groupVram,
   isModelProcess,
+  memoryAlertText,
+  MEMORY_ALERT_RATIO,
   pickGpu,
   sameModel,
   type CpuTimes,
@@ -31,6 +34,9 @@ import { hardwareInfo } from '../brains/hardware'
 import { lmstudioBase, ollamaBase } from '../brains/local'
 import { loadedLmStudioModels } from '../brains/lmstudio'
 import { loadedModels, unloadModel } from '../brains/ollama'
+import { ollamaCacheState } from '../brains/ollamaCache'
+import { healthBook } from '../store/modelHealth'
+import { FAIL_MEMORY_MS, healthKey, reliableModels, unreliable } from '../../shared/modelHealth'
 
 type PerfFn = 'ping' | 'sample' | 'ram_top' | 'quns'
 const host = new PowerShellHost<PerfFn>('hôte performances', script, 5 * 60_000)
@@ -45,7 +51,7 @@ let timer: NodeJS.Timeout | null = null
 let sampling = false
 let locked = false
 let prevCpu: CpuTimes | null = null
-let ramTop: { at: number; top: Array<{ name: string; gb: number }> } = { at: 0, top: [] }
+let ramTop: { at: number; top: Array<{ name: string; gb: number }>; modelGb: number } = { at: 0, top: [], modelGb: 0 }
 let gpuFailures = 0
 let last: PerfSnapshot | null = null
 const runs: PerfRun[] = []
@@ -65,19 +71,49 @@ async function gpuSample(): Promise<{ adapters: GpuAdapterSample[]; processes: G
   }
 }
 
-async function topRam(): Promise<Array<{ name: string; gb: number }>> {
-  if (Date.now() - ramTop.at < RAM_TOP_MS || process.platform !== 'win32') return ramTop.top
+/** Applications les plus gourmandes, modèle local compris (avec son cache des conversations). */
+async function topRam(): Promise<typeof ramTop> {
+  if (Date.now() - ramTop.at < RAM_TOP_MS || process.platform !== 'win32') return ramTop
   try {
     const r = await host.call<{ top?: Array<{ name: string; bytes: number }> }>('ram_top', {}, 8000)
-    const top = (r.top ?? [])
-      .filter((t) => t.name && !isModelProcess(t.name))
-      .slice(0, 3)
-      .map((t) => ({ name: friendlyName(t.name), gb: t.bytes / GB }))
-    ramTop = { at: Date.now(), top }
+    ramTop = { at: Date.now(), ...groupRamTop(r.top ?? []) }
   } catch {
     ramTop = { ...ramTop, at: Date.now() }
   }
-  return ramTop.top
+  return ramTop
+}
+
+let tags: { at: number; base: string; names: string[] } | null = null
+
+/** Modèles installés dans Ollama (relus au plus une fois par minute). */
+async function installedModels(base: string): Promise<string[]> {
+  if (tags && tags.base === base && Date.now() - tags.at < 60_000) return tags.names
+  try {
+    const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(2000) })
+    const data = (await res.json()) as { models?: Array<{ name?: string }> }
+    const names = (data.models ?? []).map((m) => m.name ?? '').filter((n) => n && !/-compi$/.test(n))
+    tags = { at: Date.now(), base, names }
+  } catch {
+    tags = { at: Date.now(), base, names: tags?.names ?? [] }
+  }
+  return tags.names
+}
+
+/** Le modèle de discussion fait mal ses actions : ce qu'on en sait, et les modèles installés qui ont réussi l'essai. */
+async function toolHealth(engine: 'ollama' | 'lmstudio', chatModel: string): Promise<NonNullable<PerfSnapshot['local']>['health']> {
+  if (!chatModel) return undefined
+  const book = healthBook()
+  const h = book[healthKey(chatModel)]
+  const now = Date.now()
+  if (!unreliable(h, now)) return undefined
+  const installed = engine === 'ollama' ? await installedModels(ollamaBase()) : []
+  return {
+    model: healthKey(chatModel),
+    repaired: h!.repaired,
+    failed: h!.lastFailAt && now - h!.lastFailAt < FAIL_MEMORY_MS ? h!.failed : 0,
+    testFailed: h!.tested?.tools === false,
+    alternatives: reliableModels(book, installed, chatModel, now)
+  }
 }
 
 async function localState(): Promise<PerfSnapshot['local']> {
@@ -93,23 +129,23 @@ async function localState(): Promise<PerfSnapshot['local']> {
         engine: 'lmstudio',
         chatModel,
         keepAlive: s.local.keepAlive ?? '30m',
-        models: models.map((m) => ({ name: m.name, sizeGb: m.sizeBytes / GB, gpuShare: 1, contextLength: m.contextLength, role: role(m.name) }))
+        models: models.map((m) => ({ name: m.name, sizeGb: m.sizeBytes / GB, gpuShare: 1, contextLength: m.contextLength, role: role(m.name) })),
+        health: await toolHealth('lmstudio', chatModel)
       }
     }
-    const models = await loadedModels(ollamaBase())
-    return {
-      engine: 'ollama',
-      chatModel,
-      keepAlive: s.local.keepAlive ?? '30m',
-      models: models.map((m) => ({
-        name: m.name.replace(/-compi$/, ''),
-        sizeGb: m.sizeBytes / GB,
-        gpuShare: m.gpuShare,
-        expiresAt: m.expiresAt,
-        contextLength: m.contextLength,
-        role: role(m.name)
-      }))
-    }
+    const models = (await loadedModels(ollamaBase())).map((m) => ({
+      name: m.name.replace(/-compi$/, ''),
+      sizeGb: m.sizeBytes / GB,
+      gpuShare: m.gpuShare,
+      expiresAt: m.expiresAt,
+      contextLength: m.contextLength,
+      role: role(m.name)
+    }))
+    const cache = await ollamaCacheState(
+      ollamaBase(),
+      models.some((m) => m.role !== 'embed')
+    ).catch(() => undefined)
+    return { engine: 'ollama', chatModel, keepAlive: s.local.keepAlive ?? '30m', models, cache, health: await toolHealth('ollama', chatModel) }
   } catch {
     // Moteur arrêté : rien de chargé.
     return s.provider === 'local' || chatModel ? { engine: s.local.engine, chatModel, keepAlive: s.local.keepAlive ?? '30m', models: [] } : undefined
@@ -135,7 +171,7 @@ async function sample(): Promise<void> {
     const gaugesOnly = watchers.size > 0 && [...watchers.keys()].every((id) => GAUGES_ONLY.has(id))
     const [gpu, top, local] = await Promise.all([
       gpuSample(),
-      gaugesOnly ? Promise.resolve(last?.ram.top ?? []) : topRam(),
+      gaugesOnly ? Promise.resolve({ top: last?.ram.top ?? [], modelGb: last?.ram.modelGb ?? 0 }) : topRam(),
       gaugesOnly ? Promise.resolve(last?.local) : localState()
     ])
     let gpuInfo: PerfSnapshot['gpu']
@@ -154,7 +190,7 @@ async function sample(): Promise<void> {
     last = {
       at: Date.now(),
       cpu,
-      ram: { usedGb: totalGb - freemem() / GB, totalGb, top },
+      ram: { usedGb: totalGb - freemem() / GB, totalGb, top: top.top, modelGb: top.modelGb },
       gpu: gpuInfo,
       local,
       runs: [...runs],
@@ -187,6 +223,12 @@ export function perfWatch(id: string, on: boolean, every = 2000): PerfSnapshot |
 }
 
 export const perfSnapshot = (): PerfSnapshot | null => last
+
+/** Mesure tout de suite (après un changement d'Ollama). */
+export async function refreshPerf(): Promise<PerfSnapshot | null> {
+  await sample()
+  return last
+}
 
 // ─── Réponses du modèle local ────────────────────────────────────────────────
 
@@ -264,6 +306,46 @@ export async function fullscreenNow(): Promise<boolean> {
   }
 }
 
+// ─── Alerte mémoire de l'îlot ────────────────────────────────────────────────
+
+const ALERT_EVERY_MS = 60_000
+const ALERT_COOLDOWN_MS = 2 * 3_600_000
+let alertTimer: NodeJS.Timeout | null = null
+let alertStreak = 0
+let alertedAt = 0
+
+/**
+ * Toutes les minutes, sans PowerShell ni Ollama : la mémoire libre du PC. Pleine à 92 % deux
+ * fois de suite avec un modèle local chargé, l'îlot prévient (au plus toutes les 2 h) et un
+ * clic ouvre Ce PC, qui dit quoi faire. Désactivable (Réglages › Îlot).
+ */
+async function checkMemory(): Promise<void> {
+  if (locked || !settings.get().monitor.memoryAlert) {
+    alertStreak = 0
+    return
+  }
+  alertStreak = 1 - freemem() / totalmem() >= MEMORY_ALERT_RATIO ? alertStreak + 1 : 0
+  if (alertStreak < 2 || Date.now() - alertedAt < ALERT_COOLDOWN_MS) return
+  alertStreak = 0
+  const local = await localState()
+  if (!local?.models.length) return
+  const top = await topRam()
+  const totalGb = totalmem() / GB
+  const ram = { usedGb: totalGb - freemem() / GB, totalGb, top: top.top, modelGb: top.modelGb }
+  alertedAt = Date.now()
+  emit(IPC.islandNotify, { pill: 'pc', text: memoryAlertText({ ram, local }), duration: 15_000, view: 'activity', sound: null })
+  log('info', `alerte mémoire : ${Math.round((ram.usedGb / totalGb) * 100)} % pris, modèle local ${top.modelGb.toFixed(1)} Go`)
+}
+
+export function startMemoryAlert(): void {
+  if (alertTimer || process.platform !== 'win32') return
+  alertTimer = setInterval(() => void checkMemory().catch(() => undefined), ALERT_EVERY_MS)
+  alertTimer.unref()
+}
+
+/** Une réponse du modèle local est en cours (Ollama ne doit pas redémarrer). */
+export const localBusy = (): boolean => generating !== undefined
+
 let powerHooked = false
 export function hookPerfPower(): void {
   if (powerHooked) return
@@ -287,5 +369,7 @@ export function stopPerf(): void {
   watchers.clear()
   if (timer) clearTimeout(timer)
   timer = null
+  if (alertTimer) clearInterval(alertTimer)
+  alertTimer = null
   host.stop()
 }

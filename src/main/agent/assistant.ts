@@ -39,6 +39,7 @@ import { sendIslandCommand } from '../notchWindow'
 import { memoryForPrompt } from '../memory/store'
 import { holdSemantic } from '../semantic'
 import { conversations } from '../store/conversations'
+import { noteLocalRun } from '../store/modelHealth'
 import { secrets } from '../store/secrets'
 import { LMSTUDIO_URL, OLLAMA_URL, settings } from '../store/settings'
 import { enabledSkillIds, pluginDir } from '../skills/store'
@@ -1075,6 +1076,8 @@ async function runQuery(
       )
     }
     probe?.finish(stats)
+    // Fiabilité du modèle local avec les outils (conseil dans Ce PC).
+    if (brain.provider === 'local' && stats) noteLocalRun(model, stats)
     // La passerelle d'un moteur gardé ouvert vit avec lui (fermée avec le moteur).
     if (!engine?.alive) route?.close()
     // Journal local des envois en ligne (vue Activité).

@@ -35,6 +35,7 @@ export type PillId =
   | 'routine'
   | 'message'
   | 'file'
+  | 'pc'
   | 'error'
 
 export const PILLS: Record<PillId, PillDef> = {
@@ -54,6 +55,7 @@ export const PILLS: Record<PillId, PillDef> = {
   routine: { id: 'routine', label: 'Routine', category: 'system', color: '#2DD4BF', icon: 'Repeat', mood: 'happy' },
   message: { id: 'message', label: 'Messages', category: 'system', color: '#E879F9', icon: 'MessageSquareText', mood: 'surprised' },
   file: { id: 'file', label: 'Fichier', category: 'assistant', color: '#2DD4BF', icon: 'FileText', mood: 'surprised' },
+  pc: { id: 'pc', label: 'Ce PC', category: 'system', color: '#FBBF24', icon: 'Gauge', mood: 'waiting' },
   error: { id: 'error', label: 'Erreur', category: 'system', color: '#F87171', icon: 'TriangleAlert', mood: 'error' }
 }
 

@@ -306,6 +306,10 @@ export interface CompiApi {
   onPerf(cb: (s: PerfSnapshot) => void): Unsubscribe
   /** « Libérer » : décharge le modèle de la recherche par le sens, ou tous les modèles locaux. */
   perfUnload(which: 'all' | 'embed'): Promise<PerfSnapshot | null>
+  /** Mémoire des conversations d'Ollama : limiter (Mo), rétablir (`null`) ou appliquer la limite réglée (`undefined`). Redémarre Ollama. */
+  perfOllamaCache(mb: number | null | undefined): Promise<PerfSnapshot | null>
+  /** Carnet de fiabilité des modèles locaux (essais d'outil, actions écrites en texte). */
+  modelHealth(): Promise<import('../shared/modelHealth').HealthBook>
   /** Le son peut-il jouer maintenant (réglages, heures calmes, réunion, pomodoro, plein écran) ? */
   soundAllowed(kind: SoundKind, pill?: PillId): Promise<boolean>
   // actions rapides sur la sélection

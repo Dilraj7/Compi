@@ -117,6 +117,7 @@ export async function prepareLocalBrain(model: string): Promise<PreparedLocal> {
 const ctxLimit = new Map<string, number>()
 const SMALL_CONTEXT = 32_768
 let warming: Promise<void> | null = null
+let warmingFor = ''
 
 /**
  * Charge le modèle local et le garde en mémoire le temps choisi (30 min par
@@ -124,10 +125,37 @@ let warming: Promise<void> | null = null
  * décharge après 5 min et la question suivante attend ~15 s de chargement.
  * Vérifie au passage qu'il tient dans la carte graphique ; sinon, réduit sa
  * fenêtre de contexte pour la prochaine fois. Juste après un chargement, lui fait
- * lire les consignes d'avance (cache).
+ * lire les consignes d'avance (cache). Un autre modèle demandé pendant ce temps
+ * (choix dans les réglages) passe juste après.
  */
 export function keepWarm(model?: string): Promise<void> {
+  const wanted = (model ?? settings.get().local.model).replace(/-compi$/, '')
+  if (warming && warmingFor !== wanted) return warming.then(() => keepWarm(model))
+  warmingFor = wanted
   return (warming ??= warm(model).finally(() => (warming = null)))
+}
+
+/**
+ * Autre modèle choisi dans les réglages : sa variante (fenêtre de contexte) est préparée
+ * comme pour une question, puis il se charge et lit les consignes pendant que
+ * l'utilisateur écrit. Seulement si Ollama tourne déjà et que le modèle est installé.
+ */
+export async function warmChosenModel(): Promise<void> {
+  const l = settings.get().local
+  const base = ollamaBase()
+  if (l.engine !== 'ollama' || !l.model || !(await ollamaVersion(base))) return
+  if (
+    !(await showModel(base, l.model).then(
+      () => true,
+      () => false
+    ))
+  )
+    return
+  try {
+    await keepWarm((await prepareLocalBrain(l.model)).model)
+  } catch (e) {
+    log('warn', 'préchargement du modèle local impossible', (e as Error).message)
+  }
 }
 
 async function warm(model?: string): Promise<void> {

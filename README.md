@@ -116,7 +116,8 @@ Compi lit ton agenda et tes e-mails, crée des brouillons et des rendez-vous ave
 - **Le raccourci ouvre une autre application** : choisis une autre combinaison dans **Réglages › Comportement**.
 - **« Ta clé API couvre plusieurs workspaces »** : renseigne l'ID `wrkspc_…` dans **Réglages › Cerveau › Workspace**.
 - **« Le moteur local ne répond pas »** : lance Ollama ou LM Studio, ou clique sur **Démarrer** dans **Réglages › Cerveau › Sur ce PC**.
-- **Le modèle local est lent** : **Activité › Ce PC** dit pourquoi (mémoire pleine, modèle trop gros…) et propose une solution.
+- **Le modèle local est lent, ou le PC rame** : **Activité › Ce PC** dit pourquoi (mémoire pleine, discussions gardées par Ollama, modèle trop gros…) et propose une solution. L'îlot te prévient quand la mémoire est presque pleine.
+- **Le modèle local écrit ses actions au lieu de les faire** : Compi rattrape celles qui sont sûres. Sinon, **Ce PC** te conseille un modèle installé qui a réussi l'essai **Tester** (Réglages › Cerveau).
 - **Un connecteur « Local » ne démarre pas** : il demande [Node.js](https://nodejs.org).
 - **Journal** : `%APPDATA%\Compi\logs\compi.log`. Les clés API y sont masquées.
 

@@ -34,6 +34,8 @@ export const USE_EXTENSION = 'use_extension'
  * se charge quand la demande en parle (mots-clés), quand le modèle le demande
  * (use_extension) ou dès qu'il a utilisé un de ses outils ; ses outils s'ajoutent à la
  * fin, comme ceux d'un connecteur, et le début de la requête ne change pas.
+ * Seulement pour un modèle à petite fenêtre (moins de 32 000 jetons) : sinon tous les outils
+ * de Compi passent d'office (passerelle, fitLocalTools), la liste ne change jamais.
  */
 export interface CompiGroup {
   id: string

@@ -6,27 +6,28 @@ Compi n'a ni compte ni serveur. Ses auteurs ne reçoivent aucune donnée : pas d
 
 Tout est dans le dossier `%APPDATA%\Compi`.
 
-| Quoi                                                     | Où                                                                | À savoir                                                                                       |
-| -------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Réglages                                                 | `settings.json`                                                   |                                                                                                |
-| Discussions                                              | `conversations.json`                                              |                                                                                                |
-| Ce que Compi sait de toi                                 | `memory.json`                                                     | visible et modifiable dans « Ce que je sais de toi »                                           |
-| Rappels, routines, minuteur, journée                     | `reminders.json`, `routines.json`, `timer.json`, `day-state.json` |                                                                                                |
-| Clés API, jetons Google et des connecteurs, liens `.ics` | `secrets.json`                                                    | **chiffré par Windows** (DPAPI)                                                                |
-| Historique du presse-papier                              | `clipboard-history.bin`                                           | désactivé par défaut ; **chiffré par Windows** ; texte seulement, 200 éléments et 30 jours     |
-| Journal technique                                        | `logs\compi.log`                                                  | erreurs et sortie du moteur ; les clés Anthropic y sont masquées ; 1 Mo, plus l'ancien fichier |
-| Journal des autorisations                                | `approvals-log.json`                                              | sans contenu ; 500 entrées et 90 jours au plus                                                 |
-| Journal « Envoyé en ligne »                              | `privacy-log.json`                                                | destination, types de données et titre de la discussion ; 100 entrées                          |
-| Copies de travail du moteur                              | `agent\`                                                          | le moteur les garde 30 jours, **même après la suppression d'une discussion** (à corriger)      |
-| Index de la recherche par le sens                        | `semantic\`                                                       | seulement si tu l'actives                                                                      |
-| Modèles de dictée et voix naturelle                      | `models\`                                                         | seulement si tu les télécharges                                                                |
-| Temps gagné (dictée partout)                             | `dictation-stats.json`                                            | par jour et par programme : dictées, mots, temps de parole ; **jamais le texte**               |
-| Appels enregistrés                                       | `meetings\`                                                       | transcriptions, noms des voix, résumés ; le son, le temps de la transcription                  |
-| Journal des rangements                                   | `moves\`                                                          | noms des fichiers déplacés, pour pouvoir annuler ; les 20 derniers rangements                  |
-| Utilisation                                              | `usage-claude-code.json`, `usage-compi.json`                      | des totaux seulement, aucun texte                                                              |
-| Messages en attente                                      | `messages-reminders.json`                                         | identifiants de notification et heures, **jamais le texte**                                    |
-| Compétences                                              | `skills\`                                                         |                                                                                                |
-| Divers                                                   | `warm-prompt.json`, `hardware.json`, caches de l'interface        | copie des consignes pour accélérer le modèle local, description du matériel                    |
+| Quoi                                                     | Où                                                                | À savoir                                                                                         |
+| -------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Réglages                                                 | `settings.json`                                                   |                                                                                                  |
+| Discussions                                              | `conversations.json`                                              |                                                                                                  |
+| Ce que Compi sait de toi                                 | `memory.json`                                                     | visible et modifiable dans « Ce que je sais de toi »                                             |
+| Rappels, routines, minuteur, journée                     | `reminders.json`, `routines.json`, `timer.json`, `day-state.json` |                                                                                                  |
+| Clés API, jetons Google et des connecteurs, liens `.ics` | `secrets.json`                                                    | **chiffré par Windows** (DPAPI)                                                                  |
+| Historique du presse-papier                              | `clipboard-history.bin`                                           | désactivé par défaut ; **chiffré par Windows** ; texte seulement, 200 éléments et 30 jours       |
+| Journal technique                                        | `logs\compi.log`                                                  | erreurs et sortie du moteur ; les clés Anthropic y sont masquées ; 1 Mo, plus l'ancien fichier   |
+| Journal des autorisations                                | `approvals-log.json`                                              | sans contenu ; 500 entrées et 90 jours au plus                                                   |
+| Journal « Envoyé en ligne »                              | `privacy-log.json`                                                | destination, types de données et titre de la discussion ; 100 entrées                            |
+| Copies de travail du moteur                              | `agent\`                                                          | le moteur les garde 30 jours, **même après la suppression d'une discussion** (à corriger)        |
+| Index de la recherche par le sens                        | `semantic\`                                                       | seulement si tu l'actives                                                                        |
+| Modèles de dictée et voix naturelle                      | `models\`                                                         | seulement si tu les télécharges                                                                  |
+| Temps gagné (dictée partout)                             | `dictation-stats.json`                                            | par jour et par programme : dictées, mots, temps de parole ; **jamais le texte**                 |
+| Appels enregistrés                                       | `meetings\`                                                       | transcriptions, noms des voix, résumés ; le son, le temps de la transcription                    |
+| Journal des rangements                                   | `moves\`                                                          | noms des fichiers déplacés, pour pouvoir annuler ; les 20 derniers rangements                    |
+| Utilisation                                              | `usage-claude-code.json`, `usage-compi.json`                      | des totaux seulement, aucun texte                                                                |
+| Messages en attente                                      | `messages-reminders.json`                                         | identifiants de notification et heures, **jamais le texte**                                      |
+| Compétences                                              | `skills\`                                                         |                                                                                                  |
+| Fiabilité des modèles locaux                             | `model-health.json`                                               | noms des modèles et nombres : essais d'outil, actions écrites en texte ; aucun texte             |
+| Divers                                                   | `warm-prompt.json`, `hardware.json`, caches de l'interface        | copie des consignes pour accélérer le modèle local (4 derniers modèles), description du matériel |
 
 Sauf les deux lignes chiffrées, ces fichiers sont lisibles par ton compte Windows, comme tes documents. Le chiffrement de Windows ne protège pas contre un programme malveillant qui tourne déjà sous ton compte.
 
@@ -58,7 +59,7 @@ Désactivée par défaut (Réglages › Cerveau › Recherche web). Avec Claude,
 **Les services que tu branches**
 
 - **Google** (agenda, e-mails), avec ton propre client Google.
-- **Connecteurs** : chaque outil demande ton accord avant de servir. Les connecteurs « Local » lancent la commande que tu as choisie, souvent `npx`, qui télécharge le connecteur depuis npm.
+- **Connecteurs** : chaque outil demande ton accord avant de servir. Les connecteurs « Local » lancent la commande que tu as choisie, souvent `npx`, qui télécharge le connecteur depuis npm. Une fois le connecteur téléchargé, Compi lance directement la copie gardée par npx, sans repasser par npm.
 - **Liens d'agenda** `.ics` que tu ajoutes.
 
 **À ta demande**
@@ -69,6 +70,12 @@ Désactivée par défaut (Réglages › Cerveau › Recherche web). Avec Claude,
 - Les téléchargements de modèles, toujours après ton clic : Hugging Face pour la dictée, la séparation des voix et la voix naturelle, Ollama pour les modèles locaux.
 
 Chaque service applique sa propre politique de confidentialité (Anthropic, Google, OpenRouter…).
+
+## Ce PC et Ollama
+
+- **Ce PC** mesure le processeur, la mémoire et la carte graphique sur ton PC. Pour la mémoire des discussions gardées par Ollama, Compi lit la fin du journal d'Ollama (`%LOCALAPPDATA%\Ollama\server.log`) : seulement des tailles, jamais le contenu.
+- **« Limiter à 2 Go »** écrit la variable `LLAMA_ARG_CACHE_RAM` dans ton compte Windows, puis redémarre Ollama, toujours après ta confirmation. **« Rétablir »** l'efface. Rien d'autre n'est changé dans Ollama.
+- **L'alerte de l'îlot** (mémoire presque pleine) se calcule sur ton PC ; elle se coupe dans Réglages › Îlot.
 
 ## Dictée partout
 
@@ -106,9 +113,10 @@ Elles tournent sans toi, donc avec moins de droits que toi. Avec un cerveau en l
 
 1. Si tu as connecté Claude Code : Réglages › Claude Code › **Déconnecter**. Compi retire ses hooks de `~/.claude/settings.json`.
 2. Réglages › Comportement : désactive **Démarrer avec Windows**.
-3. Désinstalle Compi, puis supprime le dossier `%APPDATA%\Compi`.
-4. Retire l'accès de Compi à Google sur [myaccount.google.com/permissions](https://myaccount.google.com/permissions), et chez chaque service que tu as connecté.
-5. Si tu ne t'en sers plus ailleurs, révoque tes clés API dans la console de chaque service.
+3. Si tu as limité la mémoire des discussions d'Ollama, clique sur **Rétablir** dans Activité › Ce PC (ou supprime la variable `LLAMA_ARG_CACHE_RAM` de ton compte).
+4. Désinstalle Compi, puis supprime le dossier `%APPDATA%\Compi`.
+5. Retire l'accès de Compi à Google sur [myaccount.google.com/permissions](https://myaccount.google.com/permissions), et chez chaque service que tu as connecté.
+6. Si tu ne t'en sers plus ailleurs, révoque tes clés API dans la console de chaque service.
 
 ## Signaler un problème
 

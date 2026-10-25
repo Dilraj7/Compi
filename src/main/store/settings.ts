@@ -32,8 +32,9 @@ export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
  * v13 : enregistreur d'appels (lancé seulement à la main), catégorie « réunions ».
  * v14 : voix naturelle pour la lecture à voix haute (voix de Windows par défaut).
  * v15 : recherche web des cerveaux hors Claude (désactivée), catégorie « recherches web ».
+ * v16 : alerte de l'îlot quand la mémoire du PC est presque pleine (activée).
  */
-export const SETTINGS_VERSION = 15
+export const SETTINGS_VERSION = 16
 
 /** Modèle d'Ollama pour la recherche par le sens : multilingue, bon en français, ~640 Mo. */
 export const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b'
@@ -87,7 +88,7 @@ export const DEFAULT_SETTINGS: Settings = {
     quietEnd: '08:00'
   },
   approvalKeys: { enabled: true, allow: DEFAULT_ALLOW_KEY, deny: DEFAULT_DENY_KEY },
-  monitor: { island: false },
+  monitor: { island: false, memoryAlert: true },
   webSearch: DEFAULT_WEB_SEARCH
 }
 

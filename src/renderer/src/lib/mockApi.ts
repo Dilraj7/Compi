@@ -407,7 +407,7 @@ export function createMockApi(): CompiApi {
     },
     approvalKeys: { enabled: true, allow: 'Alt+Shift+O', deny: 'Alt+Shift+N' },
     approvalKeysTaken: params.get('keys') === 'taken' ? ['Alt+Shift+N'] : [],
-    monitor: { island: params.get('monitor') === 'on' },
+    monitor: { island: params.get('monitor') === 'on', memoryAlert: true },
     // ?web=ollama (clé enregistrée) ou ?web=searxng : recherche web réglée.
     webSearch: {
       provider: params.get('web') === 'ollama' ? 'ollama' : params.get('web') === 'searxng' ? 'searxng' : 'off',
@@ -423,10 +423,16 @@ export function createMockApi(): CompiApi {
   let perfTimer: ReturnType<typeof setInterval> | undefined
   let embedLoaded = perfMode === 'spill'
   let chatLoaded = true
+  // Mémoire des conversations d'Ollama (?perf=full : 6 Go gardés, sans limite réglée).
+  let cacheConfigured: number | undefined = perfMode === 'full' ? undefined : 2048
+  let cacheUsedMb = perfMode === 'full' ? 6250 : 900
   const jitter = (base: number, spread: number): number => Math.max(0, Math.min(100, base + (Math.random() - 0.5) * spread))
   const demoPerf = (): PerfSnapshot => {
     const spill = perfMode === 'spill'
+    const full = perfMode === 'full'
     const now = Date.now()
+    const cacheMb = chatLoaded ? cacheUsedMb : 0
+    const modelRam = chatLoaded ? 1.1 + cacheMb / 1024 : 0
     const models = [
       ...(chatLoaded
         ? [
@@ -457,13 +463,17 @@ export function createMockApi(): CompiApi {
       at: now,
       cpu: Math.round(jitter(spill ? 64 : 18, 12)),
       ram: {
-        usedGb: spill ? 13.4 : 9.2,
+        usedGb: (full ? 7.9 : spill ? 12.3 : 8.1) + modelRam,
         totalGb: 15.9,
         top: [
+          { name: 'Modèle local', gb: modelRam },
           { name: 'Comet', gb: 3.2 },
           { name: 'Claude', gb: 2.2 },
           { name: 'Edge', gb: 1.1 }
         ]
+          .sort((a, b) => b.gb - a.gb)
+          .slice(0, 3),
+        modelGb: modelRam
       },
       gpu:
         perfMode === 'nogpu'
@@ -476,7 +486,13 @@ export function createMockApi(): CompiApi {
               vram,
               busyApp: spill ? { name: 'Steam', util: 31 } : undefined
             },
-      local: { engine: 'ollama', models, chatModel: 'gemma4:12b', keepAlive: settings.local.keepAlive },
+      local: {
+        engine: 'ollama',
+        models,
+        chatModel: 'gemma4:12b',
+        keepAlive: settings.local.keepAlive,
+        cache: { prompts: cacheMb ? (full ? 4 : 1) : 0, usedMb: cacheMb, limitMb: cacheConfigured ?? 8192, configuredMb: cacheConfigured, canSet: true }
+      },
       runs: spill
         ? [
             { at: now - 40 * 60_000, model: 'gemma4:12b', firstTokenMs: 4200, tokensPerSec: 61, inputTokens: 2100 },
@@ -1053,6 +1069,17 @@ export function createMockApi(): CompiApi {
     perfUnload: async (which) => {
       embedLoaded = false
       if (which === 'all') chatLoaded = false
+      const p = demoPerf()
+      perfCh.emit(p)
+      return p
+    },
+    modelHealth: async () => ({}),
+    perfOllamaCache: async (mb) => {
+      await new Promise((r) => setTimeout(r, 900))
+      if (mb !== undefined) cacheConfigured = mb ?? undefined
+      // Ollama redémarre : le modèle et ses discussions gardées sont déchargés.
+      chatLoaded = false
+      cacheUsedMb = 0
       const p = demoPerf()
       perfCh.emit(p)
       return p

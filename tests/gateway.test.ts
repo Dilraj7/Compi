@@ -1,8 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ app: { getPath: () => '.' }, net: { fetch: vi.fn() } }))
-const { applyStyle, createSseMeter, fitLocalTools, hoistSystem, isFirstTurn, prefixGap, promptPrefix, rejectsThinking, summarize } =
-  await import('../src/main/brains/gateway')
+const {
+  applyStyle,
+  createSseMeter,
+  fitLocalTools,
+  hoistSystem,
+  isFirstTurn,
+  keepPrefixStable,
+  prefixGap,
+  promptPrefix,
+  readWarmPrompts,
+  rejectsThinking,
+  summarize
+} = await import('../src/main/brains/gateway')
 
 const engineBody = { model: 'gemma4:12b-compi', max_tokens: 8192, thinking: { type: 'adaptive' }, output_config: { effort: 'high' }, messages: [] }
 
@@ -91,6 +102,82 @@ describe('consignes en tête (cache du modèle local)', () => {
   })
 })
 
+describe('début stable pour tous les modèles locaux', () => {
+  const text = (t: string): { type: 'text'; text: string } => ({ type: 'text', text: t })
+  const note = { role: 'system', content: '<total_tokens>15000000 tokens left</total_tokens>' }
+  const call = { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'get_time', input: {} }] }
+  const result = { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: '11:01' }] }
+  const roles = (b: Record<string, unknown>): string[] => (b.messages as { role: string }[]).map((m) => m.role)
+
+  it('retire la note de comptage du moteur, après une question comme après un résultat d’outil', () => {
+    const out = keepPrefixStable({
+      messages: [
+        { role: 'user', content: 'Bonjour' },
+        { role: 'assistant', content: [text('Salut')] },
+        { role: 'user', content: 'Quelle heure ?' },
+        note,
+        call,
+        result,
+        { role: 'system', content: [text('<total_tokens>14999000 tokens left</total_tokens>')] }
+      ]
+    })
+    expect(roles(out)).toEqual(['user', 'assistant', 'user', 'assistant', 'user'])
+    expect((out.messages as unknown[])[4]).toBe(result)
+  })
+
+  it('chaque appel ne fait qu’allonger le précédent', () => {
+    const turn1 = {
+      messages: [{ role: 'user', content: 'Bonjour' }, { role: 'assistant', content: [text('Salut')] }, { role: 'user', content: 'Heure ?' }, note]
+    }
+    const turn2 = { messages: [...turn1.messages, call, result, note] }
+    const a = keepPrefixStable(turn1).messages as unknown[]
+    const b = keepPrefixStable(turn2).messages as unknown[]
+    expect(b.slice(0, a.length)).toEqual(a)
+  })
+
+  it('un autre message système tardif rejoint, en texte, le message qui le précède', () => {
+    const out = keepPrefixStable({
+      messages: [
+        { role: 'user', content: 'Bonjour' },
+        { role: 'assistant', content: [text('Salut')] },
+        { role: 'user', content: 'Range mes fichiers' },
+        { role: 'system', content: 'Rappel : demande avant de déplacer.' },
+        call,
+        { role: 'system', content: [text('Après l’outil')] }
+      ]
+    })
+    expect(roles(out)).toEqual(['user', 'assistant', 'user', 'assistant', 'user'])
+    expect((out.messages as { content: unknown }[])[2].content).toEqual([text('Range mes fichiers'), text('Rappel : demande avant de déplacer.')])
+    expect((out.messages as { content: unknown }[])[4].content).toEqual([text('Après l’outil')])
+  })
+
+  it('les messages système d’avant la première réponse restent pour la remontée en tête', () => {
+    const first = { system: 'Tu es Compi.', messages: [{ role: 'user', content: 'Bonjour' }, { role: 'system', content: '# Environment' }, note] }
+    const out = hoistSystem(keepPrefixStable(first))
+    expect(out.system).toEqual([text('Tu es Compi.'), text('# Environment')])
+    expect(roles(out)).toEqual(['user'])
+    const plain = { messages: [{ role: 'user', content: 'Bonjour' }] }
+    expect(keepPrefixStable(plain)).toBe(plain)
+  })
+})
+
+describe('consignes gardées pour les derniers modèles', () => {
+  const warm = (model: string, v = 7) => ({ v, target: 'http://127.0.0.1:11434', model, system: [], tools: [] })
+
+  it('lit l’ancien fichier (un seul modèle) et la liste', () => {
+    expect(readWarmPrompts(warm('gemma4:12b-compi'))).toEqual([warm('gemma4:12b-compi')])
+    expect(readWarmPrompts({ prompts: [warm('qwen3:8b-compi'), warm('gemma4:12b-compi')] }).map((p) => p.model)).toEqual(['qwen3:8b-compi', 'gemma4:12b-compi'])
+  })
+
+  it('écarte une ancienne version, un contenu abîmé, et garde 4 modèles au plus', () => {
+    // Version 6 : les groupes d'outils de Compi se chargeaient à la demande, la liste n'est plus la même.
+    expect(readWarmPrompts(warm('qwen3:8b-compi', 6))).toEqual([])
+    expect(readWarmPrompts({ prompts: [null, { v: 7 }, warm('a')] }).map((p) => p.model)).toEqual(['a'])
+    expect(readWarmPrompts(null)).toEqual([])
+    expect(readWarmPrompts({ prompts: ['a', 'b', 'c', 'd', 'e'].map((m) => warm(m)) })).toHaveLength(4)
+  })
+})
+
 describe('écart avec la requête précédente (cache du modèle local)', () => {
   const body = (system: string, tools: { name: string }[] = [{ name: 'a' }, { name: 'b' }], thinking: unknown = { type: 'disabled' }) => ({
     system: [
@@ -169,6 +256,24 @@ describe('outils du modèle local', () => {
     expect(fit.body.system).toEqual(fitLocalTools(body, 65_536, servers).body.system)
     expect(fit.summary).toContain('chargés : Notion')
     expect(fit.wanted).toBe(true)
+  })
+
+  it('outils de Compi : tous d’office avec une fenêtre de 32 000 jetons, à la demande en dessous', () => {
+    const withGroup = { ...body, tools: [big('mcp__compi__timer'), big('mcp__compi__open_app'), big('mcp__compi__move_items')] }
+    const names = (b: Record<string, unknown>): string[] => (b.tools as Array<{ name: string }>).map((t) => t.name)
+    const wide = fitLocalTools(withGroup, 32_768, servers)
+    expect(names(wide.body)).toEqual(['mcp__compi__timer', 'mcp__compi__open_app', 'mcp__compi__move_items'])
+    expect((wide.body.system as Array<{ text: string }>).some((b) => b.text.includes('chargés à la demande : si la demande en a besoin'))).toBe(false)
+    // « ouvre » charge le groupe Windows : la liste d'outils reste la même qu'au tour précédent.
+    const later = fitLocalTools({ ...withGroup, messages: [{ role: 'user', content: 'ouvre la calculatrice' }] }, 32_768, servers)
+    expect(later.body.tools).toEqual(wide.body.tools)
+    expect(later.body.system).toEqual(wide.body.system)
+    const small = fitLocalTools(withGroup, 16_384, servers)
+    expect(names(small.body)).toEqual(['mcp__compi__timer'])
+    expect(names(fitLocalTools({ ...withGroup, messages: [{ role: 'user', content: 'ouvre la calculatrice' }] }, 16_384, servers).body)).toEqual([
+      'mcp__compi__timer',
+      'mcp__compi__open_app'
+    ])
   })
 
   it('routine : seuls les outils de connecteur autorisés d’office', () => {

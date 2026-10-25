@@ -227,6 +227,8 @@ export interface ApprovalKeysSettings {
 export interface MonitorSettings {
   /** Mini-jauges dans l'îlot replié. */
   island: boolean
+  /** L'îlot prévient quand la mémoire du PC est presque pleine avec un modèle local chargé. */
+  memoryAlert: boolean
 }
 
 /** Messages en attente (notifications des messageries), désactivé par défaut. */
@@ -304,6 +306,10 @@ export interface RunStats {
   coldStart?: boolean
   /** Cerveau local : part du modèle dans la carte graphique à la fin (0 à 1). */
   gpuShare?: number
+  /** Cerveau local : appels d'outils écrits en texte, rattrapés en vrais appels. */
+  toolTextRepaired?: number
+  /** Cerveau local : appels écrits en texte qui n'ont pas pu être exécutés. */
+  toolTextFailed?: number
 }
 
 export interface ChatMessage {

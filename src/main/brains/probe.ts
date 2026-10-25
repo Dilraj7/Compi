@@ -9,6 +9,7 @@ import { secrets } from '../store/secrets'
 import { LMSTUDIO_URL, OLLAMA_URL, settings } from '../store/settings'
 import { applyDataPolicy, applyStyle } from './gateway'
 import { prepareLocalBrain } from './local'
+import { noteToolTest } from '../store/modelHealth'
 import { loadedModels } from './ollama'
 
 export interface BrainClient {
@@ -85,6 +86,7 @@ export async function testBrain(brain: Brain): Promise<BrainTestResult> {
       messages: [{ role: 'user', content: "Quelle heure est-il ? Utilise l'outil get_time." }]
     })
     const tools = toolReply.content.some((b) => b.type === 'tool_use')
+    if (brain.provider === 'local') noteToolTest(model, tools)
 
     const parts = [`première réponse en ${(((first || end) - t0) / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} s`]
     if (tokensPerSec) parts.push(`${tokensPerSec} jetons/s`)

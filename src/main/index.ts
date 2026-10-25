@@ -12,6 +12,7 @@ import type {
   DaySettings,
   KeepAlive,
   MediaAction,
+  MonitorSettings,
   MeetingStartOptions,
   MeetingTrack,
   PublicSettings,
@@ -39,7 +40,7 @@ import { cancelGoogleConnect, connectGoogle, disconnectGoogle, googleEndpoints, 
 import { approvals } from './approvals'
 import { hardwareInfo } from './brains/hardware'
 import { stopGateway } from './brains/gateway'
-import { cancelPull, keepWarm, localStatus, ollamaBase, runInstall, startLocalEngine, startPull } from './brains/local'
+import { cancelPull, keepWarm, localStatus, ollamaBase, runInstall, startLocalEngine, startPull, warmChosenModel } from './brains/local'
 import { ollamaFolder, resolveModelsDir, restartOllama } from './brains/modelsDir'
 import { testBrain } from './brains/probe'
 import { startHookServer, stopHookServer } from './bridge/hookServer'
@@ -139,7 +140,9 @@ import { cleanMessagesPatch } from '../shared/messages'
 import { keyTarget } from '../shared/attention'
 import { SOUND_KINDS, shouldPlay, type SoundKind } from '../shared/sounds'
 import type { PillId } from '../shared/pills'
-import { fullscreenNow, hookPerfPower, perfWatch, stopPerf, unloadLocal } from './system/monitor'
+import { fullscreenNow, hookPerfPower, localBusy, perfWatch, refreshPerf, startMemoryAlert, stopPerf, unloadLocal } from './system/monitor'
+import { setCacheLimit } from './brains/ollamaCache'
+import { healthBook } from './store/modelHealth'
 import { createNotchWindow, onPanelOpen, registerIslandIpc, sendIslandCommand, showOpenDialog, showSaveDialog } from './notchWindow'
 import { conversations } from './store/conversations'
 import { secrets } from './store/secrets'
@@ -363,7 +366,17 @@ function registerIpc(): void {
     }
     if (patch.approvalKeys) patch = { ...patch, approvalKeys: cleanApprovalKeys(patch.approvalKeys) }
     if (patch.sounds) patch = { ...patch, sounds: cleanSounds(patch.sounds) }
-    if (patch.monitor) patch = { ...patch, monitor: { island: Boolean(patch.monitor.island) } }
+    if (patch.monitor) {
+      const m = patch.monitor as Partial<MonitorSettings>
+      const cur = settings.get().monitor
+      patch = {
+        ...patch,
+        monitor: {
+          island: typeof m.island === 'boolean' ? m.island : cur.island,
+          memoryAlert: typeof m.memoryAlert === 'boolean' ? m.memoryAlert : cur.memoryAlert
+        }
+      }
+    }
     if (patch.local && patch.local.keepAlive !== undefined && !KEEP_ALIVE.includes(patch.local.keepAlive))
       patch = { ...patch, local: { ...patch.local, keepAlive: settings.get().local.keepAlive } }
     for (const k of [patch.shortcut, patch.quickShortcut, patch.voice?.shortcut]) if (typeof k === 'string') checkNotApprovalKey(k)
@@ -428,6 +441,12 @@ function registerIpc(): void {
     perfWatch(`ui:${String(id).slice(0, 40)}`, Boolean(on), typeof every === 'number' && every > 0 ? every : 2000)
   )
   ipcMain.handle(IPC.perfUnload, (_e, which: string) => unloadLocal(which === 'embed' ? 'embed' : 'all'))
+  // « Limiter à 2 Go », « Rétablir » ou « Redémarrer Ollama » : sur un clic confirmé, jamais pendant une réponse locale.
+  ipcMain.handle(IPC.perfOllamaCache, async (_e, mb: unknown) => {
+    if (localBusy()) throw new Error('Une réponse locale est en cours : attends qu’elle se termine, Ollama doit redémarrer.')
+    await setCacheLimit(ollamaBase(), mb === null ? null : typeof mb === 'number' ? mb : undefined)
+    return refreshPerf()
+  })
   ipcMain.handle(IPC.soundAllowed, (_e, kind: SoundKind, pill?: PillId) => soundAllowed(kind, pill))
 
   ipcMain.handle(IPC.previewHooks, () => previewHooks(settings.get().claudeCode))
@@ -569,6 +588,7 @@ function registerIpc(): void {
     return recommend(answers, await hardwareInfo())
   })
   ipcMain.handle(IPC.testBrain, (_e, brain: Brain) => testBrain(brain))
+  ipcMain.handle(IPC.modelHealth, () => healthBook())
   ipcMain.handle(IPC.setCustomKey, (_e, key: string | null) => {
     secrets.setCustomKey(key)
     log('info', `clé du service « Autre » ${key ? 'enregistrée' : 'supprimée'}`)
@@ -950,6 +970,7 @@ app.whenReady().then(async () => {
   hookMediaPower()
   hookMessagesPower()
   hookPerfPower()
+  startMemoryAlert()
   hookDictationPower()
   hookMeetingsPower()
   onDictationKeyActive(() => emit(IPC.settingsChanged, publicSettings()))
@@ -966,6 +987,17 @@ app.whenReady().then(async () => {
     if (settings.get().provider !== 'local' || Date.now() - lastWarm < 120_000) return
     lastWarm = Date.now()
     void keepWarm()
+  })
+  // Autre modèle local choisi : il se charge et lit les consignes pendant que l'utilisateur écrit.
+  const localBrainKey = (s: Settings): string => (s.provider === 'local' ? `${s.local.engine}|${s.local.baseUrl ?? ''}|${s.local.model}` : '')
+  let warmedBrain = localBrainKey(settings.get())
+  settings.onChange((s) => {
+    const key = localBrainKey(s)
+    if (key === warmedBrain) return
+    warmedBrain = key
+    if (!key) return
+    lastWarm = Date.now()
+    void warmChosenModel()
   })
 
   // Démarrage avec Windows : on n'écrit dans le registre que si l'état réel diffère du réglage

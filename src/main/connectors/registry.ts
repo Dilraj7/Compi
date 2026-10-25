@@ -6,6 +6,7 @@ import type { ConnectorAuthState, ConnectorConfig, ConnectorTestResult } from '.
 import { hostEnv } from '../brains/brain'
 import { secrets } from '../store/secrets'
 import { settings } from '../store/settings'
+import { npxDirect } from './npxDirect'
 import { accessTokenFor, loadOAuth } from './oauth'
 
 /** Lanceurs de paquets qui, sous Windows, sont des scripts .cmd à passer par cmd.exe. */
@@ -40,7 +41,8 @@ async function httpHeaders(c: ConnectorConfig): Promise<Record<string, string> |
 async function toSdkConfig(c: ConnectorConfig): Promise<McpServerConfig | null> {
   if (c.transport === 'stdio') {
     if (!c.command) return null
-    const { command, args } = resolveCommand(c.command, c.args)
+    // Paquet déjà dans le cache de npx : son serveur directement, sans npx ni cmd.exe.
+    const { command, args } = npxDirect(c.command, c.args) ?? resolveCommand(c.command, c.args)
     return { type: 'stdio', command, args, env: secrets.getConnectorSecrets(c.id, c.envKeys) }
   }
   if (!c.url) return null
@@ -104,7 +106,7 @@ export async function withConnector<T>(id: string, fn: (client: McpClient, timeo
       const missing = await missingRuntime(c.command)
       if (missing) throw new ConnectorError(missing)
       const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js')
-      const { command, args } = resolveCommand(c.command, c.args)
+      const { command, args } = npxDirect(c.command, c.args) ?? resolveCommand(c.command, c.args)
       const env = { ...(hostEnv(process.env) as Record<string, string>), ...secrets.getConnectorSecrets(c.id, c.envKeys) }
       await Promise.race([client.connect(new StdioClientTransport({ command, args, env, stderr: 'ignore' })), timeout])
     } else {
