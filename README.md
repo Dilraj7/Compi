@@ -81,7 +81,7 @@ npm install
 npm run build:win
 ```
 
-Lance ensuite `dist/Compi-Setup-0.1.0.exe`. L'installateur n'est pas signé : SmartScreen affiche un avertissement, clique sur **Informations complémentaires**, puis **Exécuter quand même**.
+Lance ensuite `dist/Compi-Setup-0.4.0.exe`. L'installateur n'est pas signé : SmartScreen affiche un avertissement, clique sur **Informations complémentaires**, puis **Exécuter quand même**.
 
 **Au premier lancement**, clique sur l'îlot et choisis ton cerveau, ou laisse Compi te conseiller en 4 questions. Avec Claude, colle ta clé API créée sur [console.anthropic.com](https://console.anthropic.com/settings/keys).
 

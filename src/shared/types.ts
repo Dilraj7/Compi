@@ -2,6 +2,7 @@
 
 import type { MessageNotice } from './claims'
 import type { PrivacyCategory, PrivacySettings } from './privacy'
+import type { StageDetail } from './stage'
 
 export type ModelId = 'claude-opus-5-5' | 'claude-sonnet-5-5' | 'claude-haiku-5-5'
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
@@ -143,6 +144,8 @@ export interface Settings {
   shortcut: string
   /** Raccourci des actions rapides sur la sélection (vide : désactivé). */
   quickShortcut: string
+  /** Raccourci du plein écran, le « poste de pilotage » (vide : désactivé). */
+  fullShortcut: string
   launchAtLogin: boolean
   autoHide: boolean
   advancedMode: boolean
@@ -270,6 +273,7 @@ export interface PublicSettings extends Settings {
   shortcutActive: boolean
   quickShortcutActive: boolean
   voiceShortcutActive: boolean
+  fullShortcutActive: boolean
   /** La touche de la dictée partout est observée (sinon : module absent ou refusé par Windows). */
   dictationKeyActive: boolean
   /** Les raccourcis des autorisations n'ont pas pu être pris la dernière fois (autre application). */
@@ -291,6 +295,8 @@ export interface ToolActivity {
   status: 'running' | 'done' | 'error'
   /** Fichier texte écrit : numéro de la modification, pour le bouton « Annuler ». */
   undo?: string
+  /** Ce que l'étape a changé (fichier, rangement, agenda…), montré par la scène du plein écran. */
+  detail?: StageDetail
 }
 
 /** Vitesse mesurée d'une réponse (cerveaux local et « Autre », via la passerelle). */
@@ -505,9 +511,9 @@ export interface ConnectorTestResult {
   needsLogin?: boolean
 }
 
-/** `attention` : une validation attend (affichée sur place si on discute, sinon dans Activité). */
+/** `attention` : une validation attend (affichée sur place si on discute, sinon dans Activité). `full` : entrer ou sortir du plein écran. */
 export type IslandCommand =
-  'open-chat' | 'toggle' | 'collapse' | 'open-settings' | 'open-activity' | 'attention' | 'open-quick' | 'open-today' | 'voice' | 'focus-pending'
+  'open-chat' | 'toggle' | 'collapse' | 'open-settings' | 'open-activity' | 'attention' | 'open-quick' | 'open-today' | 'voice' | 'focus-pending' | 'full'
 
 // ─── Actions rapides sur la sélection ────────────────────────────────────────
 

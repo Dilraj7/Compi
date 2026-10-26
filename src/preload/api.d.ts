@@ -81,6 +81,8 @@ export interface CompiApi {
   setFocusable(focusable: boolean): void
   /** Le panneau répond au clic sans prendre le clavier tant qu'on n'y clique pas. */
   setActivatable(activatable: boolean): void
+  /** Plein écran : `true` la fenêtre prend tout l'écran ; `false` elle reprend sa taille (après l'animation). */
+  setFull(full: boolean): void
   onIslandCommand(cb: (cmd: IslandCommand) => void): Unsubscribe
   onIslandNotice(cb: (notice: IslandNotice) => void): Unsubscribe
   // réglages
@@ -327,6 +329,8 @@ export interface CompiApi {
   // fichiers / divers
   getPathForFile(file: File): string
   openExternal(url: string): Promise<void>
+  /** Ouvre dans l'Explorateur un dossier confié (rien d'autre). */
+  openFolder(path: string): Promise<void>
   quit(): void
 }
 

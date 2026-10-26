@@ -36,12 +36,16 @@ let panelActivatable = false
 /** La fenêtre a vraiment le focus (panneau ouvert pour discuter, ou clic dedans). */
 let hadFocus = false
 
+/** Plein écran (poste de pilotage) : la fenêtre couvre tout l'écran de l'îlot, barre des tâches comprise. */
+let full = false
+
 /** Tests de bout en bout : décale l'îlot pour ne pas recouvrir celui de Compi installé. */
 const TEST_OFFSET_X = Number(process.env.COMPI_TEST_OFFSET_X) || 0
 
 function targetBounds(): Electron.Rectangle {
   const display = screen.getPrimaryDisplay()
   const { x, y, width } = display.bounds
+  if (full) return display.bounds
   return {
     x: Math.round(x + (width - WIN_WIDTH) / 2) + TEST_OFFSET_X,
     y,
@@ -52,6 +56,23 @@ function targetBounds(): Electron.Rectangle {
 
 export function reposition(): void {
   if (win && !win.isDestroyed()) win.setBounds(targetBounds())
+}
+
+/**
+ * Entrer ou sortir du plein écran. En entrant, la fenêtre prend tout l'écran et le clavier
+ * (l'interface rend déjà la souris active). En sortant, l'interface a d'abord rétréci
+ * l'îlot : la fenêtre reprend sa taille habituelle. Passer à une autre application la
+ * fait sortir (perte du focus → « collapse »).
+ */
+export function setFullMode(on: boolean): void {
+  if (!win || win.isDestroyed() || on === full) return
+  full = on
+  win.setBounds(targetBounds())
+  if (!on) return
+  setPanelActivatable(win, true)
+  win.focus()
+  win.webContents.focus()
+  win.setAlwaysOnTop(true, 'screen-saver')
 }
 
 export function createNotchWindow(): BrowserWindow {
@@ -134,6 +155,8 @@ export function registerIslandIpc(): void {
     // Souris sur l'îlot replié : activable, sinon Windows jette le clic qui doit l'ouvrir.
     refreshActivatable(win)
   })
+
+  ipcMain.on(IPC.setFull, (_e, value: boolean) => setFullMode(value === true))
 
   // Panneau ouvert sans prendre le clavier (validation, Activité…) : activable au clic.
   ipcMain.on(IPC.setActivatable, (_e, value: boolean) => {

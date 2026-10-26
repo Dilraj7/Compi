@@ -6,6 +6,7 @@ import type { CompiApi } from '../../../preload/api'
 import { defaultBrain } from '@shared/brains'
 import { CATALOG } from '@shared/catalog'
 import { recommend } from '@shared/recommend'
+import { stageDetail } from '@shared/stage'
 import type {
   AgendaDraft,
   AgendaPreview,
@@ -311,6 +312,7 @@ export function createMockApi(): CompiApi {
     settingsVersion: 12,
     shortcut: 'Alt+Shift+Space',
     quickShortcut: 'Alt+Shift+C',
+    fullShortcut: 'Alt+Shift+Return',
     launchAtLogin: true,
     autoHide: false,
     advancedMode: false,
@@ -337,6 +339,7 @@ export function createMockApi(): CompiApi {
     hasApiKey: params.get('brain') !== 'none',
     shortcutActive: true,
     quickShortcutActive: true,
+    fullShortcutActive: true,
     connectorSecrets: {},
     privacy: {
       screen: 'ask',
@@ -802,6 +805,69 @@ export function createMockApi(): CompiApi {
       agent.emit({ type: 'done', conversationId, messageId, sentTo: { destination: null, categories: [] } })
       return
     }
+    // Démo de la scène du plein écran : six étapes, détaillées comme par l'assistant (stageDetail).
+    if (/factures/i.test(text)) {
+      const steps: Array<{ name: string; label: string; input: Record<string, unknown>; result: string; card?: string }> = [
+        {
+          name: 'mcp__compi__web_search',
+          label: 'Recherche web : ranger ses factures',
+          input: { query: 'ranger ses factures' },
+          result:
+            'Résultats web pour « ranger ses factures » (Ollama) :\n\n1. Combien de temps garder ses factures\n   https://example.com/garder-factures\n\n2. Classer ses papiers à la maison\n   https://example.org/classer-papiers'
+        },
+        {
+          name: 'mcp__compi__move_items',
+          label: 'Rangement de 3 éléments',
+          input: {},
+          result:
+            'Déplacés (3) :\n- D:\\Docs\\facture-edf-octobre.pdf → D:\\Docs\\Factures\\facture-edf-octobre.pdf\n- D:\\Docs\\orange-2026-10.pdf → D:\\Docs\\Factures\\orange-2026-10.pdf\n- D:\\Docs\\loyer-octobre.pdf → D:\\Docs\\Factures\\loyer-octobre.pdf\n\nPour annuler : undo_moves (rangement m7).'
+        },
+        {
+          name: 'mcp__compi__write_text_file',
+          label: 'Écriture de factures.md',
+          input: { path: 'D:\\Docs\\Factures\\factures.md' },
+          result: 'Contenu écrit dans D:\\Docs\\Factures\\factures.md (5 ligne(s), modification e9). L’utilisateur peut l’annuler.',
+          card: 'D:\\Docs\\Factures\\factures.md\nContenu remplacé · 3 → 5 ligne(s)\n\n  # Factures 2026\n  - septembre : EDF, Orange\n+ - octobre : EDF, Orange, loyer\n+ Total octobre : 1 012 €'
+        },
+        {
+          name: 'mcp__compi__calendar_create_event',
+          label: 'Ajout à l’agenda',
+          input: {},
+          result: "Ajouté à l'agenda : « Payer le loyer », samedi 31 octobre, 10:00 – 10:15."
+        },
+        {
+          name: 'mcp__compi__reminder_create',
+          label: 'Rappel',
+          input: { message: 'Vérifier la facture Orange' },
+          result: 'Rappel programmé : mardi 27 octobre à 09:00.'
+        },
+        {
+          name: 'mcp__compi__open_folder',
+          label: 'Ouverture du dossier',
+          input: { path: 'D:\\Docs\\Factures' },
+          result: "Dossier ouvert dans l'Explorateur : D:\\Docs\\Factures"
+        }
+      ]
+      for (const [i, s] of steps.entries()) {
+        const tool = { id: `s${i}`, name: s.name, label: s.label, status: 'running' as const }
+        agent.emit({ type: 'tool', conversationId, messageId, tool })
+        await wait(650)
+        const detail = stageDetail(s.name, s.input, s.result, { card: s.card })
+        agent.emit({
+          type: 'tool',
+          conversationId,
+          messageId,
+          tool: { ...tool, status: 'done', ...(detail ? { detail } : {}), ...(s.card ? { undo: 'e9' } : {}) }
+        })
+      }
+      for (const chunk of 'C’est rangé : **3 factures** dans **Factures**, le récapitulatif est à jour et le loyer est dans ton agenda.'.match(/.{1,6}/gs) ??
+        []) {
+        agent.emit({ type: 'text', conversationId, messageId, delta: chunk })
+        await wait(24)
+      }
+      agent.emit({ type: 'done', conversationId, messageId, sentTo: { destination: null, categories: [] } })
+      return
+    }
     if (/presse|clipboard/i.test(text)) {
       agent.emit({
         type: 'tool',
@@ -1056,6 +1122,7 @@ export function createMockApi(): CompiApi {
     setInteractive: () => undefined,
     setFocusable: () => undefined,
     setActivatable: () => undefined,
+    setFull: () => undefined,
     onIslandCommand: commands.on,
     onIslandNotice: notices.on,
 
@@ -1790,6 +1857,7 @@ export function createMockApi(): CompiApi {
 
     getPathForFile: (file) => `C:\\Users\\demo\\Downloads\\${file.name}`,
     openExternal: async (url) => void window.open(url, '_blank'),
+    openFolder: async () => undefined,
     quit: () => undefined
   }
 }

@@ -63,6 +63,8 @@ import {
   approvalKeyFree,
   armApprovalKeys,
   disarmApprovalKeys,
+  fullShortcutActive,
+  initFullShortcut,
   initQuickShortcut,
   initShortcut,
   initVoiceShortcut,
@@ -70,6 +72,7 @@ import {
   onApprovalShortcut,
   prettyShortcut,
   quickShortcutActive,
+  setFullShortcut,
   setQuickShortcut,
   setShortcut,
   setVoiceShortcut,
@@ -172,6 +175,7 @@ function publicSettings(): PublicSettings {
     shortcutActive: shortcutActive(),
     quickShortcutActive: quickShortcutActive(),
     voiceShortcutActive: voiceShortcutActive(),
+    fullShortcutActive: fullShortcutActive(),
     dictationKeyActive: dictationKeyActive(),
     approvalKeysTaken,
     hasGoogleClient: hasGoogleClient(),
@@ -381,7 +385,7 @@ function registerIpc(): void {
     }
     if (patch.local && patch.local.keepAlive !== undefined && !KEEP_ALIVE.includes(patch.local.keepAlive))
       patch = { ...patch, local: { ...patch.local, keepAlive: settings.get().local.keepAlive } }
-    for (const k of [patch.shortcut, patch.quickShortcut, patch.voice?.shortcut]) if (typeof k === 'string') checkNotApprovalKey(k)
+    for (const k of [patch.shortcut, patch.quickShortcut, patch.fullShortcut, patch.voice?.shortcut]) if (typeof k === 'string') checkNotApprovalKey(k)
     if (patch.shortcut !== undefined && patch.shortcut !== settings.get().shortcut && !setShortcut(patch.shortcut)) {
       throw new Error(`« ${prettyShortcut(patch.shortcut)} » est déjà utilisé par une autre application (1Password, Claude…). Choisis une autre combinaison.`)
     }
@@ -389,6 +393,9 @@ function registerIpc(): void {
       throw new Error(
         `« ${prettyShortcut(patch.quickShortcut)} » est déjà utilisé (par une autre application ou pour ouvrir Compi). Choisis une autre combinaison.`
       )
+    }
+    if (patch.fullShortcut !== undefined && patch.fullShortcut !== settings.get().fullShortcut && !setFullShortcut(patch.fullShortcut)) {
+      throw new Error(`« ${prettyShortcut(patch.fullShortcut)} » est déjà utilisé (par une autre application ou par Compi). Choisis une autre combinaison.`)
     }
     // La recherche par le sens s'active et se désactive par ses propres boutons.
     if (patch.semantic) {
@@ -906,6 +913,10 @@ function registerIpc(): void {
   ipcMain.handle(IPC.openExternal, (_e, url: string) => {
     if (/^https?:\/\//.test(url)) return shell.openExternal(url)
   })
+  // Seulement un dossier confié, tel qu'il est dans les réglages.
+  ipcMain.handle(IPC.openFolder, async (_e, path: string) => {
+    if (typeof path === 'string' && settings.get().folders.includes(path)) await shell.openPath(path)
+  })
   ipcMain.on(IPC.quit, () => app.quit())
 }
 
@@ -942,6 +953,8 @@ app.whenReady().then(async () => {
   if (quick?.replaced) settings.update({ quickShortcut: quick.accelerator })
   const voiceKey = initVoiceShortcut(settings.get().voice.shortcut)
   if (voiceKey?.replaced) settings.update({ voice: { ...settings.get().voice, shortcut: voiceKey.accelerator } })
+  const fullKey = initFullShortcut(settings.get().fullShortcut)
+  if (fullKey?.replaced) settings.update({ fullShortcut: fullKey.accelerator })
   handleModelScheme()
   cleanPartialDownloads()
   cleanPartialSpeechDownloads()

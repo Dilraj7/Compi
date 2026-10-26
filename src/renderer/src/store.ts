@@ -66,6 +66,8 @@ export interface QuickState {
 interface CompiState {
   settings: PublicSettings | null
   mode: IslandMode
+  /** Plein écran (poste de pilotage) : l'îlot ouvert couvre tout l'écran. */
+  full: boolean
   view: PanelView
   /** Le panneau a le focus clavier (ouvert pour discuter). */
   focused: boolean
@@ -129,7 +131,12 @@ interface CompiState {
 
   setSettings(s: PublicSettings): void
   open(view?: PanelView, opts?: { focus?: boolean; attention?: boolean }): void
+  /** Collapse sort aussi du plein écran (l'îlot se rétracte dans l'encoche). */
   collapse(): void
+  /** Plein écran : l'îlot grandit jusqu'à couvrir l'écran et prend le clavier. */
+  enterFull(): void
+  /** Retour au panneau de l'encoche (Échap, raccourci, bouton). */
+  exitFull(): void
   hover(on: boolean): void
   setView(v: PanelView): void
   showNotice(n: IslandNotice): void
@@ -301,6 +308,7 @@ export const useCompi = create<CompiState>((set, get) => {
   return {
     settings: null,
     mode: 'compact',
+    full: false,
     view: 'chat',
     focused: false,
     attention: false,
@@ -372,10 +380,23 @@ export const useCompi = create<CompiState>((set, get) => {
 
     collapse: () => {
       api().setFocusable(false)
-      set({ mode: restingMode(), focused: false, attention: false, palette: false })
+      // La fenêtre reprend sa taille quand l'îlot a fini de rétrécir (Island).
+      set({ mode: restingMode(), full: false, focused: false, attention: false, palette: false })
       // Le bandeau disparaît avec le panneau : il ne retient plus la notification.
       get().holdNotice(false)
       scheduleSleep()
+    },
+
+    enterFull: () => {
+      if (get().full) return
+      get().holdNotice(false)
+      set({ mode: 'expanded', full: true, focused: true, attention: false, sleepy: false, palette: false })
+      setInteractive(true)
+      api().setFull(true)
+    },
+
+    exitFull: () => {
+      if (get().full) set({ full: false })
     },
 
     hover: (on) => {

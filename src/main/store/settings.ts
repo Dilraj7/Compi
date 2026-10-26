@@ -14,6 +14,7 @@ import { readJson, writeJson } from './jsonFile'
 export const DEFAULT_SHORTCUT = 'Alt+Shift+Space'
 export const DEFAULT_QUICK_SHORTCUT = 'Alt+Shift+C'
 export const DEFAULT_VOICE_SHORTCUT = 'Alt+Shift+V'
+export const DEFAULT_FULL_SHORTCUT = 'Alt+Shift+Return'
 export const DEFAULT_ALLOW_KEY = 'Alt+Shift+O'
 export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
 
@@ -33,8 +34,10 @@ export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
  * v14 : voix naturelle pour la lecture à voix haute (voix de Windows par défaut).
  * v15 : recherche web des cerveaux hors Claude (désactivée), catégorie « recherches web ».
  * v16 : alerte de l'îlot quand la mémoire du PC est presque pleine (activée).
+ * v17 : raccourci du plein écran (Alt+Maj+Entrée). Champ ajouté seulement : la version
+ * précédente relit ces réglages sans rien perdre (retour arrière possible).
  */
-export const SETTINGS_VERSION = 16
+export const SETTINGS_VERSION = 17
 
 /** Modèle d'Ollama pour la recherche par le sens : multilingue, bon en français, ~640 Mo. */
 export const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b'
@@ -51,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   custom: { name: '', baseUrl: '', model: '', effort: 'medium' },
   shortcut: DEFAULT_SHORTCUT,
   quickShortcut: DEFAULT_QUICK_SHORTCUT,
+  fullShortcut: DEFAULT_FULL_SHORTCUT,
   launchAtLogin: true,
   autoHide: false,
   advancedMode: false,

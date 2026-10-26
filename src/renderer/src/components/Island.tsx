@@ -2,17 +2,19 @@
 // (caché → pastille → aperçu → panneau) avec une animation à ressort.
 // Les yeux du robot restent le point focal d'un état à l'autre.
 
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useShallow } from 'zustand/react/shallow'
 import { PILLS, type PillId } from '@shared/pills'
-import { gaugeLevel, gbText, type PerfSnapshot } from '@shared/perf'
+import { gaugeLevel, type PerfSnapshot } from '@shared/perf'
 import { useCompi } from '../store'
 import { useMood } from '../mascot/useMood'
 import { LedEyes, useLook } from '../mascot/LedEyes'
 import { LedDots, prettyShortcut, Ticker } from './ui'
+import { GAUGE_COLOR, MiniGauges, perfLevels } from './Gauges'
 import { PILL_ICONS, openFromNotice } from './Notice'
 import { Panel } from './Panel'
+import { FullScreen } from './FullScreen'
 import { CompactArt, CompactTimer, LedEq, ListeningPeek, MediaPeek, SpeakingPeek, TimerPeek, useLiveMedia } from './Live'
 import { CallPeek, CompactCall, REC } from './CallLive'
 
@@ -27,7 +29,27 @@ const SIZE = {
 
 const SPRING = { type: 'spring', stiffness: 380, damping: 32, mass: 0.85 } as const
 
-function Eyes({ size = 'sm' }: { size?: 'sm' | 'md' }) {
+/** Taille de la fenêtre : en plein écran, l'îlot la remplit (elle grandit juste après l'appel). */
+function useViewport(): { width: number; height: number } {
+  const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight })
+  useEffect(() => {
+    const onResize = (): void => setSize({ width: window.innerWidth, height: window.innerHeight })
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return size
+}
+
+type EyeSize = 'sm' | 'md' | 'lg'
+
+const EYE_SIZE = {
+  sm: { look: 1.1, dot: 2.9, gap: 1.3, eyeGap: 11 },
+  md: { look: 1.4, dot: 3.4, gap: 1.5, eyeGap: 13 },
+  // Plein écran : le robot en grand dans la barre du haut.
+  lg: { look: 1.8, dot: 4.4, gap: 1.9, eyeGap: 17 }
+} as const
+
+function Eyes({ size = 'sm' }: { size?: EyeSize }) {
   // Le regard vit dans un enfant : l'élément partagé (layoutId) ne se redessine pas à
   // chaque mouvement de souris, ce qui relancerait son animation de mise en page.
   return (
@@ -37,12 +59,13 @@ function Eyes({ size = 'sm' }: { size?: 'sm' | 'md' }) {
   )
 }
 
-function LookingEyes({ size }: { size: 'sm' | 'md' }) {
+function LookingEyes({ size }: { size: EyeSize }) {
   const { mood, color } = useMood()
-  const { ref, look } = useLook(size === 'md' ? 1.4 : 1.1)
+  const e = EYE_SIZE[size]
+  const { ref, look } = useLook(e.look)
   return (
     <div ref={ref} className="grid place-items-center">
-      <LedEyes mood={mood} color={color} dot={size === 'md' ? 3.4 : 2.9} gap={size === 'md' ? 1.5 : 1.3} eyeGap={size === 'md' ? 13 : 11} look={look} />
+      <LedEyes mood={mood} color={color} dot={e.dot} gap={e.gap} eyeGap={e.eyeGap} look={look} />
     </div>
   )
 }
@@ -57,58 +80,6 @@ function Fade({ children, className, delay = 0 }: { children: ReactNode; classNa
     >
       {children}
     </motion.div>
-  )
-}
-
-/** Les quatre mesures de l'îlot : processeur, mémoire, carte graphique, mémoire vidéo (0 à 1). */
-function perfLevels(p: PerfSnapshot): Array<{ key: string; label: string; short: string; value: number; text: string }> {
-  const out = [
-    { key: 'cpu', label: 'Processeur', short: 'Processeur', value: p.cpu / 100, text: `${Math.round(p.cpu)} %` },
-    {
-      key: 'ram',
-      label: 'Mémoire',
-      short: 'Mémoire',
-      value: p.ram.usedGb / p.ram.totalGb,
-      text: `${gbText(p.ram.usedGb).replace(' Go', '')}/${gbText(p.ram.totalGb)}`
-    }
-  ]
-  if (p.gpu) {
-    out.push(
-      { key: 'gpu', label: 'Carte graphique', short: 'Graphique', value: p.gpu.util / 100, text: `${Math.round(p.gpu.util)} %` },
-      {
-        key: 'vram',
-        label: 'Mémoire vidéo',
-        short: 'Mém. vidéo',
-        value: p.gpu.vramUsedGb / p.gpu.vramTotalGb,
-        text: `${gbText(p.gpu.vramUsedGb).replace(' Go', '')}/${gbText(p.gpu.vramTotalGb)}`
-      }
-    )
-  }
-  return out
-}
-
-const GAUGE_COLOR = { ok: 'var(--led)', high: '#FBBF24', full: '#F87171' } as const
-
-/** Mini-jauges LED à côté du robot : une colonne de 4 points par mesure. */
-function MiniGauges({ perf }: { perf: PerfSnapshot }) {
-  return (
-    <div className="flex items-end gap-[3px] pl-0.5" title="Processeur · mémoire · carte graphique · mémoire vidéo">
-      {perfLevels(perf).map((g) => {
-        const lit = g.value > 0.02 ? Math.max(1, Math.round(Math.min(1, g.value) * 4)) : 0
-        const color = GAUGE_COLOR[gaugeLevel(g.value)]
-        return (
-          <span key={g.key} className="flex flex-col-reverse gap-[2px]">
-            {[0, 1, 2, 3].map((d) => (
-              <span
-                key={d}
-                className="size-[3px] rounded-[0.5px] transition-colors duration-500"
-                style={d < lit ? { background: color, boxShadow: `0 0 4px ${color}` } : { background: 'rgb(255 255 255 / 0.09)' }}
-              />
-            ))}
-          </span>
-        )
-      })}
-    </div>
   )
 }
 
@@ -314,13 +285,32 @@ export function Island() {
   const addAttachments = useCompi((s) => s.addAttachments)
   const everywhere = useCompi((s) => s.dictation.everywhere !== null)
   const calling = useCompi((s) => s.call !== null)
+  const full = useCompi((s) => s.full)
+  const viewport = useViewport()
   const { color } = useMood()
 
   // Une notification (ou une dictée partout) force l'aperçu le temps de l'afficher, sans prendre le focus.
   // Un appel enregistré n'est jamais caché : au moins la pastille, avec son point rouge.
   const shown = (notice || everywhere) && mode !== 'expanded' ? 'peek' : calling && mode === 'hidden' ? 'compact' : mode
-  const size = shown === 'peek' && notice ? SIZE.notice : SIZE[shown]
+  const size = full ? { ...viewport, radius: 0 } : shown === 'peek' && notice ? SIZE.notice : SIZE[shown]
   const expanded = shown === 'expanded'
+
+  // Sortie du plein écran : la fenêtre reprend sa taille une fois l'îlot rétréci (fin de
+  // l'animation, ou au plus tard 0,9 s), jamais pendant : l'îlot serait coupé.
+  const windowFull = useRef(false)
+  const restoreWindow = (): void => {
+    if (!windowFull.current || useCompi.getState().full) return
+    windowFull.current = false
+    window.compi.setFull(false)
+  }
+  useEffect(() => {
+    if (full) {
+      windowFull.current = true
+      return
+    }
+    const t = setTimeout(restoreWindow, 900)
+    return () => clearTimeout(t)
+  }, [full])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -328,6 +318,8 @@ export function Island() {
       const s = useCompi.getState()
       // Échap pendant la dictée : on l'abandonne, sans refermer.
       if (s.dictation.phase === 'recording' || s.dictation.phase === 'starting') s.cancelDictation()
+      // En plein écran, Échap ramène d'abord le panneau de l'encoche.
+      else if (s.full) s.exitFull()
       else if (s.mode === 'expanded') s.collapse()
     }
     window.addEventListener('keydown', onKey)
@@ -369,11 +361,14 @@ export function Island() {
           height: size.height,
           borderBottomLeftRadius: size.radius,
           borderBottomRightRadius: size.radius,
-          boxShadow: expanded
-            ? `0 34px 90px -24px rgb(0 0 0 / 0.85), 0 0 0 1px ${calling ? `${REC}99` : 'rgb(255 255 255 / 0.07)'}, 0 18px 60px -30px ${color}`
-            : `0 8px 24px -10px rgb(0 0 0 / 0.7), 0 0 0 1px ${calling ? `${REC}b3` : 'rgb(255 255 255 / 0.05)'}, 0 6px 26px -14px ${calling ? REC : color}`
+          boxShadow: full
+            ? `0 0 0 0 transparent, 0 0 0 0 transparent, 0 0 0 0 transparent`
+            : expanded
+              ? `0 34px 90px -24px rgb(0 0 0 / 0.85), 0 0 0 1px ${calling ? `${REC}99` : 'rgb(255 255 255 / 0.07)'}, 0 18px 60px -30px ${color}`
+              : `0 8px 24px -10px rgb(0 0 0 / 0.7), 0 0 0 1px ${calling ? `${REC}b3` : 'rgb(255 255 255 / 0.05)'}, 0 6px 26px -14px ${calling ? REC : color}`
         }}
         transition={SPRING}
+        onAnimationComplete={restoreWindow}
         onClick={!expanded ? () => openFromNotice(notice) : undefined}
         style={{ cursor: expanded ? 'default' : 'pointer' }}
       >
@@ -407,7 +402,7 @@ export function Island() {
               <PeekContent />
             </motion.div>
           )}
-          {shown === 'expanded' && (
+          {shown === 'expanded' && !full && (
             <motion.div
               key="expanded"
               className="h-full"
@@ -418,10 +413,25 @@ export function Island() {
               <Panel eyes={<Eyes size="md" />} />
             </motion.div>
           )}
+          {full && (
+            <motion.div
+              key="full"
+              className="h-full"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: 0.22, delay: 0.12 } }}
+              exit={{ opacity: 0, transition: { duration: 0.08 } }}
+            >
+              <FullScreen eyes={<Eyes size="lg" />} width={viewport.width} />
+            </motion.div>
+          )}
         </AnimatePresence>
       </motion.div>
-      <span className="notch-shoulder left" />
-      <span className="notch-shoulder right" />
+      {!full && (
+        <>
+          <span className="notch-shoulder left" />
+          <span className="notch-shoulder right" />
+        </>
+      )}
     </div>
   )
 }

@@ -58,6 +58,8 @@ function useVoiceRelease(): void {
 /** Une carte ou une question attend : le panneau s'ouvre dessus, et la première prend le clavier. */
 function focusPending(): void {
   const s = useCompi.getState()
+  // Plein écran : la carte est dans la colonne « À toi », elle prend le clavier sur place.
+  if (s.full) return s.focusPending()
   const view = attentionView({ ...pendingInput(s), mode: 'compact' }) ?? 'activity'
   s.open(view, { focus: true, attention: false })
   s.setView(view)
@@ -112,8 +114,16 @@ function useBridge(): void {
       api.onIslandCommand((cmd) => {
         const s = st()
         switch (cmd) {
+          case 'full':
+            if (s.full) s.exitFull()
+            else s.enterFull()
+            break
           case 'open-chat':
-            if (s.mode === 'expanded' && s.focused && (s.view === 'chat' || s.approvals.length + s.questions.length > 0)) s.collapse()
+            // En plein écran, la discussion est déjà là : le raccourci place le curseur dans la saisie.
+            if (s.full) {
+              s.setView('chat')
+              setTimeout(() => document.querySelector<HTMLTextAreaElement>('[data-chat-input]')?.focus(), 80)
+            } else if (s.mode === 'expanded' && s.focused && (s.view === 'chat' || s.approvals.length + s.questions.length > 0)) s.collapse()
             // Une demande attend : on arrive directement sur la carte, au clavier.
             else if (s.approvals.length + s.questions.length > 0) focusPending()
             else s.open('chat', { focus: true })
@@ -141,6 +151,8 @@ function useBridge(): void {
             onVoiceKey()
             break
           case 'attention': {
+            // Plein écran : la carte est déjà dans la colonne « À toi », la vue du centre ne change pas.
+            if (s.full) break
             // En discussion, la carte s'affiche au-dessus de la saisie ; sinon, on montre Activité.
             const view = attentionView(pendingInput(s))
             if (s.mode !== 'expanded') s.open(view ?? 'activity', { attention: true })
@@ -149,9 +161,10 @@ function useBridge(): void {
           }
           case 'collapse':
             // Clic ailleurs : on referme, sauf si une validation attend encore. Le panneau
-            // reste alors cliquable (activable), mais n'a plus le clavier.
+            // reste alors cliquable (activable), mais n'a plus le clavier. Le plein écran se
+            // rétracte toujours : jamais un écran Compi devant l'application choisie.
             if (s.approvals.length + s.questions.length > 0) {
-              useCompi.setState({ focused: false, attention: true, view: attentionView(pendingInput(s)) ?? s.view })
+              useCompi.setState({ full: false, focused: false, attention: true, view: attentionView(pendingInput(s)) ?? s.view })
             } else {
               s.collapse()
             }

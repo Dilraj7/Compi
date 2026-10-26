@@ -11,6 +11,7 @@ import { useMood } from '../mascot/useMood'
 import { RobotHead } from '../mascot/RobotHead'
 import { Markdown } from '../components/Markdown'
 import { PendingRequests } from '../components/Cards'
+import { StageCard } from '../components/Stage'
 import { BrainChip, BrainPicker, useBrainReady, WelcomeBrains } from '../components/BrainPicker'
 import { Button, LedDots, cx, prettyShortcut } from '../components/ui'
 
@@ -80,6 +81,8 @@ function Hero() {
 
 function ToolRow({ tool }: { tool: ToolActivity }) {
   const Icon = tool.name === 'WebSearch' || tool.name === 'WebFetch' ? Globe : FileText
+  // Plein écran : la scène montre ce que l'étape a changé, sous sa ligne.
+  const wide = useCompi((s) => s.full)
   // Fichier texte écrit : « Annuler » remet la version d'avant (refusé si le fichier a changé depuis).
   const [undo, setUndo] = useState<{ busy: boolean; done?: boolean; message?: string }>({ busy: false })
   const cancel = (): void => {
@@ -116,6 +119,7 @@ function ToolRow({ tool }: { tool: ToolActivity }) {
         )}
       </div>
       {undo.message && <div className={`mt-0.5 pl-6.5 ${undo.done ? 'text-led-green' : 'text-led-amber'}`}>{undo.message}</div>}
+      {wide && tool.detail && tool.status === 'done' && !undo.done && <StageCard detail={tool.detail} />}
     </motion.div>
   )
 }
@@ -416,6 +420,7 @@ function Composer() {
   const setDraft = useCompi((s) => s.setDraft)
   const dictating = useCompi((s) => s.dictation.phase === 'recording' || s.dictation.phase === 'starting')
   const voiceKey = useCompi((s) => (s.settings?.voiceShortcutActive ? s.settings.voice.shortcut : ''))
+  const wide = useCompi((s) => s.full)
   const [text, setText] = useState('')
   const ref = useRef<HTMLTextAreaElement>(null)
 
@@ -464,7 +469,7 @@ function Composer() {
   }
 
   return (
-    <div className="shrink-0 px-4 pt-1 pb-4">
+    <div className={cx('shrink-0 px-4 pt-1 pb-4', wide && 'mx-auto w-full max-w-[calc(var(--chat-max)+2rem)]')}>
       <AnimatePresence>
         {brainHint && (
           <motion.div
@@ -572,7 +577,9 @@ function Composer() {
 /** Demandes d'autorisation affichées sur place : pas besoin de changer d'onglet. */
 function PendingTray() {
   const pending = useCompi((s) => s.approvals.length + s.questions.length)
-  if (!pending) return null
+  // En plein écran, elles sont dans la colonne « À toi ».
+  const full = useCompi((s) => s.full)
+  if (!pending || full) return null
   return (
     <div className="scroll-y max-h-[60%] shrink-0 space-y-2 px-5 pt-1 pb-2">
       <PendingRequests />
@@ -582,6 +589,7 @@ function PendingTray() {
 
 export function ChatView() {
   const messages = useCompi((s) => s.messages)
+  const wide = useCompi((s) => s.full)
   const streamingId = useCompi((s) => s.streamingId)
   const pending = useCompi((s) => s.approvals.length + s.questions.length)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -596,8 +604,9 @@ export function ChatView() {
   return (
     <>
       {messages.length === 0 ? (
-        // Une validation attend : on laisse la place à la carte plutôt qu'à l'accueil.
-        pending ? (
+        // Une validation attend : on laisse la place à la carte plutôt qu'à l'accueil
+        // (en plein écran, elle est dans la colonne « À toi »).
+        pending && !wide ? (
           <div className="flex-1" />
         ) : (
           <Hero />
@@ -609,11 +618,14 @@ export function ChatView() {
             const el = e.currentTarget
             stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
           }}
-          className="scroll-y flex-1 space-y-4 px-5 pt-2 pb-3"
+          className="scroll-y flex-1 px-5 pt-2 pb-3"
         >
-          {messages.map((m, i) => (
-            <Message key={m.id} m={m} streaming={m.id === streamingId} last={i === messages.length - 1} />
-          ))}
+          {/* Plein écran : une colonne de lecture centrée (largeur donnée par --chat-max). */}
+          <div className={cx('space-y-4', wide && 'mx-auto w-full max-w-[var(--chat-max)]')}>
+            {messages.map((m, i) => (
+              <Message key={m.id} m={m} streaming={m.id === streamingId} last={i === messages.length - 1} />
+            ))}
+          </div>
         </div>
       )}
       <PendingTray />

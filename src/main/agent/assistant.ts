@@ -22,6 +22,7 @@ import {
 } from '../../shared/privacy'
 import { WEB_SEARCH_TOOL, webSearchLabel, webSearchReady } from '../../shared/webSearch'
 import type { AgentEvent, Brain, ChatMessage, Routine, RunStats, SendRequest, SendResult, SentTo, ToolActivity } from '../../shared/types'
+import { stageDetail } from '../../shared/stage'
 import { approvals } from '../approvals'
 import { brainEnv, hostEnv, resolveBrain } from '../brains/brain'
 import { openRoute, type OpenRoute } from '../brains/gateway'
@@ -315,6 +316,8 @@ interface PermissionContext {
   routine?: string
   /** Ce que les connecteurs déclarent de leurs outils (« destructeur »…), par nom complet d'outil. */
   toolHints?: () => Promise<Map<string, ToolHints>>
+  /** Carte acceptée (écriture d'un fichier) : son détail, repris par la scène du plein écran. */
+  onCard?: (toolUseID: string, detail: string) => void
 }
 
 /** Annotations des outils des connecteurs, lues auprès du moteur une fois les serveurs connectés. */
@@ -397,7 +400,7 @@ function headlessDecision(ctx: PermissionContext, toolName: string, input: Recor
 
 const makeCanUseTool =
   (ctx: PermissionContext): CanUseTool =>
-  async (toolName, input, { signal }) => {
+  async (toolName, input, { signal, toolUseID }) => {
     const s = settings.get()
     const category = TOOL_CATEGORY[toolName]
     const ask = async (card: {
@@ -444,14 +447,15 @@ const makeCanUseTool =
       const plan = await planTextEdit(String(input.path ?? ''), String(input.content ?? ''), input.mode === 'append' ? 'append' : 'replace', allowedFolders())
       if ('error' in plan) return { behavior: 'deny', message: plan.error }
       if (plan.existed && plan.before === plan.after) return allow(input)
+      const detail = describeTextEdit(plan)
       const outcome = await ask({
         title: `Compi veut ${plan.existed ? 'modifier' : 'créer'} « ${basename(plan.path)} »`,
-        detail: describeTextEdit(plan),
+        detail,
         canAlwaysAllow: false
       })
-      return outcome === 'deny'
-        ? { behavior: 'deny', message: "L'utilisateur a refusé cette écriture. Demande-lui ce qu'il veut changer, sans insister." }
-        : allow(input)
+      if (outcome === 'deny') return { behavior: 'deny', message: "L'utilisateur a refusé cette écriture. Demande-lui ce qu'il veut changer, sans insister." }
+      ctx.onCard?.(toolUseID, detail)
+      return allow(input)
     }
 
     // Actions sur Windows et sur le compte Google : une carte à chaque fois, jamais « Toujours ».
@@ -632,6 +636,9 @@ async function runQuery(
   const usage = { input: 0, output: 0, cost: 0 }
   const stderrTail: string[] = []
   const tools = new Map<string, ToolActivity>()
+  // Pour la scène : ce que chaque outil a reçu, et le détail des cartes acceptées.
+  const toolInputs = new Map<string, Record<string, unknown>>()
+  const cards = new Map<string, string>()
   const streamedMessageIds = new Set<string>()
   let currentApiMessageId = ''
 
@@ -706,7 +713,8 @@ async function runQuery(
     external: () => Boolean(conversations.get(conversationId)?.external),
     headless,
     routine: opts.routine,
-    toolHints: () => hintsWithin(toolHints)
+    toolHints: () => hintsWithin(toolHints),
+    onCard: (id, detail) => cards.set(id, detail)
   }
 
   // Cerveau local, en discussion : un moteur gardé ouvert d'un message à l'autre (COMPI_LIVE_ENGINE=0 : comme avant).
@@ -792,6 +800,7 @@ async function runQuery(
           if (block.type === 'tool_use' || block.type === 'mcp_tool_use' || block.type === 'server_tool_use') {
             const input = (block.input ?? {}) as Record<string, unknown>
             const name = block.type === 'mcp_tool_use' ? `mcp__${block.server_name}__${block.name}` : block.name
+            toolInputs.set(block.id, input)
             setTool({ id: block.id, name, label: activityLabel(name === 'web_search' ? 'WebSearch' : name, input), status: 'running' })
           } else if (block.type === 'text' && !streamedMessageIds.has(msg.message.id)) {
             // Repli si le flux partiel n'a pas livré ce texte.
@@ -811,7 +820,10 @@ async function runQuery(
           // Fichier écrit : le numéro de la modification sert au bouton « Annuler » de la discussion.
           const result = typeof block.content === 'string' ? block.content : (block.content ?? []).map((c) => (c.type === 'text' ? c.text : '')).join(' ')
           const undo = t.name === WRITE_TEXT_FILE && !block.is_error ? editIdIn(result) : undefined
-          setTool({ ...t, status: block.is_error ? 'error' : 'done', ...(undo ? { undo } : {}) })
+          const detail = block.is_error
+            ? undefined
+            : stageDetail(t.name, toolInputs.get(t.id) ?? {}, result, { card: cards.get(t.id), structured: msg.tool_use_result })
+          setTool({ ...t, status: block.is_error ? 'error' : 'done', ...(undo ? { undo } : {}), ...(detail ? { detail } : {}) })
         }
         break
       }

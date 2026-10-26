@@ -14,6 +14,7 @@ const api: CompiApi = {
   setInteractive: (v) => ipcRenderer.send(IPC.setInteractive, v),
   setFocusable: (v) => ipcRenderer.send(IPC.setFocusable, v),
   setActivatable: (v) => ipcRenderer.send(IPC.setActivatable, v),
+  setFull: (v) => ipcRenderer.send(IPC.setFull, v),
   onIslandCommand: (cb) => listen(IPC.islandCommand, cb),
   onIslandNotice: (cb) => listen(IPC.islandNotify, cb),
 
@@ -197,6 +198,7 @@ const api: CompiApi = {
 
   getPathForFile: (file) => webUtils.getPathForFile(file),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
+  openFolder: (path) => ipcRenderer.invoke(IPC.openFolder, path),
   quit: () => ipcRenderer.send(IPC.quit)
 }
 

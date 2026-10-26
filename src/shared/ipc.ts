@@ -5,6 +5,7 @@ export const IPC = {
   setInteractive: 'island:set-interactive',
   setFocusable: 'island:set-focusable',
   setActivatable: 'island:set-activatable',
+  setFull: 'island:set-full',
   islandCommand: 'island:command',
   islandNotify: 'island:notify',
   // réglages
@@ -201,5 +202,6 @@ export const IPC = {
   soundAllowed: 'sound:allowed',
   // divers
   openExternal: 'app:open-external',
+  openFolder: 'folders:open',
   quit: 'app:quit'
 } as const

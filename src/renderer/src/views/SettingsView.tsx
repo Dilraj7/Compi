@@ -263,6 +263,18 @@ export function SettingsView() {
                 >
                   <ShortcutInput value={s.quickShortcut} onChange={(quickShortcut) => update({ quickShortcut })} />
                 </Row>
+                <Row
+                  label="Plein écran"
+                  hint={
+                    s.fullShortcutActive ? (
+                      'Compi en grand : ta journée, la discussion et ce qui t’attend. Échap ou une autre appli le ramène dans l’encoche.'
+                    ) : (
+                      <span className="text-led-amber">Inactif : combinaison déjà utilisée. Choisis-en une autre.</span>
+                    )
+                  }
+                >
+                  <ShortcutInput value={s.fullShortcut} onChange={(fullShortcut) => update({ fullShortcut })} />
+                </Row>
                 <div data-settings-focus="keys" className="scroll-mt-2">
                   <Row
                     label="Répondre aux autorisations au clavier"
@@ -369,7 +381,7 @@ export function SettingsView() {
 
         <div className="flex items-center justify-between px-1 pt-1 text-[11.5px] text-fog-700">
           <span>
-            <span className="led-text text-fog-500">Compi</span> v0.1.0 · fait avec Claude
+            <span className="led-text text-fog-500">Compi</span> v0.4.0 · fait avec Claude
           </span>
           <Button size="sm" variant="ghost" onClick={() => window.compi.quit()}>
             <Power size={13} /> Quitter

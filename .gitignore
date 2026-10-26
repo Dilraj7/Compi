@@ -29,3 +29,6 @@ coverage/
 
 # Notes et sauvegardes personnelles (jamais publiées)
 perso/
+
+# Anciens installateurs gardés pour revenir en arrière
+installers/

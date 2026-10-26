@@ -71,6 +71,8 @@ export const ApprovalCard = forwardRef<HTMLDivElement, { a: ApprovalRequest; onD
   function ApprovalCard({ a, onDecide, hint }, ref) {
     const [busy, setBusy] = useState(false)
     const [keys, setKeys] = useState(false)
+    // Plein écran : tout le détail, sans petite zone à faire défiler.
+    const full = useCompi((s) => s.full)
     const decide = (d: 'allow' | 'deny' | 'always'): void => {
       if (busy) return
       setBusy(true)
@@ -117,7 +119,7 @@ export const ApprovalCard = forwardRef<HTMLDivElement, { a: ApprovalRequest; onD
             )}
             {a.detail && !cloud && (
               <div
-                className={`mt-2 ${a.toolName === 'mcp__compi__write_text_file' ? 'max-h-52' : 'max-h-24'} overflow-auto rounded-xl bg-black/60 px-2.5 py-2 font-mono text-[11.5px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap text-fog-300 ring-1 ring-inset ring-white/[0.06] select-text`}
+                className={`mt-2 ${full ? 'max-h-[45vh]' : a.toolName === 'mcp__compi__write_text_file' ? 'max-h-52' : 'max-h-24'} overflow-auto rounded-xl bg-black/60 px-2.5 py-2 font-mono text-[11.5px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap text-fog-300 ring-1 ring-inset ring-white/[0.06] select-text`}
               >
                 {a.detail}
               </div>

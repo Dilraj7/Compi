@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Activity, Brain, History, MessageCircle, Plug, Settings2, SquarePen, Sun, X } from 'lucide-react'
+import { Activity, Brain, History, Maximize2, MessageCircle, Plug, Settings2, SquarePen, Sun, X } from 'lucide-react'
 import type { PanelView } from '@shared/types'
 import { useCompi } from '../store'
 import { useMood } from '../mascot/useMood'
-import { IconButton } from './ui'
+import { IconButton, prettyShortcut } from './ui'
 import { CommandPalette } from './CommandPalette'
 import { NoticeBanner } from './Notice'
 import { CallBanner } from './CallLive'
@@ -40,15 +40,94 @@ const VIEWS: Record<PanelView, () => ReactNode> = {
   memory: () => <MemoryView />
 }
 
-export function Panel({ eyes }: { eyes: ReactNode }) {
+/** « Compi » et son humeur, en haut à gauche (encoche et plein écran). */
+export function CompiTitle() {
+  const { mood, color } = useMood()
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span className="led-text text-[15px] text-fog-100">Compi</span>
+      <motion.span key={mood} initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} className="truncate text-[11.5px] text-fog-500">
+        <span className="mr-1.5 inline-block size-1.5 rounded-full align-middle" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
+        {STATUS[mood]}
+      </motion.span>
+    </div>
+  )
+}
+
+/** Onglets de l'en-tête, puis `children` après un séparateur (fermer, plein écran…). */
+export function PanelNav({ children }: { children?: ReactNode }) {
   const view = useCompi((s) => s.view)
   const setView = useCompi((s) => s.setView)
-  const collapse = useCompi((s) => s.collapse)
   const newConversation = useCompi((s) => s.newConversation)
   const pending = useCompi((s) => s.approvals.length + s.questions.length)
   const hasMessages = useCompi((s) => s.messages.length > 0)
+  return (
+    <nav className="flex items-center justify-end gap-0.5">
+      {view === 'chat' && hasMessages && (
+        <IconButton label="Nouvelle discussion (Ctrl+N)" onClick={newConversation}>
+          <SquarePen size={15} />
+        </IconButton>
+      )}
+      <IconButton label="Discussion (Ctrl+1)" active={view === 'chat'} onClick={() => setView('chat')}>
+        <MessageCircle size={16} />
+      </IconButton>
+      <IconButton label="Aujourd’hui (Ctrl+2)" active={view === 'today'} onClick={() => setView('today')}>
+        <Sun size={16} />
+      </IconButton>
+      <IconButton label="Activité (Ctrl+3)" active={view === 'activity'} badge={pending} onClick={() => setView('activity')}>
+        <Activity size={16} />
+      </IconButton>
+      <IconButton label="Historique (Ctrl+4)" active={view === 'history'} onClick={() => setView('history')}>
+        <History size={16} />
+      </IconButton>
+      <IconButton label="Ce que je sais de toi, presse-papier (Ctrl+5)" active={view === 'memory'} onClick={() => setView('memory')}>
+        <Brain size={16} />
+      </IconButton>
+      <IconButton label="Extensions : dossiers, connecteurs, compétences (Ctrl+6)" active={view === 'connectors'} onClick={() => setView('connectors')}>
+        <Plug size={16} />
+      </IconButton>
+      <IconButton label="Réglages (Ctrl+7) · Ctrl+K pour chercher" active={view === 'settings'} onClick={() => setView('settings')}>
+        <Settings2 size={16} />
+      </IconButton>
+      <span className="mx-1 h-4 w-px bg-white/10" />
+      {children}
+    </nav>
+  )
+}
+
+/** La vue ouverte, avec le bandeau des notifications et la palette Ctrl+K. */
+export function PanelBody() {
+  const view = useCompi((s) => s.view)
   const palette = useCompi((s) => s.palette)
-  const { mood, color } = useMood()
+  return (
+    <div className="relative min-h-0 flex-1">
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={view}
+          className="absolute inset-0 flex flex-col"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.2, 0.8, 0.2, 1] } }}
+          exit={{ opacity: 0, y: -4, transition: { duration: 0.1 } }}
+        >
+          {VIEWS[view]()}
+        </motion.div>
+      </AnimatePresence>
+      <NoticeBanner />
+      <AnimatePresence>{palette && <CommandPalette key="palette" />}</AnimatePresence>
+    </div>
+  )
+}
+
+/** Libellé du bouton « Plein écran », avec son raccourci s'il est actif. */
+export function fullLabel(settings: { fullShortcut: string; fullShortcutActive: boolean } | null): string {
+  return settings?.fullShortcutActive && settings.fullShortcut ? `Plein écran (${prettyShortcut(settings.fullShortcut)})` : 'Plein écran'
+}
+
+export function Panel({ eyes }: { eyes: ReactNode }) {
+  const collapse = useCompi((s) => s.collapse)
+  const enterFull = useCompi((s) => s.enterFull)
+  const settings = useCompi((s) => s.settings)
+  const { color } = useMood()
 
   return (
     <div className="relative flex h-full flex-col">
@@ -60,67 +139,23 @@ export function Panel({ eyes }: { eyes: ReactNode }) {
       <div className="dot-grid pointer-events-none absolute inset-0 [mask-image:linear-gradient(to_bottom,black,transparent_70%)]" />
 
       <header className="relative grid h-[58px] shrink-0 grid-cols-[1fr_auto_1fr] items-center px-4">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="led-text text-[15px] text-fog-100">Compi</span>
-          <motion.span key={mood} initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} className="truncate text-[11.5px] text-fog-500">
-            <span className="mr-1.5 inline-block size-1.5 rounded-full align-middle" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
-            {STATUS[mood]}
-          </motion.span>
-        </div>
+        <CompiTitle />
 
         <div className="px-3">{eyes}</div>
 
-        <nav className="flex items-center justify-end gap-0.5">
-          {view === 'chat' && hasMessages && (
-            <IconButton label="Nouvelle discussion (Ctrl+N)" onClick={newConversation}>
-              <SquarePen size={15} />
-            </IconButton>
-          )}
-          <IconButton label="Discussion (Ctrl+1)" active={view === 'chat'} onClick={() => setView('chat')}>
-            <MessageCircle size={16} />
+        <PanelNav>
+          <IconButton label={fullLabel(settings)} onClick={enterFull}>
+            <Maximize2 size={15} />
           </IconButton>
-          <IconButton label="Aujourd’hui (Ctrl+2)" active={view === 'today'} onClick={() => setView('today')}>
-            <Sun size={16} />
-          </IconButton>
-          <IconButton label="Activité (Ctrl+3)" active={view === 'activity'} badge={pending} onClick={() => setView('activity')}>
-            <Activity size={16} />
-          </IconButton>
-          <IconButton label="Historique (Ctrl+4)" active={view === 'history'} onClick={() => setView('history')}>
-            <History size={16} />
-          </IconButton>
-          <IconButton label="Ce que je sais de toi, presse-papier (Ctrl+5)" active={view === 'memory'} onClick={() => setView('memory')}>
-            <Brain size={16} />
-          </IconButton>
-          <IconButton label="Extensions : dossiers, connecteurs, compétences (Ctrl+6)" active={view === 'connectors'} onClick={() => setView('connectors')}>
-            <Plug size={16} />
-          </IconButton>
-          <IconButton label="Réglages (Ctrl+7) · Ctrl+K pour chercher" active={view === 'settings'} onClick={() => setView('settings')}>
-            <Settings2 size={16} />
-          </IconButton>
-          <span className="mx-1 h-4 w-px bg-white/10" />
           <IconButton label="Fermer (Échap)" onClick={collapse}>
             <X size={16} />
           </IconButton>
-        </nav>
+        </PanelNav>
       </header>
 
       <CallBanner />
 
-      <div className="relative min-h-0 flex-1">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={view}
-            className="absolute inset-0 flex flex-col"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.2, 0.8, 0.2, 1] } }}
-            exit={{ opacity: 0, y: -4, transition: { duration: 0.1 } }}
-          >
-            {VIEWS[view]()}
-          </motion.div>
-        </AnimatePresence>
-        <NoticeBanner />
-        <AnimatePresence>{palette && <CommandPalette key="palette" />}</AnimatePresence>
-      </div>
+      <PanelBody />
     </div>
   )
 }

@@ -9,7 +9,8 @@ import { TimeSavedSection } from './TimeSavedSection'
 import { UsageSection } from './UsageSection'
 
 export function ActivityView() {
-  const pending = useCompi((s) => s.approvals.length + s.questions.length)
+  // En plein écran, les demandes sont dans la colonne « À toi ».
+  const pending = useCompi((s) => (s.full ? 0 : s.approvals.length + s.questions.length))
   const sessions = useCompi((s) => s.sessions)
   const connected = useCompi((s) => s.settings?.claudeCode.connected)
   const setView = useCompi((s) => s.setView)

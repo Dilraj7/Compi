@@ -14,6 +14,7 @@ import {
   History,
   Keyboard,
   Mail,
+  Maximize2,
   MessageCircle,
   MessagesSquare,
   Mic,
@@ -33,7 +34,7 @@ import {
 import { searchPalette, type PaletteEntry } from '@shared/palette'
 import type { ConversationMeta, PanelView } from '@shared/types'
 import { TAB_ORDER, useCompi, type SettingsFocus } from '../store'
-import { cx } from './ui'
+import { cx, prettyShortcut } from './ui'
 
 interface Item extends PaletteEntry {
   icon: LucideIcon
@@ -99,6 +100,15 @@ function useItems(conversations: ConversationMeta[]): Item[] {
         run: () => void window.compi.startTimer(25)
       },
       { id: 'pomodoro', group: 'Actions', label: 'Pomodoro', icon: Timer, keywords: 'concentration focus pause', run: () => void window.compi.startPomodoro() },
+      {
+        id: 'full',
+        group: 'Actions',
+        label: 'Plein écran (ou revenir à l’encoche)',
+        icon: Maximize2,
+        keywords: 'grand ecran poste de pilotage agrandir encoche reduire',
+        hint: settings?.fullShortcutActive && settings.fullShortcut ? prettyShortcut(settings.fullShortcut) : undefined,
+        run: () => (s().full ? s().exitFull() : s().enterFull())
+      },
       {
         id: 'call',
         group: 'Actions',
