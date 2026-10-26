@@ -8,7 +8,9 @@ import {
   mergeVoices,
   nameVoice,
   newSegmenter,
+  oneVoice,
   parseSummary,
+  peopleChoice,
   SAMPLE_RATE,
   segmentChunk,
   similarity,
@@ -193,6 +195,111 @@ describe('voix des autres', () => {
       [20, 40],
       [40, 45]
     ])
+  })
+
+  it('un moment où deux voix se chevauchent n’est transcrit qu’une fois', () => {
+    // Cas réel du 25/10 : « What's on your mind? » écrit deux fois, sous deux noms.
+    expect(
+      mergeVoices([
+        { start: 16, end: 18.4, speaker: 3 },
+        { start: 17.8, end: 18.4, speaker: 2 }
+      ])
+    ).toEqual([{ start: 16, end: 18.4, who: 's1' }])
+    expect(
+      mergeVoices([
+        { start: 11.3, end: 12, speaker: 1 },
+        { start: 11.3, end: 16, speaker: 2 }
+      ])
+    ).toEqual([{ start: 11.3, end: 16, who: 's1' }])
+    expect(
+      mergeVoices([
+        { start: 0, end: 3, speaker: 0 },
+        { start: 2.5, end: 6, speaker: 1 }
+      ])
+    ).toEqual([
+      { start: 0, end: 3, who: 's1' },
+      { start: 3, end: 6, who: 's2' }
+    ])
+  })
+
+  it('automatique : une voix faite seulement de bouts de moins d’une seconde rejoint la plus proche', () => {
+    const segs = [
+      { start: 0, end: 4, speaker: 0 },
+      { start: 4.5, end: 5.2, speaker: 1 },
+      { start: 5.5, end: 9, speaker: 0 },
+      { start: 12, end: 14, speaker: 2 }
+    ]
+    expect(mergeVoices(segs)).toEqual([
+      { start: 0, end: 9, who: 's1' },
+      { start: 12, end: 14, who: 's2' }
+    ])
+    // Nombre de personnes choisi : chaque voix trouvée est gardée.
+    expect(mergeVoices(segs, false).map((p) => p.who)).toEqual(['s1', 's2', 's1', 's3'])
+    // Une vraie phrase (1 s ou plus) garde sa voix ; si toutes les voix sont courtes, rien n'est réuni.
+    const longer = mergeVoices([
+      { start: 0, end: 4, speaker: 0 },
+      { start: 5, end: 6.2, speaker: 1 }
+    ])
+    expect(longer.map((p) => p.who)).toEqual(['s1', 's2'])
+    const short = mergeVoices([
+      { start: 0, end: 0.6, speaker: 0 },
+      { start: 2, end: 2.7, speaker: 1 }
+    ])
+    expect(short.map((p) => p.who)).toEqual(['s1', 's2'])
+  })
+
+  it('cas réel du 25/10 : un seul agent vocal coupé en 5 voix', () => {
+    const real = [
+      [11.3, 12, 1],
+      [11.3, 16, 2],
+      [16, 18.4, 3],
+      [17.8, 18.4, 2],
+      [31.5, 34.5, 4],
+      [43.3, 59.8, 4],
+      [64.7, 77.1, 4],
+      [81, 82, 4],
+      [90, 103.3, 4],
+      [103, 103.3, 2],
+      [117.6, 118.3, 5],
+      [118.3, 124, 2],
+      [124, 127, 4],
+      [127, 128, 2],
+      [128, 130.1, 4],
+      [130, 131, 2],
+      [131, 133, 4],
+      [133, 134.4, 1],
+      [135.8, 140.2, 2],
+      [150.3, 151, 5],
+      [153, 170, 4],
+      [170, 171.7, 2],
+      [179, 182.7, 1],
+      [182, 196, 4],
+      [196, 202, 2],
+      [202, 205.3, 4],
+      [228.5, 228.9, 5],
+      [231, 231.8, 5],
+      [232, 233, 2],
+      [233, 234, 4],
+      [234, 242, 2],
+      [242, 247.8, 4],
+      [257, 260.9, 3]
+    ].map(([start, end, speaker]) => ({ start, end, speaker }))
+    const auto = mergeVoices(real)
+    // Plus aucun moment transcrit deux fois ; les « Yeah » (voix 5) rejoignent leur voisine.
+    expect(auto.every((p, i) => i === 0 || p.start >= auto[i - 1].end)).toBe(true)
+    expect(new Set(auto.map((p) => p.who)).size).toBe(4)
+    // Seul le nombre de personnes indiqué ramène l'appel à une voix (pas de séparation).
+    expect(new Set(mergeVoices(real, false).map((p) => p.who)).size).toBe(5)
+  })
+
+  it('une seule personne en face : toutes ses phrases à la même voix', () => {
+    const lines = oneVoice([
+      { start: 0, end: 1, who: 'me', text: 'Bonjour' },
+      { start: 1, end: 2, who: 'others', text: 'Bonjour Alex' }
+    ])
+    expect(lines.map((l) => l.who)).toEqual(['me', 's1'])
+    expect(peopleChoice(2)).toBe(2)
+    for (const bad of [0, 5, 1.5, '2', null, undefined]) expect(peopleChoice(bad)).toBeUndefined()
   })
 
   it('nomme les voix', () => {

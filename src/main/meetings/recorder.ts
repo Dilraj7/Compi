@@ -19,6 +19,8 @@ import {
   MEETING_MAX_MS,
   mergeVoices,
   newSegmenter,
+  oneVoice,
+  peopleChoice,
   SAMPLE_RATE,
   segmentChunk,
   type SegmenterState,
@@ -93,7 +95,8 @@ export async function startMeeting(opts: MeetingStartOptions): Promise<MeetingSt
     hasSummary: false,
     audio: true,
     lines: [],
-    names: {}
+    names: {},
+    people: opts.others ? peopleChoice(opts.people) : undefined
   }
   mkdirSync(meetingDir(id), { recursive: true })
   const tracks: Active['tracks'] = {}
@@ -185,6 +188,14 @@ function enqueue(a: Active, track: MeetingTrack, span: SpeechSpan): void {
       event({ type: 'notice', id: a.meeting.id, message: 'La transcription en direct s’est arrêtée ; le son continue d’être enregistré.' })
     }
   })
+}
+
+/** Personnes en face, changées pendant l'appel (jusqu'à l'arrêt) ; `undefined` : automatique. */
+export function setMeetingPeople(id: string, people: unknown): boolean {
+  const a = active
+  if (!a || a.meeting.id !== id || a.stopping || !a.meeting.others) return false
+  a.meeting = { ...a.meeting, people: peopleChoice(people) }
+  return true
 }
 
 /** Morceau de son d'une piste (16 bits, 16 kHz), envoyé par l'îlot. */
@@ -308,13 +319,17 @@ function spansOfTrack(id: string, track: MeetingTrack): SpeechSpan[] {
   }
 }
 
-/** Voix des autres séparées, si le pack est là et l'option active ; sinon `null` (on garde « Les autres »). */
+/**
+ * Voix des autres séparées, si le pack est là et l'option active ; sinon `null` (on garde
+ * « Les autres »). Le nombre de personnes indiqué par l'utilisateur est imposé à la séparation ;
+ * une seule personne : rien à séparer.
+ */
 async function separateVoices(m: Meeting): Promise<MeetingLine[] | null> {
-  if (!m.others || !settings.get().meetings.voices || !speechModelFiles('voices') || !trackSamples(m.id, 'others')) return null
+  if (!m.others || m.people === 1 || !settings.get().meetings.voices || !speechModelFiles('voices') || !trackSamples(m.id, 'others')) return null
   try {
     event({ type: 'processing', id: m.id, step: 'Je sépare les voix…' })
     const seconds = trackSamples(m.id, 'others') / SAMPLE_RATE
-    const pieces = mergeVoices(await diarizeTrack(audioPath(m.id, 'others'), seconds))
+    const pieces = mergeVoices(await diarizeTrack(audioPath(m.id, 'others'), seconds, m.people), !m.people)
     if (!pieces.length) return null
     const spans = pieces.map((p) => ({ from: Math.floor(p.start * SAMPLE_RATE), to: Math.ceil(p.end * SAMPLE_RATE), who: p.who }))
     return await transcribeTrack(m, 'others', spans, 'Je réécris chaque voix')
@@ -329,6 +344,7 @@ async function finalize(meeting: Meeting, separated = false): Promise<MeetingMet
   let m = meeting
   const voices = separated ? null : await separateVoices(m)
   if (voices) m = { ...m, lines: [...m.lines.filter((l) => l.who === 'me'), ...voices], speakers: countVoices(voices) }
+  else if (m.people === 1 && m.lines.some((l) => l.who === 'others')) m = { ...m, lines: oneVoice(m.lines), speakers: 1 }
   const keep = settings.get().meetings.keepAudio
   m = { ...m, lines: dropEchoes([...m.lines].sort(byTime)), status: 'done', audio: keep }
   if (!keep) deleteAudio(m.id)

@@ -1323,7 +1323,8 @@ export function createMockApi(): CompiApi {
         hasSummary: false,
         audio: true,
         lines: [],
-        names: {}
+        names: {},
+        people: opts.others ? opts.people : undefined
       }
       let i = 0
       const timer = setInterval(() => {
@@ -1365,6 +1366,11 @@ export function createMockApi(): CompiApi {
       recording = null
       meetingsCh.emit(meetingList())
       meetingCh.emit({ type: 'stopped', id, message: 'Enregistrement annulé : rien n’a été gardé.' })
+    },
+    meetingPeople: async (id, people) => {
+      if (recording?.meeting.id !== id || !recording.meeting.others) return false
+      recording.meeting.people = people
+      return true
     },
     onMeetingEvent: meetingCh.on,
     meetings: async () => meetingList(),

@@ -132,17 +132,51 @@ export interface VoiceSegment {
   speaker: number
 }
 
+/** Personnes en face que l'utilisateur peut indiquer avant ou pendant l'appel (sinon : automatique). */
+export const PEOPLE_CHOICES = [1, 2, 3, 4] as const
+
+/** Nombre de personnes en face choisi, ou `undefined` (automatique). */
+export const peopleChoice = (n: unknown): number | undefined => (typeof n === 'number' && (PEOPLE_CHOICES as readonly number[]).includes(n) ? n : undefined)
+
+/** Une seule personne en face : ses phrases forment une seule voix, que l'on peut nommer. */
+export const oneVoice = (lines: MeetingLine[]): MeetingLine[] => lines.map((l) => (l.who === 'others' ? { ...l, who: 's1' } : l))
+
+/** En automatique, une voix dont aucun morceau n'atteint cette durée (secondes) n'est pas gardée seule. */
+const TINY_VOICE = 1
+
+const gap = (a: VoiceSegment, b: VoiceSegment): number => Math.max(0, a.start - b.end, b.start - a.end)
+
 /**
- * Segments de la séparation des voix → morceaux à transcrire : les voisins
- * d'une même voix sont réunis (moins de 0,6 s d'écart, 20 s au plus), les trop
- * longs coupés, les miettes retirées. Les voix sont numérotées dans l'ordre où
- * elles parlent : s1, s2…
+ * Segments de la séparation des voix → morceaux à transcrire :
+ * - un moment où deux voix se chevauchent n'est transcrit qu'une fois : le morceau
+ *   couvert par un autre est retiré, celui qui dépasse commence à la fin de l'autre ;
+ * - en automatique (`auto`), une voix qui n'a dit que des bouts de moins d'une
+ *   seconde (« Yeah. ») rejoint la voix la plus proche dans le temps : sur un bout
+ *   si court, l'empreinte de la voix n'est pas fiable (cas réel du 25/10 : un seul
+ *   agent vocal coupé en 5 voix) ;
+ * - les voisins d'une même voix sont réunis (moins de 0,6 s d'écart, 20 s au plus),
+ *   les trop longs coupés, les miettes retirées.
+ * Les voix sont numérotées dans l'ordre où elles parlent : s1, s2…
  */
-export function mergeVoices(segments: VoiceSegment[]): { start: number; end: number; who: string }[] {
-  const sorted = segments.filter((s) => s.end - s.start >= 0.3).sort((a, b) => a.start - b.start)
+export function mergeVoices(segments: VoiceSegment[], auto = true): { start: number; end: number; who: string }[] {
+  const sorted = segments.filter((s) => s.end - s.start >= 0.3).sort((a, b) => a.start - b.start || b.end - a.end)
+  const once: VoiceSegment[] = []
+  let covered = -Infinity
+  for (const s of sorted) {
+    const start = Math.max(s.start, covered)
+    if (s.end - start >= 0.3) once.push({ ...s, start })
+    covered = Math.max(covered, s.end)
+  }
+  const longest = new Map<number, number>()
+  for (const s of once) longest.set(s.speaker, Math.max(longest.get(s.speaker) ?? 0, s.end - s.start))
+  const tiny = (s: VoiceSegment): boolean => auto && longest.get(s.speaker)! < TINY_VOICE
+  const solid = once.filter((s) => !tiny(s))
+  const voiced = solid.length
+    ? once.map((s) => (tiny(s) ? { ...s, speaker: solid.reduce((best, o) => (gap(o, s) < gap(best, s) ? o : best)).speaker } : s))
+    : once
   const ids = new Map<number, string>()
   const out: { start: number; end: number; who: string }[] = []
-  for (const s of sorted) {
+  for (const s of voiced) {
     if (!ids.has(s.speaker)) ids.set(s.speaker, `s${ids.size + 1}`)
     const who = ids.get(s.speaker)!
     const last = out.at(-1)

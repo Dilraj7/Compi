@@ -115,13 +115,14 @@ import {
   recordingId,
   recoverMeetings,
   resumeMeeting,
+  setMeetingPeople,
   startMeeting,
   stopMeeting,
   takeDisplayCapture
 } from './meetings/recorder'
 import { deleteMeeting, getMeeting, isMeetingId, listMeetings, updateMeeting } from './meetings/store'
 import { summarizeMeeting } from './meetings/summary'
-import { meetingMarkdown, nameVoice } from '../shared/meetings'
+import { meetingMarkdown, nameVoice, peopleChoice } from '../shared/meetings'
 import { clearSent, listSent } from './privacy/log'
 import { clearApprovalLog, listApprovalLog } from './privacy/approvalLog'
 import { claudeCodeUsage, refreshClaudeCodeUsage, startUsageWatch, stopUsageWatch } from './usage/claudeCode'
@@ -786,8 +787,9 @@ function registerIpc(): void {
     return id
   }
   ipcMain.handle(IPC.meetingStart, (_e, opts: MeetingStartOptions) =>
-    startMeeting({ engine: opts?.engine === 'omnilingual' ? 'omnilingual' : 'parakeet', others: opts?.others === true })
+    startMeeting({ engine: opts?.engine === 'omnilingual' ? 'omnilingual' : 'parakeet', others: opts?.others === true, people: peopleChoice(opts?.people) })
   )
+  ipcMain.handle(IPC.meetingPeople, (_e, id: string, people: unknown) => setMeetingPeople(String(id), people))
   ipcMain.on(IPC.meetingAudio, (_e, id: string, track: MeetingTrack, data: Int16Array) => {
     if (track === 'me' || track === 'others') meetingAudio(String(id), track, data)
   })

@@ -152,6 +152,7 @@ export const IPC = {
   meetingAudio: 'meetings:audio',
   meetingStop: 'meetings:stop',
   meetingDiscard: 'meetings:discard',
+  meetingPeople: 'meetings:people',
   meetingEvent: 'meetings:event',
   meetingsList: 'meetings:list',
   meetingGet: 'meetings:get',

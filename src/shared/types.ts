@@ -899,12 +899,16 @@ export interface Meeting extends MeetingMeta {
   /** Noms donnés aux voix : `{ s1: 'Paul' }`. */
   names: Record<string, string>
   summary?: MeetingSummary
+  /** Personnes en face indiquées par l'utilisateur (1 à 4) ; absent : les voix sont comptées automatiquement. */
+  people?: number
 }
 
 export interface MeetingStartOptions {
   engine: SpeechModelId
   /** Capter aussi le son de l'ordinateur (les autres participants). */
   others: boolean
+  /** Personnes en face (1 à 4), si l'utilisateur le sait ; sinon automatique. */
+  people?: number
 }
 
 export interface MeetingStart {

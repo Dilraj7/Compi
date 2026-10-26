@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
 import { ArrowLeft, Check, Copy, Download, FileText, Mic, Phone, RotateCcw, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { brainLabel, defaultBrain } from '@shared/brains'
-import { clockAt, CONSENT_SENTENCE, followUpPrompt, formatDuration, speakerLabel, transcriptText } from '@shared/meetings'
+import { clockAt, CONSENT_SENTENCE, followUpPrompt, formatDuration, PEOPLE_CHOICES, speakerLabel, transcriptText } from '@shared/meetings'
 import { isOnline } from '@shared/privacy'
 import { SPEECH_MODELS } from '@shared/speechModels'
 import type { Meeting, MeetingMeta, SpeechModelId, SpeechModelStatus } from '@shared/types'
@@ -26,6 +26,16 @@ const voiceColor = (who: string): string => {
 const ENGINES: Array<{ value: SpeechModelId; label: string; hint: string }> = [
   { value: 'parakeet', label: 'Français · anglais', hint: SPEECH_MODELS.parakeet.hint },
   { value: 'omnilingual', label: 'தமிழ் · tamoul', hint: SPEECH_MODELS.omnilingual.hint }
+]
+
+type PeopleValue = 'auto' | `${(typeof PEOPLE_CHOICES)[number]}`
+const PEOPLE: Array<{ value: PeopleValue; label: string; hint: string }> = [
+  { value: 'auto', label: 'Auto', hint: 'Compi compte les voix lui-même' },
+  ...PEOPLE_CHOICES.map((n) => ({
+    value: `${n}` as PeopleValue,
+    label: `${n}`,
+    hint: n === 1 ? 'Une seule personne : toutes ses phrases à la même voix' : `Exactement ${n} voix`
+  }))
 ]
 
 export function MeetingsView({ tabs }: { tabs: ReactNode }) {
@@ -112,18 +122,25 @@ function StartCallCard({ onClose }: { onClose: () => void }) {
   const settings = useCompi((s) => s.settings)
   const [engine, setEngine] = useState<SpeechModelId>(settings?.meetings.engine ?? 'parakeet')
   const [others, setOthers] = useState(true)
+  const [people, setPeople] = useState<PeopleValue>('auto')
   const [status, setStatus] = useState<SpeechModelStatus | null>(null)
+  const [voicesPack, setVoicesPack] = useState(false)
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     void window.compi.speechModelStatus(engine).then(setStatus)
   }, [engine])
+  useEffect(() => {
+    void window.compi.speechModelStatus('voices').then((st) => setVoicesPack(st.installed))
+  }, [])
 
   const ready = status?.model === engine && status.installed
+  // Le nombre de personnes ne sert qu'à la séparation des voix (pack téléchargé, option active).
+  const separate = others && voicesPack && Boolean(settings?.meetings.voices)
   const start = (): void => {
     if (settings && settings.meetings.engine !== engine) void window.compi.updateSettings({ meetings: { ...settings.meetings, engine } })
     onClose()
-    void useCompi.getState().startCall({ engine, others })
+    void useCompi.getState().startCall({ engine, others, people: separate && people !== 'auto' ? Number(people) : undefined }, separate)
   }
 
   return (
@@ -164,6 +181,18 @@ function StartCallCard({ onClose }: { onClose: () => void }) {
         </div>
         <Toggle checked={others} onChange={setOthers} label="Capter le son de l’appel" />
       </div>
+      {separate && (
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[12.5px] text-fog-100">Personnes en face</span>
+            <Segmented<PeopleValue> id="call-people" value={people} options={PEOPLE} onChange={setPeople} />
+          </div>
+          <div className="text-[11px] leading-snug text-fog-500">
+            Une seule personne : choisis 1, ses phrases restent à la même voix. Avec Auto, Compi compare les voix et en trouve parfois trop : donne le même nom
+            à deux voix pour les réunir. Se change jusqu’à l’arrêt.
+          </div>
+        </div>
+      )}
 
       {status && !ready && (
         <div className="text-[11.5px] text-led-amber">

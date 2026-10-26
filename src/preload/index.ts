@@ -152,6 +152,7 @@ const api: CompiApi = {
   meetingAudio: (id, track, data) => ipcRenderer.send(IPC.meetingAudio, id, track, data),
   meetingStop: () => ipcRenderer.invoke(IPC.meetingStop),
   meetingDiscard: () => ipcRenderer.invoke(IPC.meetingDiscard),
+  meetingPeople: (id, people) => ipcRenderer.invoke(IPC.meetingPeople, id, people),
   onMeetingEvent: (cb) => listen(IPC.meetingEvent, cb),
   meetings: () => ipcRenderer.invoke(IPC.meetingsList),
   meeting: (id) => ipcRenderer.invoke(IPC.meetingGet, id),

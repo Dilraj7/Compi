@@ -258,6 +258,8 @@ export interface CompiApi {
   meetingStop(): Promise<MeetingMeta | null>
   /** Annule l'enregistrement en cours : rien n'est gardé. */
   meetingDiscard(): Promise<void>
+  /** Personnes en face pendant l'appel (1 à 4, `undefined` : automatique) ; faux si l'appel est déjà arrêté. */
+  meetingPeople(id: string, people: number | undefined): Promise<boolean>
   onMeetingEvent(cb: (e: MeetingEvent) => void): Unsubscribe
   meetings(): Promise<MeetingMeta[]>
   meeting(id: string): Promise<Meeting | null>

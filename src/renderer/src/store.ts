@@ -182,8 +182,10 @@ interface CompiState {
   setPalette(on: boolean): void
   focusActivity(f: 'perf' | null): void
   setActivityTab(tab: ActivityTab): void
-  /** Commence l'enregistrement d'un appel (après « Commencer »). */
-  startCall(opts: MeetingStartOptions): Promise<void>
+  /** Commence l'enregistrement d'un appel (après « Commencer ») ; `choosePeople` : les voix seront séparées. */
+  startCall(opts: MeetingStartOptions, choosePeople?: boolean): Promise<void>
+  /** Personnes en face, changées pendant l'appel (`undefined` : automatique). */
+  setCallPeople(people: number | undefined): void
   stopCall(): Promise<void>
   /** Annule l'enregistrement : rien n'est gardé. */
   discardCall(): Promise<void>
@@ -198,6 +200,10 @@ export interface CallState {
   startedAt: number
   /** Le son de l'appel est capté (sinon : le micro seul). */
   others: boolean
+  /** Les voix des autres seront séparées : le nombre de personnes en face se choisit jusqu'à l'arrêt. */
+  choosePeople: boolean
+  /** Personnes en face (1 à 4) ; absent : automatique. */
+  people?: number
   phase: 'starting' | 'recording' | 'processing'
   /** Dernières phrases transcrites (3 au plus). */
   lines: MeetingLine[]
@@ -725,9 +731,10 @@ export const useCompi = create<CompiState>((set, get) => {
     focusActivity: (activityFocus) => set(activityFocus ? { activityFocus, activityTab: 'perf' } : { activityFocus }),
     setActivityTab: (activityTab) => set({ activityTab }),
 
-    startCall: async (opts) => {
+    startCall: async (opts, choosePeople = false) => {
       if (get().call) return
-      set({ call: { id: '', startedAt: Date.now(), others: opts.others, phase: 'starting', lines: [] } })
+      const people = opts.others ? opts.people : undefined
+      set({ call: { id: '', startedAt: Date.now(), others: opts.others, choosePeople: false, people, phase: 'starting', lines: [] } })
       let id = ''
       try {
         const started = await api().meetingStart(opts)
@@ -738,7 +745,7 @@ export const useCompi = create<CompiState>((set, get) => {
           void get().stopCall()
         })
         const others = started.systemAudio === 'windows' || callCapture.others
-        set({ call: { id, startedAt: started.startedAt, others, phase: 'recording', lines: [] } })
+        set({ call: { id, startedAt: started.startedAt, others, choosePeople: choosePeople && others, people, phase: 'recording', lines: [] } })
         if (opts.others && !others) {
           get().showNotice({ pill: 'meeting', text: 'Son de l’appel indisponible : seul ton micro est enregistré.', duration: 8000 })
         }
@@ -754,6 +761,12 @@ export const useCompi = create<CompiState>((set, get) => {
           duration: 8000
         })
       }
+    },
+    setCallPeople: (people) => {
+      const c = get().call
+      if (!c || c.phase !== 'recording' || !c.choosePeople) return
+      set({ call: { ...c, people } })
+      void api().meetingPeople(c.id, people)
     },
     stopCall: async () => {
       const c = get().call

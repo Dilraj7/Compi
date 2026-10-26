@@ -4,8 +4,8 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { Square, X } from 'lucide-react'
-import { clockAt, speakerLabel } from '@shared/meetings'
+import { Square, Users, X } from 'lucide-react'
+import { clockAt, PEOPLE_CHOICES, speakerLabel } from '@shared/meetings'
 import { useCompi, type CallState } from '../store'
 import { useNow } from './Live'
 
@@ -21,6 +21,9 @@ function Dot({ pulse }: { pulse: boolean }) {
 }
 
 const elapsed = (c: CallState, now: number): string => clockAt((now - c.startedAt) / 1000)
+
+/** Personnes en face, au clic : Auto → 1 → 2 → 3 → 4 → Auto. */
+const nextPeople = (n?: number): number | undefined => PEOPLE_CHOICES[(n ? (PEOPLE_CHOICES as readonly number[]).indexOf(n) : -1) + 1]
 
 /** Pastille : point rouge et durée (à gauche des yeux). */
 export function CompactCall({ call }: { call: CallState }) {
@@ -104,6 +107,16 @@ export function CallBanner() {
       <span className="min-w-0 flex-1 truncate text-fog-300">{call.phase === 'processing' ? (call.step ?? '') : lastLineText(call)}</span>
       {recording && (
         <>
+          {call.choosePeople && (
+            <button
+              onClick={() => useCompi.getState().setCallPeople(nextPeople(call.people))}
+              className="flex h-6.5 shrink-0 items-center gap-1 rounded-lg px-1.5 text-[11.5px] text-fog-300 tabular-nums transition-colors hover:bg-white/[0.06] hover:text-fog-100"
+              title={`Personnes en face : ${call.people ?? 'automatique'}. Clique pour changer (Auto, 1, 2, 3, 4).`}
+              aria-label={`Personnes en face : ${call.people ?? 'automatique'}`}
+            >
+              <Users size={12} /> {call.people ?? 'Auto'}
+            </button>
+          )}
           <button
             onClick={() => (confirm ? void useCompi.getState().discardCall() : setConfirm(true))}
             className="flex h-6.5 items-center gap-1 rounded-lg px-2 text-[11.5px] text-fog-300 transition-colors hover:bg-white/[0.06] hover:text-fog-100"
