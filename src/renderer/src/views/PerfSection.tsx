@@ -18,6 +18,7 @@ import {
   type PerfSnapshot,
   type VramUse
 } from '@shared/perf'
+import { REREAD_LABEL, rereadText } from '@shared/reread'
 import type { KeepAlive } from '@shared/types'
 import { useCompi } from '../store'
 import { Button, LedDots, Segmented, cx } from '../components/ui'
@@ -482,8 +483,12 @@ export function PerfSection() {
                     </span>
                     <span className="w-24 shrink-0 text-fog-300">{r.firstTokenMs !== undefined ? `1er mot ${waitText(r.firstTokenMs)}` : '—'}</span>
                     <span className="w-20 shrink-0 text-fog-300">{r.tokensPerSec !== undefined ? `${r.tokensPerSec} jetons/s` : ''}</span>
-                    <span className="min-w-0 flex-1 truncate text-led-amber/80">
-                      {[r.coldStart && 'modèle rechargé', r.gpuShare !== undefined && r.gpuShare < 0.97 && `${pct((1 - r.gpuShare) * 100)} sur le processeur`]
+                    <span className="min-w-0 flex-1 truncate text-led-amber/80" title={r.reread ? rereadText(r.reread) : undefined}>
+                      {[
+                        r.coldStart && 'modèle rechargé',
+                        r.gpuShare !== undefined && r.gpuShare < 0.97 && `${pct((1 - r.gpuShare) * 100)} sur le processeur`,
+                        r.reread && r.reread.cause !== 'reload' && `${REREAD_LABEL[r.reread.cause]} (${r.reread.tokens.toLocaleString('fr-FR')} jetons relus)`
+                      ]
                         .filter(Boolean)
                         .join(' · ')}
                     </span>

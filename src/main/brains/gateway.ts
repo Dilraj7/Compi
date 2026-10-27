@@ -5,13 +5,15 @@
 // chaque réponse. Elle n'écoute que sur 127.0.0.1, derrière une adresse secrète
 // par discussion.
 
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import http from 'node:http'
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { app, net } from 'electron'
 import {
+  estimateMessages,
+  estimateTokens,
   localToolsNote,
   presentGroups,
   selectLocalTools,
@@ -20,8 +22,9 @@ import {
   type ToolDef,
   type ToolServer
 } from '../../shared/localTools'
+import { judgeReread, mainReread, type RequestChange } from '../../shared/reread'
 import { createToolTextRepair, type ToolTextStats } from '../../shared/toolText'
-import type { Effort, RunStats } from '../../shared/types'
+import type { Effort, Reread, RunStats } from '../../shared/types'
 import { log } from '../log'
 
 export interface RouteOptions {
@@ -148,8 +151,8 @@ export function fitLocalTools(
   contextTokens: number,
   servers: ToolServer[],
   allowed?: string[]
-): { body: Body; summary: string | null; wanted: boolean } {
-  if (!Array.isArray(body.tools) || !body.tools.length) return { body, summary: null, wanted: false }
+): { body: Body; summary: string | null; wanted: boolean; omitted: string[] } {
+  if (!Array.isArray(body.tools) || !body.tools.length) return { body, summary: null, wanted: false, omitted: [] }
   const all = body.tools as ToolDef[]
   const messages = Array.isArray(body.messages) ? (body.messages as { role?: string; content?: unknown }[]) : []
   const keys = servers.map((s) => s.key)
@@ -170,7 +173,7 @@ export function fitLocalTools(
     tools: withServerInstructions(sel.tools, sections, servers, sel.missing)
   }
   const summary = `${sel.tools.length}/${all.length} outils (≈ ${sel.tokens} jetons, fenêtre ${contextTokens})${sel.loaded.length ? ` · chargés : ${sel.loaded.join(', ')}` : ''}${sel.omitted.length ? ` · trop gros : ${sel.omitted.join(', ')}` : ''}${sel.partial.length ? ` · en partie : ${sel.partial.join(', ')}` : ''}`
-  return { body: out, summary, wanted: sel.wanted.length > 0 }
+  return { body: out, summary, wanted: sel.wanted.length > 0, omitted: sel.omitted }
 }
 
 /** OpenRouter : n'utiliser que les fournisseurs qui ne gardent pas les messages. */
@@ -208,27 +211,74 @@ export function promptPrefix(body: Body): PromptPrefix {
  * Premier endroit où deux débuts de requête diffèrent (là où le modèle local doit
  * tout relire), sans rien citer du contenu : il peut contenir la mémoire ou des chemins.
  */
-export function prefixGap(before: PromptPrefix, now: PromptPrefix): string | null {
-  if (before.thinking !== now.thinking) return 'réglage de réflexion'
+export function prefixDiff(before: PromptPrefix, now: PromptPrefix): { part: 'thinking' | 'system' | 'tools'; where: string } | null {
+  if (before.thinking !== now.thinking) return { part: 'thinking', where: 'réglage de réflexion' }
   for (let i = 0; i < Math.max(before.system.length, now.system.length); i++) {
     const a = before.system[i] ?? ''
     const b = now.system[i] ?? ''
     if (a === b) continue
     let at = 0
     while (at < a.length && at < b.length && a[at] === b[at]) at++
-    return `consignes, bloc ${i + 1}, caractère ${at}`
+    return { part: 'system', where: `consignes, bloc ${i + 1}, caractère ${at}` }
   }
   for (let i = 0; i < Math.max(before.tools.length, now.tools.length); i++) {
     if (JSON.stringify(before.tools[i]) === JSON.stringify(now.tools[i])) continue
-    return `outil n° ${i + 1} (${now.tools[i]?.name ?? before.tools[i]?.name ?? '?'})`
+    return { part: 'tools', where: `outil n° ${i + 1} (${now.tools[i]?.name ?? before.tools[i]?.name ?? '?'})` }
   }
   return null
 }
+
+export const prefixGap = (before: PromptPrefix, now: PromptPrefix): string | null => prefixDiff(before, now)?.where ?? null
 
 /** Première requête d'une discussion : une seule demande, encore aucune réponse. */
 export function isFirstTurn(body: Body): boolean {
   const messages = Array.isArray(body.messages) ? (body.messages as { role?: string }[]) : []
   return messages.length > 0 && !messages.some((m) => m.role === 'assistant')
+}
+
+/** Ce que le modèle local a lu : début de requête, et une empreinte par message (rien du contenu n'est gardé). */
+export interface ReadState extends PromptPrefix {
+  messages: string[]
+}
+
+/**
+ * Le moteur pose `cache_control` sur le dernier message et le déplace à chaque tour, en
+ * changeant au besoin un texte simple en bloc de texte : le modèle local lit le même texte,
+ * l'empreinte ignore donc la marque et la forme.
+ */
+const withoutCacheMarks = (key: string, value: unknown): unknown => (key === 'cache_control' ? undefined : value)
+
+function messageMark(m: unknown): string {
+  const msg = m as { content?: unknown }
+  const same = typeof msg?.content === 'string' ? { ...msg, content: [{ type: 'text', text: msg.content }] } : m
+  return createHash('sha1').update(JSON.stringify(same, withoutCacheMarks)).digest('base64')
+}
+
+export function readState(body: Body): ReadState {
+  const messages = Array.isArray(body.messages) ? body.messages : []
+  return { ...promptPrefix(body), messages: messages.map(messageMark) }
+}
+
+/**
+ * Ce qui a changé depuis la dernière requête lue par le modèle local, et la part
+ * vraiment nouvelle pour lui (estimée) : ce qui s'est ajouté à la même discussion,
+ * sinon la dernière question. Le reste, s'il le relit, est une relecture.
+ */
+export function requestChange(before: ReadState | null, now: ReadState, body: Body, contextTokens?: number): RequestChange {
+  const messages = Array.isArray(body.messages) ? (body.messages as { role?: string }[]) : []
+  const promptTokens = estimateTokens(now.system.join('\n')) + estimateTokens(now.tools) + estimateMessages(messages)
+  let common = 0
+  while (before && common < Math.min(before.messages.length, now.messages.length) && before.messages[common] === now.messages[common]) common++
+  const extended = before !== null && common === before.messages.length
+  const lastAnswer = messages.map((m) => m.role).lastIndexOf('assistant')
+  const newTokens = estimateMessages(extended ? messages.slice(common) : messages.slice(lastAnswer + 1))
+  const diff = before && prefixDiff(before, now)
+  let change: RequestChange['change'] = null
+  if (!before) change = 'start'
+  else if (diff) change = diff.part === 'tools' ? 'tools' : 'system'
+  // Même début de discussion qui ne se prolonge pas : elle a été résumée ou réécrite.
+  else if (!extended && !isFirstTurn(body)) change = common > 0 ? 'summary' : 'other-chat'
+  return { change, newTokens, promptTokens, contextTokens }
 }
 
 // ─── Mesures ─────────────────────────────────────────────────────────────────
@@ -243,6 +293,10 @@ interface RequestMeter {
   endAt?: number
   /** Cerveau local : appels d'outils écrits en texte, rattrapés ou non. */
   toolText?: ToolTextStats
+  /** Cerveau local : relecture de cet appel, si elle a compté. */
+  reread?: Reread
+  /** Cerveau local : extensions demandées, trop grosses pour la fenêtre. */
+  omitted?: string[]
 }
 
 /** Lit un flux SSE de /v1/messages au fil de l'eau et en tire les mesures. */
@@ -305,8 +359,15 @@ export function summarize(startedAt: number, meters: RequestMeter[]): RunStats {
     inputTokens: meters.reduce((n, m) => n + m.inputTokens, 0),
     outputTokens: meters.reduce((n, m) => n + m.outputTokens, 0),
     requests: meters.length,
-    ...toolTextTotals(meters)
+    ...toolTextTotals(meters),
+    ...rereadTotals(meters)
   }
+}
+
+function rereadTotals(meters: RequestMeter[]): Pick<RunStats, 'reread' | 'toolsOmitted'> {
+  const reread = mainReread(meters.map((m) => m.reread))
+  const omitted = [...new Set(meters.flatMap((m) => m.omitted ?? []))]
+  return { ...(reread ? { reread } : {}), ...(omitted.length ? { toolsOmitted: omitted } : {}) }
 }
 
 // ─── Serveur ─────────────────────────────────────────────────────────────────
@@ -378,6 +439,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
 
   // Discussion qui demande un connecteur précis : ses consignes ne servent pas de modèle au cache.
   let wanted = false
+  let omitted: string[] = []
   if (body) {
     // Identifiants de session et d'appareil du moteur : inutiles au modèle, ils ne partent pas.
     delete body.metadata
@@ -387,6 +449,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
         const fit = fitLocalTools(body, route.contextTokens, route.servers ?? [], route.allowedConnectorTools)
         body = fit.body
         wanted = fit.wanted
+        omitted = fit.omitted
         if (fit.summary && fit.summary !== route.toolsLogged) log('info', `modèle local : ${fit.summary}`)
         route.toolsLogged = fit.summary ?? undefined
       }
@@ -395,7 +458,9 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
 
   try {
     const styled = body && !route.noThinking ? applyStyle(body, route) : body
-    if (route.provider === 'local' && styled) noteLocalPrefix(route.target, styled)
+    // Seuls les tours de l'assistant (avec ses outils) comptent : une petite requête annexe du
+    // moteur (titre…) n'a pas de quoi être relue, et le modèle garde la discussion en cache à côté.
+    const change = route.provider === 'local' && Array.isArray(styled?.tools) && styled.tools.length ? noteLocalRead(route, styled) : null
     if (route.provider === 'local' && styled && route.remember !== false && !wanted && route.memoryVersion === memoryVersion)
       rememberPrompt(route.target, styled)
     let upstream = await send(styled ? JSON.stringify(styled) : raw)
@@ -456,6 +521,14 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
           `modèle local : ${toolText.repaired} appel(s) écrit(s) en texte rattrapé(s), ${toolText.failed} non (${toolText.reason ?? '—'})`
         )
       }
+      if (change) {
+        const reread = judgeReread(result.inputTokens, change, route.meters.length === 0)
+        if (reread) {
+          result.reread = reread
+          log('info', `modèle local : ${reread.tokens} jetons relus (requête ≈ ${reread.promptTokens}), cause : ${reread.cause}`)
+        }
+      }
+      if (omitted.length) result.omitted = omitted
       route.meters.push(result)
     }
   } catch (e) {
@@ -480,23 +553,27 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
  */
 const WARM_VERSION = 8
 
-/** Début de la dernière requête lue par le modèle local : c'est ce qu'il a en cache. */
-let lastPrefix: (PromptPrefix & { key: string }) | null = null
+/** Dernière requête lue par le modèle local (début et empreintes des messages) : c'est ce qu'il a en cache. */
+let lastRead: (ReadState & { key: string }) | null = null
 let lastGapLogged = ''
 
 /**
- * Une nouvelle discussion qui ne reprend pas le début de la précédente oblige le modèle
- * local à tout relire (~45 s sur une carte graphique moyenne). Le journal dit où.
+ * Note ce que le modèle local va lire, et ce qui a changé depuis la requête précédente
+ * (toutes discussions confondues : il ne garde que la dernière en cache). Une nouvelle
+ * discussion qui ne reprend pas le début de la précédente oblige le modèle à tout
+ * relire (~45 s sur une carte graphique moyenne) : le journal dit où.
  */
-function noteLocalPrefix(target: string, body: Body): void {
-  const key = `${target}|${String(body.model)}`
-  const now = { ...promptPrefix(body), key }
-  if (lastPrefix?.key === key && isFirstTurn(body)) {
-    const gap = prefixGap(lastPrefix, now)
+function noteLocalRead(route: Route, body: Body): RequestChange {
+  const key = `${route.target}|${String(body.model)}`
+  const now = readState(body)
+  const before = lastRead?.key === key ? lastRead : null
+  if (before && isFirstTurn(body)) {
+    const gap = prefixGap(before, now)
     if (gap && gap !== lastGapLogged) log('info', `cache du modèle local : nouvelle discussion différente de la requête précédente (${gap}), le début est relu`)
     lastGapLogged = gap ?? ''
   }
-  lastPrefix = now
+  lastRead = { ...now, key }
+  return requestChange(before, now, body, route.contextTokens)
 }
 /**
  * Lire d'avance ~12 000 jetons prend 2 à 3 min sur un PC sans grosse carte
@@ -604,7 +681,7 @@ export async function primeLocalCache(target: string, model: string): Promise<bo
     max_tokens: 1,
     stream: false
   }
-  lastPrefix = { ...promptPrefix(primeBody), key: `${p.target}|${model}` }
+  lastRead = { ...readState(primeBody), key: `${p.target}|${model}` }
   const r = await net.fetch(`${p.target}/v1/messages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'anthropic-version': '2023-06-01' },

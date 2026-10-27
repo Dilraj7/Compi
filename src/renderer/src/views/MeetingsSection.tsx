@@ -6,7 +6,7 @@ import { motion } from 'motion/react'
 import { Download, Lock, Trash2, X } from 'lucide-react'
 import { brainLabel, defaultBrain } from '@shared/brains'
 import { isOnline } from '@shared/privacy'
-import { VOICES_PACK } from '@shared/speechModels'
+import { LEGACY_VOICES_PACK, VOICES_PACK } from '@shared/speechModels'
 import { sizeLabel } from '@shared/voice'
 import type { MeetingSettings, PublicSettings, Settings, SpeechModelStatus } from '@shared/types'
 import { useCompi } from '../store'
@@ -46,21 +46,15 @@ export function MeetingsSection({ s, update }: Props) {
         hint={
           status?.installed ? (
             <span className="inline-flex items-center gap-1">
-              <Lock size={10} /> {status.sizeBytes ? sizeLabel(status.sizeBytes) : ''} sur ton PC · {VOICES_PACK.license}
+              <Lock size={10} /> {status.sizeBytes ? sizeLabel(status.sizeBytes) : ''} sur ton PC ·{' '}
+              {(status.outdated ? LEGACY_VOICES_PACK : VOICES_PACK).license}
             </span>
           ) : (
             `« Personne 1 », « Personne 2 »… au lieu de « Les autres ». Pack de deux petits modèles (${sizeLabel(VOICES_PACK.approxMb, true)}), depuis Hugging Face.`
           )
         }
       >
-        {status?.installed ? (
-          <div className="flex items-center gap-1">
-            <Toggle checked={m.voices} onChange={(voices) => set({ voices })} label="Séparer les voix" />
-            <Button size="sm" variant="ghost" onClick={() => void window.compi.speechModelDelete('voices').then(setStatus)} title="Supprimer le pack du PC">
-              <Trash2 size={13} />
-            </Button>
-          </div>
-        ) : dl ? (
+        {dl ? (
           <div className="flex w-44 items-center gap-2">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
               <motion.div
@@ -73,12 +67,27 @@ export function MeetingsSection({ s, update }: Props) {
               <X size={13} />
             </Button>
           </div>
+        ) : status?.installed ? (
+          <div className="flex items-center gap-1">
+            <Toggle checked={m.voices} onChange={(voices) => set({ voices })} label="Séparer les voix" />
+            <Button size="sm" variant="ghost" onClick={() => void window.compi.speechModelDelete('voices').then(setStatus)} title="Supprimer le pack du PC">
+              <Trash2 size={13} />
+            </Button>
+          </div>
         ) : (
           <Button size="sm" variant="subtle" onClick={download} disabled={Boolean(status?.downloading)}>
             <Download size={13} /> Télécharger ({sizeLabel(VOICES_PACK.approxMb, true)})
           </Button>
         )}
       </Row>
+      {status?.outdated && !dl && (
+        <div className="flex items-center justify-between gap-3 px-3.5 pb-2 text-[11.5px] text-white/55">
+          <span>Un modèle des voix plus fiable existe : il distingue mieux deux personnes. L’ancien sert en attendant.</span>
+          <Button size="sm" variant="subtle" onClick={download} disabled={Boolean(status.downloading)}>
+            <Download size={13} /> Mettre à jour ({sizeLabel(VOICES_PACK.approxMb, true)})
+          </Button>
+        </div>
+      )}
       {error && <div className="px-3.5 pb-2 text-[11.5px] text-led-amber">{error}</div>}
       <Row
         label="Résumer à la fin de l’appel"

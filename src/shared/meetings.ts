@@ -132,8 +132,11 @@ export interface VoiceSegment {
   speaker: number
 }
 
-/** Personnes en face que l'utilisateur peut indiquer avant ou pendant l'appel (sinon : automatique). */
-export const PEOPLE_CHOICES = [1, 2, 3, 4] as const
+/**
+ * Personnes en face que l'utilisateur peut indiquer avant ou pendant l'appel (sinon : automatique).
+ * Seulement « une seule » : imposer 2 à 4 voix se trompait plus que l'automatique (bancs des 25 et 26/10).
+ */
+export const PEOPLE_CHOICES = [1] as const
 
 /** Nombre de personnes en face choisi, ou `undefined` (automatique). */
 export const peopleChoice = (n: unknown): number | undefined => (typeof n === 'number' && (PEOPLE_CHOICES as readonly number[]).includes(n) ? n : undefined)

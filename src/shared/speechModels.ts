@@ -66,21 +66,45 @@ export interface SpeechPackDef {
   sources: ModelSource[]
 }
 
-/** Fichiers du pack des voix, par rôle. */
-export const VOICES_FILES = { segmentation: 'model.int8.onnx', embedding: '3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx' } as const
+/** Fichiers d'un pack des voix, par rôle. */
+export interface VoicesFiles {
+  segmentation: string
+  embedding: string
+}
+
+const SEGMENTATION = { repo: 'csukuangfj/sherpa-onnx-pyannote-segmentation-3-0', revision: '9403a6902bb58e3d5ae8c7e77c3422de279db2e0' }
+const EMBEDDINGS = { repo: 'csukuangfj/speaker-embedding-models', revision: '0743f301363dec56491a490f6d6cbc9d67f9a3bf' }
+
+export const VOICES_FILES: VoicesFiles = { segmentation: 'model.int8.onnx', embedding: 'wespeaker_en_voxceleb_resnet34_LM.onnx' }
 
 /**
  * Pack des voix : repère qui parle chez les autres participants d'un appel
  * (« Personne 1 », « Personne 2 »…). Deux petits modèles, sur le PC.
+ * WeSpeaker plutôt que CAM++ : banc du 2026-10-26 sur des appels fabriqués
+ * (voix Windows), 3 appels justes sur 5 contre 1 au mieux, même seuil.
  */
 export const VOICES_PACK: SpeechPackDef = {
   label: 'Pack des voix',
+  license: 'pyannote segmentation 3.0 (licence MIT) et WeSpeaker ResNet34-LM (licence CC-BY-4.0)',
+  dir: 'voices-pyannote-wespeaker',
+  approxMb: 28,
+  sources: [
+    { ...SEGMENTATION, files: [VOICES_FILES.segmentation] },
+    { ...EMBEDDINGS, files: [VOICES_FILES.embedding] }
+  ]
+}
+
+export const LEGACY_VOICES_FILES: VoicesFiles = { segmentation: 'model.int8.onnx', embedding: '3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx' }
+
+/** Pack des voix de Compi 0.2 à 0.4 (CAM++) : encore utilisé tant que le nouveau n'est pas téléchargé. */
+export const LEGACY_VOICES_PACK: SpeechPackDef = {
+  label: 'Pack des voix (ancien)',
   license: 'pyannote segmentation 3.0 (licence MIT) et CAM++ de 3D-Speaker (licence Apache-2.0)',
   dir: 'voices-pyannote-campplus',
   approxMb: 31,
   sources: [
-    { repo: 'csukuangfj/sherpa-onnx-pyannote-segmentation-3-0', revision: '9403a6902bb58e3d5ae8c7e77c3422de279db2e0', files: [VOICES_FILES.segmentation] },
-    { repo: 'csukuangfj/speaker-embedding-models', revision: '0743f301363dec56491a490f6d6cbc9d67f9a3bf', files: [VOICES_FILES.embedding] }
+    { ...SEGMENTATION, files: [LEGACY_VOICES_FILES.segmentation] },
+    { ...EMBEDDINGS, files: [LEGACY_VOICES_FILES.embedding] }
   ]
 }
 

@@ -31,7 +31,7 @@ import type { Meeting, MeetingEvent, MeetingLine, MeetingMeta, MeetingStart, Mee
 import { emit } from '../bus'
 import { log } from '../log'
 import { diarizeTrack, prepareSpeech, transcribeSpeech } from '../speech/engine'
-import { speechModelFiles } from '../speech/models'
+import { speechModelFiles, voicesFiles } from '../speech/models'
 import { settings } from '../store/settings'
 import { audioPath, deleteAudio, deleteMeeting, getMeeting, hasAudio, listMeetings, meetingDir, metaOf, saveMeeting } from './store'
 import { canAutoSummarize, summarizeMeeting } from './summary'
@@ -325,7 +325,7 @@ function spansOfTrack(id: string, track: MeetingTrack): SpeechSpan[] {
  * une seule personne : rien à séparer.
  */
 async function separateVoices(m: Meeting): Promise<MeetingLine[] | null> {
-  if (!m.others || m.people === 1 || !settings.get().meetings.voices || !speechModelFiles('voices') || !trackSamples(m.id, 'others')) return null
+  if (!m.others || m.people === 1 || !settings.get().meetings.voices || !voicesFiles() || !trackSamples(m.id, 'others')) return null
   try {
     event({ type: 'processing', id: m.id, step: 'Je sépare les voix…' })
     const seconds = trackSamples(m.id, 'others') / SAMPLE_RATE

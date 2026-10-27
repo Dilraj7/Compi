@@ -51,7 +51,7 @@ import type {
 import { VOICE_MODELS } from '@shared/voice'
 import { addDictation, DEFAULT_DICTATION } from '@shared/dictation'
 import { DEFAULT_MEETINGS, defaultMeetingTitle, nameVoice } from '@shared/meetings'
-import { SPEECH_PACKS } from '@shared/speechModels'
+import { LEGACY_VOICES_PACK, SPEECH_PACKS } from '@shared/speechModels'
 import { DEFAULT_NATURAL_VOICE } from '@shared/naturalVoice'
 import type { OllamaFolder } from '@shared/ollamaFolder'
 import { newPomodoro, newTimer, paused, resumed } from '@shared/timer'
@@ -59,7 +59,7 @@ import { cleanFact, sameFact } from '@shared/memory'
 import { cleanDraft } from '@shared/routines'
 import { icsUrl } from '@shared/agenda'
 import { hourStart, messageCost, type ClaudeCodeUsage, type CompiUsageRow, type UsageRow } from '@shared/usage'
-import type { ApprovalLogEntry } from '@shared/types'
+import type { ApprovalLogEntry, Reread } from '@shared/types'
 import type { PerfSnapshot } from '@shared/perf'
 
 type Cb<T> = (v: T) => void
@@ -421,7 +421,9 @@ export function createMockApi(): CompiApi {
 
   // Ce PC (scénarios : ?perf=ok, ?perf=spill, ?perf=nogpu) : instantanés simulés, qui bougent un peu.
   const perfCh = channel<PerfSnapshot>()
+  // ?perf=reread : discussion qui remplit la fenêtre (relue à chaque question) et extension trop grosse.
   const perfMode = params.get('perf') ?? 'ok'
+  const DEMO_REREAD = (tokens: number): Reread => ({ tokens, promptTokens: tokens + 1500, cause: 'full' })
   const perfWatchers = new Set<string>()
   let perfTimer: ReturnType<typeof setInterval> | undefined
   let embedLoaded = perfMode === 'spill'
@@ -501,7 +503,21 @@ export function createMockApi(): CompiApi {
             { at: now - 40 * 60_000, model: 'gemma4:12b', firstTokenMs: 4200, tokensPerSec: 61, inputTokens: 2100 },
             { at: now - 9 * 60_000, model: 'gemma4:12b', firstTokenMs: 412_000, tokensPerSec: 15, inputTokens: 3400, coldStart: true, gpuShare: 0.62 }
           ]
-        : [{ at: now - 6 * 60_000, model: 'gemma4:12b', firstTokenMs: 2600, tokensPerSec: 72, inputTokens: 1800, coldStart: false, gpuShare: 1 }]
+        : perfMode === 'reread'
+          ? [
+              { at: now - 14 * 60_000, model: 'gemma4:12b', firstTokenMs: 44_000, tokensPerSec: 35, inputTokens: 26_100, reread: DEMO_REREAD(26_100) },
+              { at: now - 9 * 60_000, model: 'gemma4:12b', firstTokenMs: 2400, tokensPerSec: 36, inputTokens: 600, toolsOmitted: ['Notion'] },
+              {
+                at: now - 3 * 60_000,
+                model: 'gemma4:12b',
+                firstTokenMs: 48_000,
+                tokensPerSec: 34,
+                inputTokens: 27_900,
+                reread: DEMO_REREAD(27_900),
+                toolsOmitted: ['Notion']
+              }
+            ]
+          : [{ at: now - 6 * 60_000, model: 'gemma4:12b', firstTokenMs: 2600, tokensPerSec: 72, inputTokens: 1800, coldStart: false, gpuShare: 1 }]
     }
   }
   const syncPerfTimer = (): void => {
@@ -587,20 +603,25 @@ export function createMockApi(): CompiApi {
     sizeBytes: voiceInstalled[model] ? VOICE_MODELS[model].variants[voiceInstalled[model]!].approxMb * 1e6 : undefined,
     downloading: voiceDl ?? undefined
   })
-  // Dictée partout (scénarios ?speech=installed, ?stats=demo) : rien n'est téléchargé.
+  // Dictée partout (scénarios ?speech=installed, ?stats=demo, ?voices=old pour l'ancien pack des voix) : rien n'est téléchargé.
   const speechCh = channel<SpeechModelStatus>()
   let speechInstalled: Partial<Record<SpeechPackId, boolean>> = {
     ...(params.get('speech') === 'installed' && { parakeet: true }),
     ...(params.get('tts') === 'natural' && { supertonic: true })
   }
+  let voicesOld = params.get('voices') === 'old'
   let speechDl: SpeechModelStatus['downloading'] | null = null
   let speechCancelled = false
-  const speechStatus = (model: SpeechPackId): SpeechModelStatus => ({
-    model,
-    installed: Boolean(speechInstalled[model]),
-    sizeBytes: speechInstalled[model] ? SPEECH_PACKS[model].approxMb * 1e6 : undefined,
-    downloading: speechDl ?? undefined
-  })
+  const speechStatus = (model: SpeechPackId): SpeechModelStatus => {
+    const old = model === 'voices' && voicesOld && !speechInstalled.voices
+    return {
+      model,
+      installed: Boolean(speechInstalled[model]) || old,
+      sizeBytes: old ? LEGACY_VOICES_PACK.approxMb * 1e6 : speechInstalled[model] ? SPEECH_PACKS[model].approxMb * 1e6 : undefined,
+      outdated: old || undefined,
+      downloading: speechDl ?? undefined
+    }
+  }
   // Réunions (scénario ?meetings=demo) : rien n'est enregistré ; un appel simulé à « Commencer ».
   const meetingCh = channel<MeetingEvent>()
   const meetingsCh = channel<MeetingMeta[]>()
@@ -909,7 +930,10 @@ export function createMockApi(): CompiApi {
       conversationId,
       messageId,
       costUsd: 0.0042,
-      sentTo: brain.provider === 'local' ? { destination: null, categories: [] } : { destination: 'Claude (Anthropic)', categories: ['files'], masked: 1 }
+      sentTo: brain.provider === 'local' ? { destination: null, categories: [] } : { destination: 'Claude (Anthropic)', categories: ['files'], masked: 1 },
+      ...(perfMode === 'reread' && {
+        stats: { firstTokenMs: 48_000, tokensPerSec: 34, inputTokens: 27_900, outputTokens: 120, requests: 1, reread: DEMO_REREAD(27_900) }
+      })
     })
   }
 
@@ -1365,6 +1389,7 @@ export function createMockApi(): CompiApi {
       }
       speechDl = null
       speechInstalled = { ...speechInstalled, [model]: true }
+      if (model === 'voices') voicesOld = false
       speechCh.emit(speechStatus(model))
       return speechStatus(model)
     },
@@ -1373,6 +1398,7 @@ export function createMockApi(): CompiApi {
     },
     speechModelDelete: async (model) => {
       speechInstalled = { ...speechInstalled, [model]: false }
+      if (model === 'voices') voicesOld = false
       return speechStatus(model)
     },
     onSpeechModelProgress: speechCh.on,

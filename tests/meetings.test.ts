@@ -19,6 +19,7 @@ import {
   summaryInput,
   type SpeechSpan
 } from '../src/shared/meetings'
+import { LEGACY_VOICES_PACK, packRevision, VOICES_FILES, VOICES_PACK } from '../src/shared/speechModels'
 import type { Meeting, MeetingLine } from '../src/shared/types'
 
 /** Son de test : `parts` = [secondes, amplitude] (0 = silence, sinon une voyelle tenue). */
@@ -298,8 +299,8 @@ describe('voix des autres', () => {
       { start: 1, end: 2, who: 'others', text: 'Bonjour Alex' }
     ])
     expect(lines.map((l) => l.who)).toEqual(['me', 's1'])
-    expect(peopleChoice(2)).toBe(2)
-    for (const bad of [0, 5, 1.5, '2', null, undefined]) expect(peopleChoice(bad)).toBeUndefined()
+    expect(peopleChoice(1)).toBe(1)
+    for (const bad of [0, 2, 3, 4, 5, 1.5, '1', null, undefined]) expect(peopleChoice(bad)).toBeUndefined()
   })
 
   it('nomme les voix', () => {
@@ -401,5 +402,16 @@ describe('export', () => {
     expect(md).toContain('- [ ] Envoyer les captures (jeudi)')
     expect(md).toContain('**Léa** [00:02] : Bonjour à tous.')
     expect(md).toContain('**Moi** [00:07] : La page est prête.')
+  })
+})
+
+describe('pack des voix', () => {
+  it('WeSpeaker dans un nouveau dossier, l’ancien pack CAM++ toujours reconnu', () => {
+    expect(VOICES_PACK.dir).not.toBe(LEGACY_VOICES_PACK.dir)
+    expect(VOICES_PACK.sources.flatMap((s) => s.files)).toEqual([VOICES_FILES.segmentation, VOICES_FILES.embedding])
+    expect(LEGACY_VOICES_PACK.dir).toBe('voices-pyannote-campplus')
+    // Révision écrite à l'installation par Compi 0.2 à 0.4 : la changer rendrait l'ancien pack invisible.
+    expect(packRevision(LEGACY_VOICES_PACK)).toBe('9403a6902bb58e3d5ae8c7e77c3422de279db2e0+0743f301363dec56491a490f6d6cbc9d67f9a3bf')
+    expect(LEGACY_VOICES_PACK.sources[1].files).toEqual(['3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx'])
   })
 })

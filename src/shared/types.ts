@@ -318,6 +318,27 @@ export interface RunStats {
   toolTextRepaired?: number
   /** Cerveau local : appels écrits en texte qui n'ont pas pu être exécutés. */
   toolTextFailed?: number
+  /** Cerveau local : la plus grosse relecture de la réponse (shared/reread.ts), si elle a compté. */
+  reread?: Reread
+  /** Cerveau local : extensions demandées, trop grosses pour la fenêtre du modèle (non envoyées). */
+  toolsOmitted?: string[]
+}
+
+/**
+ * Pourquoi le modèle local a tout relu : rechargé, premier passage sur ces consignes,
+ * outils ou consignes changés, retour à une autre discussion, discussion résumée,
+ * fenêtre pleine, ou ce qu'il avait lu remplacé sans changement visible.
+ */
+export type RereadCause = 'reload' | 'start' | 'tools' | 'system' | 'other-chat' | 'summary' | 'full' | 'cache'
+
+export interface Reread {
+  /** Jetons réellement relus par le modèle (hors cache), d'après sa réponse. */
+  tokens: number
+  /** Taille estimée de toute la requête, en jetons. */
+  promptTokens: number
+  cause: RereadCause
+  /** Premier appel de la réponse : un modèle rechargé relit tout à ce moment-là. */
+  first?: boolean
 }
 
 export interface ChatMessage {
@@ -822,6 +843,8 @@ export interface SpeechModelStatus {
   model: SpeechPackId
   installed: boolean
   sizeBytes?: number
+  /** Pack des voix : seul l'ancien pack est là (il sert encore), un meilleur existe. */
+  outdated?: boolean
   downloading?: { model: SpeechPackId; received: number; total: number }
 }
 
@@ -905,7 +928,7 @@ export interface Meeting extends MeetingMeta {
   /** Noms donnés aux voix : `{ s1: 'Paul' }`. */
   names: Record<string, string>
   summary?: MeetingSummary
-  /** Personnes en face indiquées par l'utilisateur (1 à 4) ; absent : les voix sont comptées automatiquement. */
+  /** Personnes en face indiquées par l'utilisateur (1 ; jusqu'à 4 avant la 0.4) ; absent : les voix sont comptées automatiquement. */
   people?: number
 }
 
@@ -913,7 +936,7 @@ export interface MeetingStartOptions {
   engine: SpeechModelId
   /** Capter aussi le son de l'ordinateur (les autres participants). */
   others: boolean
-  /** Personnes en face (1 à 4), si l'utilisateur le sait ; sinon automatique. */
+  /** Une seule personne en face (1), si l'utilisateur le sait ; sinon automatique. */
   people?: number
 }
 

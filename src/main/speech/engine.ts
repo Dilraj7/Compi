@@ -6,10 +6,10 @@
 
 import { join } from 'node:path'
 import { utilityProcess, type UtilityProcess } from 'electron'
-import { SPEECH_MODELS, VOICES_FILES } from '../../shared/speechModels'
+import { SPEECH_MODELS } from '../../shared/speechModels'
 import type { SpeechModelId } from '../../shared/types'
 import { log } from '../log'
-import { speechModelFiles } from './models'
+import { speechModelFiles, voicesFiles } from './models'
 import type { SpeechRequest, SpeechResponse } from './protocol'
 
 const IDLE_MS = 10 * 60_000
@@ -118,7 +118,7 @@ export async function transcribeSpeech(model: SpeechModelId, samples: Float32Arr
  * mémoire est rendue. Délai large : ~1 s de calcul par minute d'appel.
  */
 export function diarizeTrack(path: string, seconds: number, speakers?: number): Promise<{ start: number; end: number; speaker: number }[]> {
-  const files = speechModelFiles('voices')
+  const files = voicesFiles()
   if (!files) return Promise.reject(new Error('Le pack des voix n’est pas téléchargé.'))
   const c = utilityProcess.fork(join(__dirname, 'speechWorker.js'), [], { serviceName: 'Compi - voix', stdio: 'ignore' })
   return new Promise<{ start: number; end: number; speaker: number }[]>((resolve, reject) => {
@@ -137,8 +137,8 @@ export function diarizeTrack(path: string, seconds: number, speakers?: number): 
     c.postMessage({
       type: 'diarize',
       id: 1,
-      segmentation: files[VOICES_FILES.segmentation],
-      embedding: files[VOICES_FILES.embedding],
+      segmentation: files.segmentation,
+      embedding: files.embedding,
       path,
       speakers
     } as SpeechRequest)

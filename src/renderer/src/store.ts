@@ -209,7 +209,7 @@ export interface CallState {
   others: boolean
   /** Les voix des autres seront séparées : le nombre de personnes en face se choisit jusqu'à l'arrêt. */
   choosePeople: boolean
-  /** Personnes en face (1 à 4) ; absent : automatique. */
+  /** Une seule personne en face (1) ; absent : automatique. */
   people?: number
   phase: 'starting' | 'recording' | 'processing'
   /** Dernières phrases transcrites (3 au plus). */

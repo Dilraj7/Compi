@@ -34,7 +34,7 @@ const PEOPLE: Array<{ value: PeopleValue; label: string; hint: string }> = [
   ...PEOPLE_CHOICES.map((n) => ({
     value: `${n}` as PeopleValue,
     label: `${n}`,
-    hint: n === 1 ? 'Une seule personne : toutes ses phrases à la même voix' : `Exactement ${n} voix`
+    hint: 'Une seule personne : toutes ses phrases à la même voix'
   }))
 ]
 

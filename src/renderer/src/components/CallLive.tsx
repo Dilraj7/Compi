@@ -22,7 +22,7 @@ function Dot({ pulse }: { pulse: boolean }) {
 
 const elapsed = (c: CallState, now: number): string => clockAt((now - c.startedAt) / 1000)
 
-/** Personnes en face, au clic : Auto → 1 → 2 → 3 → 4 → Auto. */
+/** Personnes en face, au clic : Auto → 1 → Auto. */
 const nextPeople = (n?: number): number | undefined => PEOPLE_CHOICES[(n ? (PEOPLE_CHOICES as readonly number[]).indexOf(n) : -1) + 1]
 
 /** Pastille : point rouge et durée (à gauche des yeux). */
@@ -111,7 +111,7 @@ export function CallBanner() {
             <button
               onClick={() => useCompi.getState().setCallPeople(nextPeople(call.people))}
               className="flex h-6.5 shrink-0 items-center gap-1 rounded-lg px-1.5 text-[11.5px] text-fog-300 tabular-nums transition-colors hover:bg-white/[0.06] hover:text-fog-100"
-              title={`Personnes en face : ${call.people ?? 'automatique'}. Clique pour changer (Auto, 1, 2, 3, 4).`}
+              title={`Personnes en face : ${call.people ?? 'automatique'}. Clique pour changer (Auto ou 1).`}
               aria-label={`Personnes en face : ${call.people ?? 'automatique'}`}
             >
               <Users size={12} /> {call.people ?? 'Auto'}

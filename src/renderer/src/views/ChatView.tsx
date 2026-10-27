@@ -4,6 +4,7 @@ import { ArrowUp, Check, CloudUpload, FileText, Globe, Loader2, Lock, Mic, Paper
 import { CATEGORY_SENT_LABEL } from '@shared/privacy'
 import { followUpFor } from '@shared/claims'
 import { gbText, localPhase } from '@shared/perf'
+import { REREAD_LABEL, rereadText } from '@shared/reread'
 import type { ChatMessage, RunStats, SentTo, ToolActivity } from '@shared/types'
 import { useShallow } from 'zustand/react/shallow'
 import { useCompi } from '../store'
@@ -135,30 +136,44 @@ export function showPerf(): void {
 
 /** Vitesse mesurée par la passerelle (cerveaux local et « Autre »), et la cause d'une lenteur. */
 function SpeedLine({ stats }: { stats: RunStats }) {
+  const [why, setWhy] = useState(false)
   const parts = [
     stats.firstTokenMs !== undefined && `1er mot en ${seconds(stats.firstTokenMs)}`,
     stats.tokensPerSec !== undefined && `${stats.tokensPerSec} jetons/s`
   ].filter(Boolean)
   if (!parts.length) return null
+  const reread = stats.reread
   const causes = [
     stats.coldStart && 'modèle rechargé',
-    stats.gpuShare !== undefined && stats.gpuShare < 0.97 && `${Math.round((1 - stats.gpuShare) * 100)} % sur le processeur`
+    stats.gpuShare !== undefined && stats.gpuShare < 0.97 && `${Math.round((1 - stats.gpuShare) * 100)} % sur le processeur`,
+    reread && reread.cause !== 'reload' && REREAD_LABEL[reread.cause]
   ].filter(Boolean)
   const slow = causes.length > 0 || (stats.firstTokenMs ?? 0) > 20_000 || (stats.tokensPerSec !== undefined && stats.tokensPerSec < 15)
   return (
-    <span>
-      {parts.join(' · ')}
-      {causes.length > 0 && <span className="text-led-amber/80"> · {causes.join(' · ')}</span>}
-      {slow && (
-        <button
-          className="ml-1.5 underline decoration-dotted underline-offset-2 hover:text-fog-300"
-          onClick={showPerf}
-          title="Voir ce qui ralentit le modèle local"
-        >
-          Pourquoi ?
-        </button>
+    <>
+      <span>
+        {parts.join(' · ')}
+        {causes.length > 0 && <span className="text-led-amber/80"> · {causes.join(' · ')}</span>}
+        {slow && (
+          <button
+            className="ml-1.5 underline decoration-dotted underline-offset-2 hover:text-fog-300"
+            onClick={reread ? () => setWhy((v) => !v) : showPerf}
+            aria-expanded={reread ? why : undefined}
+            title={reread ? 'Ce que le modèle a dû relire, et pourquoi' : 'Voir ce qui ralentit le modèle local'}
+          >
+            Pourquoi ?
+          </button>
+        )}
+      </span>
+      {why && reread && (
+        <span className="basis-full text-[11px] leading-snug text-fog-500">
+          {rereadText(reread)}{' '}
+          <button className="underline decoration-dotted underline-offset-2 hover:text-fog-300" onClick={showPerf}>
+            Voir Ce PC
+          </button>
+        </span>
       )}
-    </span>
+    </>
   )
 }
 

@@ -2,7 +2,7 @@
 // testées dans tests/perf.test.ts. Tout est mesuré sur le PC, rien ne part en ligne.
 
 import { cacheChoice, SUGGESTED_CACHE_MB, type OllamaCache } from './ollamaCache'
-import type { KeepAlive } from './types'
+import type { KeepAlive, Reread, RereadCause } from './types'
 
 const GB = 1024 ** 3
 
@@ -164,6 +164,10 @@ export interface PerfRun {
   firstTokenMs?: number
   tokensPerSec?: number
   inputTokens: number
+  /** La plus grosse relecture de la réponse, et pourquoi (shared/reread.ts). */
+  reread?: Reread
+  /** Extensions demandées, trop grosses pour la fenêtre du modèle. */
+  toolsOmitted?: string[]
   coldStart?: boolean
   gpuShare?: number
 }
@@ -316,8 +320,28 @@ export function perfAdvice(s: PerfSnapshot): PerfAdvice[] {
     })
   }
 
-  // 5. Longue discussion : chaque question fait tout relire au modèle.
-  if (last && !last.coldStart && last.inputTokens > 6000 && (last.firstTokenMs ?? 0) > 20_000) {
+  // 5. Le modèle relit tout pour la même raison sur 2 des 3 dernières réponses.
+  const recent = s.runs.slice(-3)
+  const reread = repeatedReread(recent)
+  if (reread) out.push(rereadAdvice(reread))
+
+  // 5 bis. Une extension demandée ne tient pas dans la fenêtre du modèle, 2 fois sur les 3 dernières réponses.
+  const omitted = [...new Set(recent.flatMap((r) => r.toolsOmitted ?? []))].filter((name) => recent.filter((r) => r.toolsOmitted?.includes(name)).length >= 2)
+  if (omitted.length) {
+    const window = chat?.contextLength ? ` (${chat.contextLength.toLocaleString('fr-FR')} jetons)` : ''
+    const list =
+      omitted.length > 1
+        ? `Les extensions ${omitted.slice(0, -1).join(', ')} et ${omitted.at(-1)} sont trop grosses`
+        : `L’extension ${omitted[0]} est trop grosse`
+    out.push({
+      id: 'tools-omitted',
+      level: 'info',
+      text: `${list} pour la fenêtre de ton modèle${window} : ${omitted.length > 1 ? 'leurs' : 'ses'} outils ne lui sont pas envoyés, il ne peut pas s’en servir. Un modèle avec une plus grande fenêtre, ou Claude, le peut.`
+    })
+  }
+
+  // 5 ter. Longue discussion : chaque question fait tout relire au modèle (sans mesure de relecture plus précise).
+  if (!reread && last && !last.coldStart && last.inputTokens > 6000 && (last.firstTokenMs ?? 0) > 20_000) {
     out.push({
       id: 'long',
       level: 'info',
@@ -335,6 +359,65 @@ export function perfAdvice(s: PerfSnapshot): PerfAdvice[] {
     })
   }
   return out
+}
+
+/** Rechargement et premier passage ont leurs propres conseils (ou n'en demandent pas). */
+const ADVISED_REREADS: RereadCause[] = ['tools', 'system', 'other-chat', 'summary', 'full', 'cache']
+
+/**
+ * Cause de relecture revenue sur au moins 2 des 3 dernières réponses (une seule le peut),
+ * avec sa plus grosse relecture.
+ */
+export function repeatedReread(runs: PerfRun[]): Reread | null {
+  for (const cause of ADVISED_REREADS) {
+    const hits = runs.map((r) => r.reread).filter((r): r is Reread => r?.cause === cause)
+    if (hits.length >= 2) return hits.reduce((a, b) => (b.tokens > a.tokens ? b : a))
+  }
+  return null
+}
+
+function rereadAdvice(r: Reread): PerfAdvice {
+  const upTo = `jusqu’à ${r.tokens.toLocaleString('fr-FR')} jetons`
+  switch (r.cause) {
+    case 'tools':
+      return {
+        id: 'reread-tools',
+        level: 'info',
+        text: `La liste des outils change d’une question à l’autre (extension chargée à la demande) : le modèle relit tout à chaque fois (${upTo}). Garder une discussion par extension évite ces relectures.`
+      }
+    case 'system':
+      return {
+        id: 'reread-system',
+        level: 'info',
+        text: `Les consignes changent d’une question à l’autre (mémoire, réglages ou niveau de réflexion) : le modèle relit tout à chaque fois (${upTo}).`
+      }
+    case 'other-chat':
+      return {
+        id: 'reread-other-chat',
+        level: 'info',
+        text: `Tu passes souvent d’une discussion à l’autre : à chaque retour, le modèle relit toute la discussion (${upTo}). Rester dans la même discussion répond plus vite.`
+      }
+    case 'summary':
+      return {
+        id: 'reread-summary',
+        level: 'info',
+        text: `Tes discussions sont résumées pour tenir dans la fenêtre du modèle : après chaque résumé, il relit tout (${upTo}). Une nouvelle discussion repart léger.`,
+        action: 'new-chat'
+      }
+    case 'full':
+      return {
+        id: 'reread-full',
+        level: 'warn',
+        text: `La discussion remplit presque toute la fenêtre du modèle : il en coupe le début et relit tout à chaque question (${upTo}). Une nouvelle discussion répond bien plus vite.`,
+        action: 'new-chat'
+      }
+    default:
+      return {
+        id: 'reread-cache',
+        level: 'info',
+        text: `Le modèle relit tout alors que rien n’a changé (${upTo}) : ce qu’il avait lu est remplacé entre deux questions, par une autre tâche ou une autre application qui se sert du modèle.`
+      }
+  }
 }
 
 /** Couleur d'une jauge selon son niveau (0 à 1). */

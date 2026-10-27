@@ -10,8 +10,10 @@ const {
   keepPrefixStable,
   prefixGap,
   promptPrefix,
+  readState,
   readWarmPrompts,
   rejectsThinking,
+  requestChange,
   summarize
 } = await import('../src/main/brains/gateway')
 
@@ -318,5 +320,74 @@ describe('mesure de la vitesse', () => {
       { inputTokens: 300, outputTokens: 60, firstDeltaAt: 4000, firstTextAt: 4000, endAt: 5000 }
     ])
     expect(stats).toEqual({ firstTokenMs: 4000, tokensPerSec: 50, inputTokens: 5300, outputTokens: 100, requests: 2 })
+  })
+})
+
+describe('ce que le modèle local relit', () => {
+  const sys = (text = 'Tu es Compi.') => [{ type: 'text', text }]
+  const tools = [{ name: 'a', description: 'outil a' }]
+  const req = (messages: { role: string; content: string }[], patch: Record<string, unknown> = {}) => ({
+    model: 'gemma4:12b',
+    system: sys(),
+    tools,
+    messages,
+    ...patch
+  })
+  const q1 = { role: 'user', content: 'Range mes factures' }
+  const a1 = { role: 'assistant', content: 'C’est fait.' }
+  const q2 = { role: 'user', content: 'Merci, et mes photos ?' }
+  const change = (before: Record<string, unknown> | null, now: Record<string, unknown>, window?: number) =>
+    requestChange(before ? readState(before) : null, readState(now), now, window)
+
+  it('rien lu avant (démarrage ou autre modèle) : premier passage', () => {
+    expect(change(null, req([q1])).change).toBe('start')
+  })
+
+  it('même discussion qui se prolonge : seule la suite est nouvelle', () => {
+    const c = change(req([q1]), req([q1, a1, q2]), 32_768)
+    expect(c.change).toBeNull()
+    expect(c.newTokens).toBeLessThan(40)
+    expect(c.promptTokens).toBeGreaterThan(c.newTokens)
+    expect(c.contextTokens).toBe(32_768)
+  })
+
+  it('la marque de cache que le moteur déplace sur le dernier message ne compte pas', () => {
+    const marked = (text: string) => ({ role: 'user', content: [{ type: 'text', text, cache_control: { type: 'ephemeral' } }] })
+    // Une fois que ce n'est plus le dernier message, le moteur le renvoie en texte simple.
+    const plain = (text: string) => ({ role: 'user', content: text })
+    const turn1 = { ...req([]), messages: [marked('Range mes factures')] }
+    const turn2 = { ...req([]), messages: [plain('Range mes factures'), a1, marked('Et mes photos ?')] }
+    expect(change(turn1, turn2).change).toBeNull()
+  })
+
+  it('nouvelle discussion sur le même début : rien n’a changé', () => {
+    expect(change(req([q1, a1, q2]), req([{ role: 'user', content: 'Quel temps fait-il ?' }])).change).toBeNull()
+  })
+
+  it('outils ou consignes changés', () => {
+    expect(change(req([q1]), req([q1, a1, q2], { tools: [...tools, { name: 'b' }] })).change).toBe('tools')
+    expect(change(req([q1]), req([q1, a1, q2], { system: sys('Tu es Compi. Mémoire : nouvelle.') })).change).toBe('system')
+    expect(change(req([q1]), req([q1, a1, q2], { thinking: { type: 'disabled' } })).change).toBe('system')
+  })
+
+  it('retour à une autre discussion, ou discussion résumée : seule la dernière question est nouvelle', () => {
+    const other = change(req([{ role: 'user', content: 'Autre chose' }]), req([q1, a1, q2]))
+    expect(other.change).toBe('other-chat')
+    expect(other.newTokens).toBeLessThan(20)
+    const summary = change(req([q1, a1, q2]), req([q1, { role: 'assistant', content: 'Résumé : factures rangées.' }, q2]))
+    expect(summary.change).toBe('summary')
+  })
+
+  it('les empreintes ne gardent rien du contenu des messages', () => {
+    expect(JSON.stringify(readState(req([q1])).messages)).not.toContain('factures')
+  })
+
+  it('la réponse garde sa plus grosse relecture et les extensions trop grosses', () => {
+    const stats = summarize(0, [
+      { inputTokens: 9000, outputTokens: 40, reread: { tokens: 9000, promptTokens: 9200, cause: 'tools', first: true }, omitted: ['Notion'] },
+      { inputTokens: 300, outputTokens: 60, omitted: ['Notion'] }
+    ])
+    expect(stats.reread).toEqual({ tokens: 9000, promptTokens: 9200, cause: 'tools', first: true })
+    expect(stats.toolsOmitted).toEqual(['Notion'])
   })
 })

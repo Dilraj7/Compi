@@ -154,6 +154,39 @@ describe('conseils', () => {
     expect(a[0].action).toBe('new-chat')
   })
 
+  it('relecture revenue 2 fois sur les 3 dernières réponses : un conseil selon sa cause', () => {
+    const run = (cause?: 'full' | 'tools' | 'start' | 'reload', tokens = 9000) => ({
+      at: 0,
+      model: 'gemma4:12b',
+      firstTokenMs: 45_000,
+      inputTokens: tokens,
+      coldStart: false,
+      ...(cause ? { reread: { tokens, promptTokens: tokens, cause } } : {})
+    })
+    // Une seule fois : rien (la réponse l'explique déjà sous la vitesse).
+    expect(perfAdvice(snapshot({ runs: [run(), run(), run('tools')] })).map((x) => x.id)).toEqual(['long'])
+    const full = perfAdvice(snapshot({ runs: [run('full', 26_000), run(), run('full', 28_000)] }))
+    // Remplace le conseil « longue discussion », avec la plus grosse relecture.
+    expect(full.map((x) => x.id)).toEqual(['reread-full'])
+    expect(full[0].action).toBe('new-chat')
+    expect(full[0].text).toContain('28\u202f000 jetons')
+    // Plus ancienne que les 3 dernières : oubliée.
+    expect(perfAdvice(snapshot({ runs: [run('tools'), run('tools'), run(), run(), run()] })).map((x) => x.id)).toEqual(['long'])
+    // Premier passage et rechargement ont leurs propres conseils.
+    expect(perfAdvice(snapshot({ runs: [run('start'), run('start'), run('reload')] })).map((x) => x.id)).toEqual(['long'])
+  })
+
+  it('extension trop grosse pour la fenêtre, demandée 2 fois sur 3', () => {
+    const run = (toolsOmitted?: string[]) => ({ at: 0, model: 'gemma4:12b', firstTokenMs: 2000, inputTokens: 900, ...(toolsOmitted ? { toolsOmitted } : {}) })
+    const s = snapshot({ runs: [run(['Notion']), run(), run(['Notion', 'Slack'])] })
+    s.local!.models[0].contextLength = 32_768
+    const a = perfAdvice(s)
+    expect(a.map((x) => x.id)).toEqual(['tools-omitted'])
+    expect(a[0].text).toContain('L’extension Notion est trop grosse')
+    expect(a[0].text).toContain('32\u202f768')
+    expect(a[0].text).not.toContain('Slack')
+  })
+
   it('une autre application occupe la carte graphique', () => {
     const s = snapshot()
     s.gpu!.busyApp = { name: 'Steam', util: 92 }

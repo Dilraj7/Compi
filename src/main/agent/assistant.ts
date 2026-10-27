@@ -23,6 +23,7 @@ import {
 import { WEB_SEARCH_TOOL, webSearchLabel, webSearchReady } from '../../shared/webSearch'
 import type { AgentEvent, Brain, ChatMessage, Routine, RunStats, SendRequest, SendResult, SentTo, ToolActivity } from '../../shared/types'
 import { stageDetail } from '../../shared/stage'
+import { withColdStart } from '../../shared/reread'
 import { approvals } from '../approvals'
 import { brainEnv, hostEnv, resolveBrain } from '../brains/brain'
 import { openRoute, type OpenRoute } from '../brains/gateway'
@@ -857,7 +858,11 @@ async function runQuery(
   let probe: LocalRunProbe | null = null
   const runStats = (): RunStats | undefined => {
     const st = route?.stats()
-    return st && st.requests ? { ...st, ...probe?.extra() } : undefined
+    if (!st?.requests) return undefined
+    const extra = probe?.extra()
+    // Modèle rechargé au début de la réponse : c'est lui qui explique la relecture de son premier appel.
+    const reread = withColdStart(st.reread, extra?.coldStart)
+    return { ...st, ...extra, ...(reread ? { reread } : {}) }
   }
 
   /** Action annoncée sans outil, ou souvenir promis sans memory_save (pas dans une routine : la mémoire y est fermée). */
@@ -1101,7 +1106,8 @@ async function runQuery(
       const sec = (ms?: number): string => (ms === undefined ? '–' : `${(ms / 1000).toFixed(1)} s`)
       const cause = [
         stats.coldStart && 'modèle rechargé',
-        stats.gpuShare !== undefined && stats.gpuShare < 0.97 && `${Math.round(stats.gpuShare * 100)} % sur la carte graphique`
+        stats.gpuShare !== undefined && stats.gpuShare < 0.97 && `${Math.round(stats.gpuShare * 100)} % sur la carte graphique`,
+        stats.reread && `${stats.reread.tokens} jetons relus (${stats.reread.cause})`
       ]
         .filter(Boolean)
         .join(' · ')

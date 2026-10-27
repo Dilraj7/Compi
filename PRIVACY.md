@@ -77,6 +77,7 @@ Chaque service applique sa propre politique de confidentialité (Anthropic, Goog
 - **Ce PC** mesure le processeur, la mémoire et la carte graphique sur ton PC. Pour la mémoire des discussions gardées par Ollama, Compi lit la fin du journal d'Ollama (`%LOCALAPPDATA%\Ollama\server.log`) : seulement des tailles, jamais le contenu.
 - **« Limiter à 2 Go »** écrit la variable `LLAMA_ARG_CACHE_RAM` dans ton compte Windows, puis redémarre Ollama, toujours après ta confirmation. **« Rétablir »** l'efface. Rien d'autre n'est changé dans Ollama.
 - **L'alerte de l'îlot** (mémoire presque pleine) se calcule sur ton PC ; elle se coupe dans Réglages › Îlot.
+- **« Pourquoi ? »** (ce que le modèle local a dû relire) compare chaque requête à la précédente sur ton PC, par des empreintes gardées en mémoire le temps de la session. Seuls le nombre de jetons relus et la cause restent, avec la réponse ; rien de plus n'est lu dans le journal d'Ollama.
 
 ## Dictée partout
 

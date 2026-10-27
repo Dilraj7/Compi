@@ -6,13 +6,22 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
-import { packRevision, SPEECH_PACKS } from '../../shared/speechModels'
+import {
+  LEGACY_VOICES_FILES,
+  LEGACY_VOICES_PACK,
+  packRevision,
+  SPEECH_PACKS,
+  VOICES_FILES,
+  type SpeechPackDef,
+  type VoicesFiles
+} from '../../shared/speechModels'
 import type { SpeechModelStatus, SpeechPackId } from '../../shared/types'
 import { log } from '../log'
 import { downloadFile, hfBase, tree, type TreeEntry } from '../voice/model'
 
 const root = (): string => join(app.getPath('userData'), 'models')
-const modelDir = (id: SpeechPackId): string => join(root(), SPEECH_PACKS[id].dir)
+const packDir = (def: SpeechPackDef): string => join(root(), def.dir)
+const modelDir = (id: SpeechPackId): string => packDir(SPEECH_PACKS[id])
 const manifestPath = (id: SpeechPackId): string => join(modelDir(id), 'compi-model.json')
 
 interface Manifest {
@@ -23,10 +32,14 @@ interface Manifest {
 }
 
 function readManifest(id: SpeechPackId): Manifest | null {
+  return readPackManifest(SPEECH_PACKS[id])
+}
+
+function readPackManifest(def: SpeechPackDef): Manifest | null {
   try {
-    const m = JSON.parse(readFileSync(manifestPath(id), 'utf8')) as Manifest
-    if (m.revision !== packRevision(SPEECH_PACKS[id])) return null
-    const dir = modelDir(id)
+    const dir = packDir(def)
+    const m = JSON.parse(readFileSync(join(dir, 'compi-model.json'), 'utf8')) as Manifest
+    if (m.revision !== packRevision(def)) return null
     for (const f of m.files) if (!existsSync(join(dir, f.path)) || statSync(join(dir, f.path)).size !== f.size) return null
     return m
   } catch {
@@ -43,14 +56,26 @@ export function speechModelFiles(id: SpeechPackId): Record<string, string> | nul
   return Object.fromEntries(packFiles(id).map((f) => [f, join(dir, f)]))
 }
 
+/** Modèles de la séparation des voix : le pack actuel, sinon l'ancien (CAM++) tant qu'il est là. */
+export function voicesFiles(): VoicesFiles | null {
+  const files = speechModelFiles('voices')
+  if (files) return { segmentation: files[VOICES_FILES.segmentation], embedding: files[VOICES_FILES.embedding] }
+  if (!readPackManifest(LEGACY_VOICES_PACK)) return null
+  const dir = packDir(LEGACY_VOICES_PACK)
+  return { segmentation: join(dir, LEGACY_VOICES_FILES.segmentation), embedding: join(dir, LEGACY_VOICES_FILES.embedding) }
+}
+
 let job: { id: SpeechPackId; abort: AbortController; received: number; total: number } | null = null
 
 export function speechModelStatus(id: SpeechPackId): SpeechModelStatus {
-  const m = readManifest(id)
+  const current = readManifest(id)
+  const legacy = !current && id === 'voices' ? readPackManifest(LEGACY_VOICES_PACK) : null
+  const m = current ?? legacy
   return {
     model: id,
     installed: Boolean(m),
     sizeBytes: m?.files.reduce((n, f) => n + f.size, 0),
+    outdated: legacy ? true : undefined,
     downloading: job ? { model: job.id, received: job.received, total: job.total } : undefined
   }
 }
@@ -103,6 +128,7 @@ export async function downloadSpeechModel(id: SpeechPackId, onProgress: (s: Spee
     const tmp = `${manifestPath(id)}.tmp`
     writeFileSync(tmp, JSON.stringify(manifest, null, 2))
     renameSync(tmp, manifestPath(id))
+    if (id === 'voices') rmSync(packDir(LEGACY_VOICES_PACK), { recursive: true, force: true })
     log('info', `dictée partout : modèle ${manifest.repo} installé, ${(job.total / 1e6).toFixed(0)} Mo`)
   } catch (e) {
     if (abort.signal.aborted) {
@@ -126,6 +152,7 @@ export function cancelSpeechDownload(): void {
 export function deleteSpeechModel(id: SpeechPackId): SpeechModelStatus {
   if (job?.id === id) job.abort.abort()
   rmSync(modelDir(id), { recursive: true, force: true })
+  if (id === 'voices') rmSync(packDir(LEGACY_VOICES_PACK), { recursive: true, force: true })
   return speechModelStatus(id)
 }
 

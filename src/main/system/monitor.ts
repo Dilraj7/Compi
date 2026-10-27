@@ -264,6 +264,8 @@ export function startLocalRun(model: string): LocalRunProbe {
           firstTokenMs: stats.firstTokenMs,
           tokensPerSec: stats.tokensPerSec,
           inputTokens: stats.inputTokens,
+          ...(stats.reread ? { reread: stats.reread } : {}),
+          ...(stats.toolsOmitted ? { toolsOmitted: stats.toolsOmitted } : {}),
           coldStart,
           gpuShare: engine === 'ollama' ? share() : undefined
         })
