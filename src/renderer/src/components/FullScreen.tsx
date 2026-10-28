@@ -15,6 +15,7 @@ import { PendingRequests } from './Cards'
 import { Block, dayTitle, Empty, MessagesBlock, ReminderRow, Timeline, TIME, TimerBlock, UnreadRows, useToday } from './Day'
 import { GAUGE_COLOR, perfLevels } from './Gauges'
 import { MediaPeek, useNow } from './Live'
+import { TasksBlock } from './Tasks'
 import { IconButton, LedDots, cx } from './ui'
 import { RoutinesSection } from '../views/RoutinesSection'
 
@@ -177,6 +178,7 @@ function ForYouColumn() {
           </div>
         )}
       </section>
+      <TasksBlock limit={8} />
       <MessagesBlock />
       <RoutinesSection />
     </div>

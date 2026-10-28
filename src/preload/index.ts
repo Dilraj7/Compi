@@ -113,6 +113,10 @@ const api: CompiApi = {
   agendaRemove: (id) => ipcRenderer.invoke(IPC.agendaRemove, id),
 
   today: () => ipcRenderer.invoke(IPC.todayGet),
+  tasks: () => ipcRenderer.invoke(IPC.tasksList),
+  setTaskDone: (listId, id, done) => ipcRenderer.invoke(IPC.tasksSetDone, listId, id, done),
+  addTask: (title, due) => ipcRenderer.invoke(IPC.tasksAdd, title, due),
+  onTasks: (cb) => listen(IPC.tasksChanged, cb),
   setCity: (name) => ipcRenderer.invoke(IPC.setCity, name),
   reminders: () => ipcRenderer.invoke(IPC.remindersList),
   onReminders: (cb) => listen(IPC.remindersChanged, cb),

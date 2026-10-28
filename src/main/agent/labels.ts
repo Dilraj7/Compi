@@ -7,6 +7,7 @@ import { isLauncher, movesSummary } from '../../shared/folderPlan'
 import { REPEAT_KINDS, routineRepeat, type RepeatKind } from '../../shared/routines'
 import { isSettingsPage, SETTINGS_PAGES } from '../../shared/windows'
 import { eventByReference, type EventRef } from '../google/eventRefs'
+import { taskByReference } from '../google/taskRefs'
 import { redact } from '../privacy/redact'
 
 type Input = Record<string, unknown>
@@ -143,6 +144,14 @@ export function activityLabel(name: string, input: Input = {}): string {
         return `Recherche dans tes e-mails : ${str(input.query)}`
       case 'mail_read':
         return 'Lecture d’un e-mail'
+      case 'tasks_list':
+        return input.query ? `Recherche dans tes tâches : ${str(input.query)}` : 'Coup d’œil à tes tâches'
+      case 'tasks_create':
+        return `Tâche : ${str(input.title)}`
+      case 'tasks_complete':
+        return `Tâche cochée : « ${taskByReference(input.ref)?.title ?? str(input.ref)} »`
+      case 'tasks_update':
+        return `Tâche : modification de « ${taskByReference(input.ref)?.title ?? str(input.ref)} »`
       case 'mail_create_draft':
         return 'Préparation d’un brouillon'
       case 'read_document':
@@ -193,6 +202,10 @@ function whenLabel(start: string, end: string): string {
 }
 
 const UNKNOWN_REF = "Réf inconnue : l'outil va échouer. Compi doit d'abord relire l'agenda."
+const UNKNOWN_TASK = "Réf inconnue : l'outil va échouer. Compi doit d'abord relire les tâches."
+
+/** « jeudi 30 octobre » (échéance d'une tâche : le jour seulement). */
+const taskDay = (day: string): string => (/^\d{4}-\d{2}-\d{2}$/.test(day) ? DAY_ONLY.format(new Date(`${day}T12:00:00`)) : day)
 
 /** Date d'arrivée d'un déplacement ; sans fin donnée, la durée est gardée (comme patchBody). */
 function movedWhen(old: EventRef, start: string, end: string): string {
@@ -428,6 +441,41 @@ export function approvalTitle(name: string, input: Input = {}): { title: string;
           ]
             .filter(Boolean)
             .join('\n\n')
+        }
+      }
+      case 'tasks_list':
+        return { title: 'Compi veut consulter tes tâches', detail: str(input.query) || undefined }
+      case 'tasks_create':
+        return {
+          title: `Compi veut ajouter la tâche « ${str(input.title)} »`,
+          detail: [
+            str(input.due) ? `Échéance : ${taskDay(str(input.due))}` : 'Sans échéance',
+            str(input.list) ? `Liste : ${str(input.list)}` : '',
+            str(input.notes).slice(0, 300)
+          ]
+            .filter(Boolean)
+            .join('\n')
+        }
+      case 'tasks_complete': {
+        const t = taskByReference(input.ref)
+        if (!t) return { title: 'Compi veut cocher une tâche', detail: UNKNOWN_TASK }
+        return { title: `Compi veut cocher « ${t.title} »`, detail: `Liste : ${t.list}${t.due ? `\nÉchéance : ${taskDay(t.due)}` : ''}` }
+      }
+      case 'tasks_update': {
+        const t = taskByReference(input.ref)
+        if (!t) return { title: 'Compi veut modifier une tâche', detail: UNKNOWN_TASK }
+        const title = str(input.title).trim()
+        const due = str(input.due)
+        return {
+          title: `Compi veut ${due && !title ? 'reporter' : 'modifier'} « ${t.title} »`,
+          detail: [
+            due ? `Échéance : ${t.due ? taskDay(t.due) : 'aucune'} → ${due === 'aucune' ? 'aucune' : taskDay(due)}` : '',
+            title && title !== t.title ? `Nouveau titre : « ${title} »` : '',
+            input.notes !== undefined ? `Nouvelles notes : ${str(input.notes).slice(0, 300) || '(vides)'}` : '',
+            'La même tâche, sans doublon.'
+          ]
+            .filter(Boolean)
+            .join('\n')
         }
       }
     }

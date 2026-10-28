@@ -150,8 +150,14 @@ function routineRules(): string {
 </routine>`
 }
 
-/** Agenda et e-mails : ce que Compi peut faire avec le compte Google (ou comment le connecter). */
+/** Agenda, e-mails et tâches : ce que Compi peut faire avec le compte Google (ou comment le connecter). */
 function googleAbilities(): string {
+  const base = agendaMailAbilities()
+  if (!settings.get().google.tasks) return base
+  return `${base}\n- Tâches Google (tasks_list ; tasks_create ajoute une tâche, tasks_complete la coche, tasks_update la modifie ou la reporte, grâce à la réf que donne tasks_list ; chaque action avec son accord). Ce ne sont pas les rappels de Compi : une tâche n'a qu'un jour d'échéance, sans heure. Aujourd'hui les affiche aussi.`
+}
+
+function agendaMailAbilities(): string {
   const { google, agenda } = settings.get()
   const sources = agenda.sources.filter((x) => x.enabled).map((x) => x.name)
   // Ce que Compi sait de son propre agenda : sinon un petit modèle invente une « intégration native ».

@@ -27,7 +27,7 @@ export const PRIVACY_CATEGORIES: { id: PrivacyCategory; label: string; what: str
   { id: 'screen', label: 'Écran', what: 'captures et texte lu à l’écran' },
   { id: 'files', label: 'Fichiers', what: 'contenu de tes documents et résultats de recherche' },
   { id: 'mail', label: 'E-mails', what: 'expéditeurs, objets et contenu de tes e-mails' },
-  { id: 'calendar', label: 'Agenda', what: 'tes rendez-vous et leurs détails' },
+  { id: 'calendar', label: 'Agenda', what: 'tes rendez-vous et tes tâches Google, avec leurs détails' },
   { id: 'clipboard', label: 'Presse-papier', what: 'ce que tu as copié' },
   { id: 'window', label: 'Fenêtres', what: 'titres des fenêtres ouvertes et état du PC' },
   { id: 'memory', label: 'Mémoire', what: 'ce que Compi a retenu sur toi' },
@@ -73,14 +73,17 @@ export const TOOL_CATEGORY: Record<string, PrivacyCategory> = {
   [compi('memory_search')]: 'memory',
   [compi('mail_search')]: 'mail',
   [compi('mail_read')]: 'mail',
-  [compi('calendar_events')]: 'calendar'
+  [compi('calendar_events')]: 'calendar',
+  // Les tâches suivent le choix « Agenda ».
+  [compi('tasks_list')]: 'calendar'
 }
 
 /**
- * Outils qui renvoient un contenu écrit par d'autres (e-mails, invitations) : il peut
- * contenir des consignes piégées. Après eux, les outils « sortants » demandent un OK.
+ * Outils qui renvoient un contenu écrit par d'autres (e-mails, invitations, tâches
+ * assignées) : il peut contenir des consignes piégées. Après eux, les outils « sortants »
+ * demandent un OK.
  */
-export const EXTERNAL_CONTENT_TOOLS = [compi('mail_search'), compi('mail_read'), compi('calendar_events')]
+export const EXTERNAL_CONTENT_TOOLS = [compi('mail_search'), compi('mail_read'), compi('calendar_events'), compi('tasks_list')]
 
 /** Outils par lesquels des données peuvent quitter le PC, hors cerveau : pages web, liens, connecteurs, commandes. */
 export function isOutbound(toolName: string): boolean {

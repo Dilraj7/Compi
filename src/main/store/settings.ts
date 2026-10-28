@@ -39,8 +39,10 @@ export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
  * v18 : conversation vocale (désactivée) et « couper la lecture en parlant ». Champs
  * ajoutés seulement, comme en v17.
  * v19 : préparer mes réunions (désactivé), 10 min avant. Champs ajoutés seulement.
+ * v20 : tâches Google (non accordées tant que l'utilisateur ne reconnecte pas son compte).
+ * Champ ajouté seulement.
  */
-export const SETTINGS_VERSION = 19
+export const SETTINGS_VERSION = 20
 
 /** Modèle d'Ollama pour la recherche par le sens : multilingue, bon en français, ~640 Mo. */
 export const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b'
@@ -74,7 +76,7 @@ export const DEFAULT_SETTINGS: Settings = {
     permissionTimeoutSec: 90
   },
   privacy: DEFAULT_PRIVACY,
-  google: { clientId: '', email: '', calendar: false, mail: false },
+  google: { clientId: '', email: '', calendar: false, mail: false, tasks: false },
   day: { morning: true, morningTime: '08:30', city: '', meetingAlerts: true, meetingMinutes: 5, meetingPrep: false, prepMinutes: 10 },
   agenda: { googleCalendars: null, sources: [] },
   showMusic: true,

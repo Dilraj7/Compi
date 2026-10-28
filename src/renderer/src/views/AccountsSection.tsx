@@ -1,10 +1,10 @@
-// Réglages « Comptes » (Google : agenda et e-mails) et « Ta journée »
+// Réglages « Comptes » (Google : agenda, e-mails et tâches) et « Ta journée »
 // (résumé du matin, météo, alertes de réunion). Les sources de l'agenda sont
 // dans AgendaSourcesSection.
 
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { CalendarDays, Check, ChevronDown, ExternalLink, FileJson, Mail, MapPin } from 'lucide-react'
+import { CalendarDays, Check, ChevronDown, ExternalLink, FileJson, ListTodo, Mail, MapPin } from 'lucide-react'
 import type { PublicSettings, Settings } from '@shared/types'
 import { useCompi } from '../store'
 import { Badge, Button, cx, LedDots, Row, Section, Segmented, TextInput, Toggle } from '../components/ui'
@@ -35,7 +35,7 @@ function Chip({ on, onClick, icon, children }: { on: boolean; onClick: () => voi
 
 const STEPS = [
   'Sur console.cloud.google.com, crée un projet « Compi ».',
-  'API et services › Bibliothèque : active « Gmail API » et « Google Calendar API ».',
+  'API et services › Bibliothèque : active « Gmail API », « Google Calendar API » et, pour les tâches, « Google Tasks API ».',
   'Google Auth Platform › Commencer : nom « Compi », audience « Externe ».',
   'Audience › Publier l’application (sinon Google te déconnecte tous les 7 jours).',
   'Clients › Créer un client › « Application de bureau », puis télécharge le fichier JSON.'
@@ -43,24 +43,38 @@ const STEPS = [
 
 export function GoogleSection({ s, apply }: Props) {
   const setSettings = useCompi((st) => st.setSettings)
-  const [want, setWant] = useState({ calendar: true, mail: true })
+  const [want, setWant] = useState({ calendar: true, mail: true, tasks: false })
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const [help, setHelp] = useState(false)
   const g = s.google
-  const connected = g.calendar || g.mail
+  const connected = g.calendar || g.mail || g.tasks
 
-  const connect = async (): Promise<void> => {
+  const connect = async (w: typeof want): Promise<void> => {
     setBusy(true)
     setMessage(null)
-    const r = await window.compi.googleConnect(want)
+    const r = await window.compi.googleConnect(w)
     setBusy(false)
-    setMessage(r.ok ? { ok: true, text: `Connecté${r.email ? ` : ${r.email}` : ''}.` } : { ok: false, text: r.message })
+    setMessage(
+      r.ok
+        ? w.tasks && !r.tasks
+          ? { ok: false, text: 'Connecté, mais sans les tâches : la case n’a pas été cochée sur l’écran de Google.' }
+          : { ok: true, text: `Connecté${r.email ? ` : ${r.email}` : ''}.` }
+        : { ok: false, text: r.message }
+    )
     setSettings(await window.compi.getSettings())
   }
+  const waiting = busy && (
+    <div className="flex items-center gap-2 text-[11.5px] text-fog-300">
+      <LedDots color={GOOGLE} /> Termine la connexion dans ton navigateur…
+      <button className="text-fog-500 underline-offset-2 hover:text-fog-100 hover:underline" onClick={() => void window.compi.googleCancel()}>
+        Annuler
+      </button>
+    </div>
+  )
 
   return (
-    <Section title="Comptes" hint="Ton agenda et tes e-mails Google. Compi n’envoie jamais d’e-mail : il prépare des brouillons.">
+    <Section title="Comptes" hint="Ton agenda, tes e-mails et tes tâches Google. Compi n’envoie jamais d’e-mail : il prépare des brouillons.">
       <div className="space-y-3 px-3.5 py-3.5">
         <div className="flex items-center gap-2.5">
           <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white text-[15px] font-bold" style={{ color: GOOGLE }}>
@@ -76,6 +90,7 @@ export function GoogleSection({ s, apply }: Props) {
             <div className="flex gap-1">
               {g.calendar && <Badge color={GOOGLE}>Agenda</Badge>}
               {g.mail && <Badge color={GOOGLE}>E-mails</Badge>}
+              {g.tasks && <Badge color={GOOGLE}>Tâches</Badge>}
             </div>
           )}
         </div>
@@ -130,22 +145,17 @@ export function GoogleSection({ s, apply }: Props) {
               <Chip on={want.mail} onClick={() => setWant({ ...want, mail: !want.mail })} icon={<Mail size={13} />}>
                 E-mails
               </Chip>
+              <Chip on={want.tasks} onClick={() => setWant({ ...want, tasks: !want.tasks })} icon={<ListTodo size={13} />}>
+                Tâches
+              </Chip>
               <div className="flex-1" />
-              {busy ? (
-                <Button variant="ghost" onClick={() => void window.compi.googleCancel()}>
-                  Annuler
-                </Button>
-              ) : (
-                <Button variant="primary" accent={GOOGLE} disabled={!want.calendar && !want.mail} onClick={() => void connect()}>
+              {!busy && (
+                <Button variant="primary" accent={GOOGLE} disabled={!want.calendar && !want.mail && !want.tasks} onClick={() => void connect(want)}>
                   Se connecter à Google
                 </Button>
               )}
             </div>
-            {busy && (
-              <div className="flex items-center gap-2 text-[11.5px] text-fog-300">
-                <LedDots color={GOOGLE} /> Termine la connexion dans ton navigateur…
-              </div>
-            )}
+            {waiting}
             <button className="text-[11px] text-fog-700 hover:text-fog-300" onClick={() => apply(window.compi.googleImportClient())}>
               Changer de fichier client
             </button>
@@ -155,14 +165,29 @@ export function GoogleSection({ s, apply }: Props) {
         {connected && (
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11.5px] leading-snug text-fog-500">
-              Ce que je lis suit tes choix de <span className="text-fog-300">Confidentialité</span> (E-mails, Agenda). Créer un rendez-vous ou un brouillon
-              passe toujours par ton OK.
+              Ce que je lis suit tes choix de <span className="text-fog-300">Confidentialité</span> (E-mails, Agenda). Créer un rendez-vous, un brouillon ou une
+              tâche passe toujours par ton OK.
             </p>
             <Button variant="subtle" size="sm" onClick={() => apply(window.compi.googleDisconnect())}>
               Déconnecter
             </Button>
           </div>
         )}
+
+        {connected && !g.tasks && (
+          <div className="flex items-center justify-between gap-3 border-t border-white/[0.05] pt-3">
+            <p className="text-[11.5px] leading-snug text-fog-500">
+              <span className="text-fog-300">Tâches Google</span> : tes listes dans Aujourd’hui et le plein écran. Google te redemande ton accord ; active
+              d’abord « Google Tasks API » dans ton projet.
+            </p>
+            {!busy && (
+              <Button variant="subtle" size="sm" onClick={() => void connect({ calendar: g.calendar, mail: g.mail, tasks: true })}>
+                <ListTodo size={13} /> Ajouter les tâches
+              </Button>
+            )}
+          </div>
+        )}
+        {connected && waiting}
 
         {message && <div className={cx('text-[11.5px]', message.ok ? 'text-led-green' : 'text-led-amber')}>{message.text}</div>}
       </div>

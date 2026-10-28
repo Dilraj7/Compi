@@ -105,6 +105,9 @@ describe('ta journée', () => {
     expect(morningLine(none, '', new Date(NOW))).toBe('Bonjour ! Rien de prévu aujourd’hui.')
     // Messages en attente : le nombre seulement, jamais les noms.
     expect(morningLine(none, '', new Date(NOW), 2)).toBe('Bonjour ! 2 messages en attente')
+    // Tâches Google pour aujourd'hui (retards compris).
+    expect(morningLine(none, '', new Date(NOW), 0, 3)).toBe('Bonjour ! 3 tâches à faire')
+    expect(morningLine(none, '', new Date(NOW), 0, 1)).toBe('Bonjour ! 1 tâche à faire')
     // Sans Google, une autre source d'agenda (connecteur, lien .ics) compte aussi.
     expect(morningLine({ ...none, agenda: true, events: [ev(14, 'Cours de piano')] }, '', new Date(NOW))).toBe('Bonjour ! 1 rendez-vous')
   })
@@ -134,7 +137,9 @@ describe('garde-fou e-mails et agenda', () => {
     expect(privacyDecision('custom', 'mcp__compi__mail_read', { mail: 'never' } as never)).toBe('deny')
     expect(privacyDecision('anthropic', 'mcp__compi__calendar_events', undefined)).toBe('ask')
     expect(privacyDecision('local', 'mcp__compi__mail_search', { mail: 'never' } as never)).toBeNull()
-    expect(EXTERNAL_CONTENT_TOOLS).toEqual(['mcp__compi__mail_search', 'mcp__compi__mail_read', 'mcp__compi__calendar_events'])
+    expect(EXTERNAL_CONTENT_TOOLS).toEqual(['mcp__compi__mail_search', 'mcp__compi__mail_read', 'mcp__compi__calendar_events', 'mcp__compi__tasks_list'])
+    // Les tâches suivent le choix « Agenda ».
+    expect(privacyDecision('anthropic', 'mcp__compi__tasks_list', { calendar: 'never' } as never)).toBe('deny')
   })
 
   it('outils « sortants » : pages web, liens, connecteurs, commandes', () => {

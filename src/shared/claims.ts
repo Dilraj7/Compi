@@ -37,6 +37,7 @@ const READ_ONLY = new Set([
   'reminder_list',
   'routine_list',
   'calendar_events',
+  'tasks_list',
   'mail_search',
   'mail_read',
   'weather_forecast',

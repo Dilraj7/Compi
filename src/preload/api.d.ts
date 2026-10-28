@@ -60,6 +60,8 @@ import type {
   SkillDraft,
   SkillInfo,
   TimerState,
+  TaskItem,
+  TasksInfo,
   TodayInfo,
   VoiceInfo,
   VoiceModelId,
@@ -189,7 +191,7 @@ export interface CompiApi {
   /** Ouvre un sélecteur de fichier et importe le JSON du client Google. */
   googleImportClient(): Promise<PublicSettings>
   /** Ouvre l'écran de Google dans le navigateur et attend la fin de la connexion. */
-  googleConnect(want: { calendar: boolean; mail: boolean }): Promise<GoogleConnectResult>
+  googleConnect(want: { calendar: boolean; mail: boolean; tasks: boolean }): Promise<GoogleConnectResult>
   googleCancel(): Promise<void>
   googleDisconnect(): Promise<PublicSettings>
 
@@ -206,6 +208,14 @@ export interface CompiApi {
   agendaRemove(id: string): Promise<PublicSettings>
 
   today(): Promise<TodayInfo>
+  /** Tâches Google à faire, toutes listes (dans l'ordre d'affichage). */
+  tasks(): Promise<TasksInfo>
+  /** Clic de l'utilisateur : cocher ou décocher une tâche. */
+  setTaskDone(listId: string, id: string, done: boolean): Promise<TaskItem | null>
+  /** Ajoute une tâche dans la liste par défaut (échéance « AAAA-MM-JJ » facultative). */
+  addTask(title: string, due?: string): Promise<TaskItem>
+  /** Tâches changées (ajoutée, cochée, modifiée) : relire. */
+  onTasks(cb: () => void): Unsubscribe
   /** Règle la ville de la météo (vide : pas de météo). */
   setCity(name: string): Promise<PublicSettings>
   reminders(): Promise<Reminder[]>

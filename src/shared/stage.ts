@@ -9,6 +9,7 @@ export type StageDetail =
   | { kind: 'moves'; moves: Array<{ from: string; to: string }>; total: number; refused: number }
   | { kind: 'event'; action: 'created' | 'updated' | 'deleted'; text: string }
   | { kind: 'reminder'; text: string; when: string }
+  | { kind: 'task'; action: 'created' | 'done' | 'updated'; text: string }
   | { kind: 'timer'; text: string }
   | { kind: 'opened'; what: 'app' | 'page' | 'file' | 'folder' | 'settings'; target: string }
   | { kind: 'sources'; sources: Array<{ title: string; url: string }> }
@@ -117,6 +118,12 @@ export function stageDetail(name: string, input: Input, result: string, opts: { 
       return line.startsWith('Modifié') ? { kind: 'event', action: 'updated', text: afterColon(line) } : undefined
     case 'calendar_delete_event':
       return line.startsWith('Supprimé') ? { kind: 'event', action: 'deleted', text: afterColon(line) } : undefined
+    case 'tasks_create':
+      return line.startsWith('Tâche ajoutée') ? { kind: 'task', action: 'created', text: afterColon(line) } : undefined
+    case 'tasks_complete':
+      return line.startsWith('Tâche terminée') ? { kind: 'task', action: 'done', text: afterColon(line) } : undefined
+    case 'tasks_update':
+      return line.startsWith('Tâche modifiée') ? { kind: 'task', action: 'updated', text: afterColon(line) } : undefined
     case 'reminder_create':
       return line.startsWith('Rappel programmé') ? { kind: 'reminder', text: cut(str(input.message)), when: afterColon(line) } : undefined
     case 'timer_start':

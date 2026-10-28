@@ -92,7 +92,8 @@ export const SAFE_COMPI_TOOLS = [
   // Lecture du compte Google : libre en local ; pour un cerveau en ligne, le garde-fou s'applique.
   'calendar_events',
   'mail_search',
-  'mail_read'
+  'mail_read',
+  'tasks_list'
 ].map((t) => `mcp__${COMPI_SERVER}__${t}`)
 
 /**

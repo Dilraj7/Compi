@@ -30,6 +30,7 @@ import type {
   QuickSelection,
   RegistryEntry,
   Reminder,
+  TaskItem,
   Routine,
   SemanticStatus,
   MessagesStatus,
@@ -59,6 +60,7 @@ import { cleanFact, sameFact } from '@shared/memory'
 import { cleanDraft } from '@shared/routines'
 import { icsUrl } from '@shared/agenda'
 import { pickPrevious, prepKey } from '@shared/meetingPrep'
+import { addDays, localDay, sortTasks } from '@shared/tasks'
 import { hourStart, messageCost, type ClaudeCodeUsage, type CompiUsageRow, type UsageRow } from '@shared/usage'
 import type { ApprovalLogEntry, Reread } from '@shared/types'
 import type { PerfSnapshot } from '@shared/perf'
@@ -357,8 +359,9 @@ export function createMockApi(): CompiApi {
     hasGoogleClient: params.get('google') !== 'none',
     google:
       params.get('google') === 'none' || params.get('google') === 'client'
-        ? { clientId: '', email: '', calendar: false, mail: false }
-        : { clientId: 'demo.apps.googleusercontent.com', email: 'alex@example.com', calendar: true, mail: true },
+        ? { clientId: '', email: '', calendar: false, mail: false, tasks: false }
+        : // ?tasks=on : les tâches Google sont accordées aussi.
+          { clientId: 'demo.apps.googleusercontent.com', email: 'alex@example.com', calendar: true, mail: true, tasks: params.get('tasks') === 'on' },
     // ?agenda=on : une source ajoutée (lien .ics) en plus de Google.
     agenda: {
       googleCalendars: null,
@@ -548,6 +551,27 @@ export function createMockApi(): CompiApi {
     { id: 'r2', message: 'Sortir les poubelles', dueAt: Date.now() + 26 * 3600_000, repeat: { every: 'week', days: [1, 4], time: '19:30' } }
   ]
   const remindersCh = channel<Reminder[]>()
+  // Tâches Google de démonstration (?tasks=on) : deux listes, retards, aujourd'hui, plus tard, sans date.
+  const tasksCh = channel<void>()
+  const dayIn = (n: number): string => addDays(localDay(new Date()), n)
+  const demoTasks: TaskItem[] = [
+    {
+      id: 'tk1',
+      listId: 'travail',
+      list: 'Travail',
+      title: 'Envoyer les captures d’écran à Léa',
+      due: dayIn(0),
+      done: false,
+      link: 'https://tasks.google.com/task/tk1'
+    },
+    { id: 'tk2', listId: 'maison', list: 'Maison', title: 'Payer la cantine', due: dayIn(-1), done: false },
+    { id: 'tk3', listId: 'maison', list: 'Maison', title: 'Réserver le restaurant pour samedi', due: dayIn(2), done: false },
+    { id: 'tk4', listId: 'travail', list: 'Travail', title: 'Relire le texte de la page', due: dayIn(5), done: false, notes: 'Surtout la partie tarifs.' },
+    { id: 'tk5', listId: 'maison', list: 'Maison', title: 'Acheter des ampoules', done: false },
+    { id: 'tk6', listId: 'travail', list: 'Travail', title: 'Rappeler le garage', done: false },
+    { id: 'tk7', listId: 'travail', list: 'Travail', title: 'Préparer la démo', due: dayIn(12), done: false },
+    { id: 'tk8', listId: 'maison', list: 'Maison', title: 'Renouveler le passeport', done: false }
+  ]
 
   // Îlot vivant (scénario ?music=playing|paused, ?timer=on) : musique, minuteur, voix.
   const mediaCh = channel<MediaInfo | null>()
@@ -1247,16 +1271,41 @@ export function createMockApi(): CompiApi {
     },
     googleConnect: async (want) => {
       await new Promise((r) => setTimeout(r, 2500))
-      settings = { ...settings, google: { ...settings.google, email: 'alex@example.com', calendar: want.calendar, mail: want.mail } }
+      settings = { ...settings, google: { ...settings.google, email: 'alex@example.com', calendar: want.calendar, mail: want.mail, tasks: want.tasks } }
       settingsCh.emit(settings)
-      return { ok: true, email: 'alex@example.com', calendar: want.calendar, mail: want.mail }
+      return { ok: true, email: 'alex@example.com', calendar: want.calendar, mail: want.mail, tasks: want.tasks }
     },
     googleCancel: async () => undefined,
     googleDisconnect: async () => {
-      settings = { ...settings, google: { ...settings.google, email: '', calendar: false, mail: false } }
+      settings = { ...settings, google: { ...settings.google, email: '', calendar: false, mail: false, tasks: false } }
       settingsCh.emit(settings)
       return settings
     },
+    tasks: async () => {
+      await new Promise((r) => setTimeout(r, 500))
+      return {
+        items: sortTasks(
+          demoTasks.filter((t) => !t.done),
+          localDay(new Date())
+        )
+      }
+    },
+    setTaskDone: async (listId, id, done) => {
+      await new Promise((r) => setTimeout(r, 300))
+      const t = demoTasks.find((x) => x.id === id && x.listId === listId)
+      if (!t) throw new Error('Introuvable chez Google (supprimé, ou mauvais identifiant).')
+      t.done = done
+      tasksCh.emit()
+      return { ...t }
+    },
+    addTask: async (title, due) => {
+      await new Promise((r) => setTimeout(r, 400))
+      const t: TaskItem = { id: `demo${Date.now()}`, listId: 'travail', list: 'Travail', title, ...(due ? { due } : {}), done: false }
+      demoTasks.push(t)
+      tasksCh.emit()
+      return t
+    },
+    onTasks: (cb) => tasksCh.on(() => cb()),
     today: async () => {
       await new Promise((r) => setTimeout(r, 400))
       return demoToday()

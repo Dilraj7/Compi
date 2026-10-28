@@ -156,7 +156,7 @@ export async function connectGoogle(want: GoogleWants): Promise<GoogleConnectRes
   const g = settings.get().google
   const clientSecret = secrets.getGoogleClientSecret()
   if (!g.clientId || !clientSecret) return { ok: false, message: "Importe d'abord le fichier JSON de ton client Google." }
-  if (!want.calendar && !want.mail) return { ok: false, message: 'Choisis au moins l’agenda ou les e-mails.' }
+  if (!want.calendar && !want.mail && !want.tasks) return { ok: false, message: 'Choisis au moins l’agenda, les e-mails ou les tâches.' }
 
   pending?.abort()
   const controller = new AbortController()
@@ -183,20 +183,20 @@ export async function connectGoogle(want: GoogleWants): Promise<GoogleConnectRes
     })
     if (!tokens.access_token || !tokens.refresh_token) return { ok: false, message: "Google n'a pas fourni de connexion durable. Réessaie." }
     const granted = grantedFrom(tokens.scope)
-    if (!granted.calendar && !granted.mail) {
+    if (!granted.calendar && !granted.mail && !granted.tasks) {
       // Rien d'utile accordé : on ne garde pas le jeton.
       await postForm(endpoints.revoke, { token: tokens.refresh_token }).catch(() => undefined)
-      return { ok: false, message: "Tu n'as coché ni l'agenda ni les e-mails sur l'écran de Google : rien n'est connecté." }
+      return { ok: false, message: "Tu n'as coché ni l'agenda, ni les e-mails, ni les tâches sur l'écran de Google : rien n'est connecté." }
     }
     const email = emailFromIdToken(tokens.id_token) ?? ''
     secrets.setGoogleRefreshToken(tokens.refresh_token)
     cached = { token: tokens.access_token, expiresAt: Date.now() + (tokens.expires_in ?? 3600) * 1000 }
-    settings.update({ google: { ...settings.get().google, email, calendar: granted.calendar, mail: granted.mail } })
+    settings.update({ google: { ...settings.get().google, email, calendar: granted.calendar, mail: granted.mail, tasks: granted.tasks } })
     log(
       'info',
-      `Google : connecté (agenda : ${granted.calendar ? 'oui' : 'non'}, e-mails : ${granted.mail ? 'oui' : 'non'}, brouillons : ${granted.drafts ? 'oui' : 'non'})`
+      `Google : connecté (agenda : ${granted.calendar ? 'oui' : 'non'}, e-mails : ${granted.mail ? 'oui' : 'non'}, brouillons : ${granted.drafts ? 'oui' : 'non'}, tâches : ${granted.tasks ? 'oui' : 'non'})`
     )
-    return { ok: true, email, calendar: granted.calendar, mail: granted.mail }
+    return { ok: true, email, calendar: granted.calendar, mail: granted.mail, tasks: granted.tasks }
   } catch (e) {
     const message = connectMessage(e as Error & { code?: string })
     log('warn', `Google : connexion échouée : ${(e as Error & { code?: string }).code ?? (e as Error).message}`)
@@ -217,7 +217,7 @@ export async function disconnectGoogle(): Promise<void> {
   cached = null
   if (token) await postForm(googleEndpoints().revoke, { token }).catch((e) => log('warn', `Google : révocation : ${(e as Error).message}`))
   secrets.setGoogleRefreshToken(null)
-  settings.update({ google: { ...settings.get().google, email: '', calendar: false, mail: false } })
+  settings.update({ google: { ...settings.get().google, email: '', calendar: false, mail: false, tasks: false } })
 }
 
 // ─── Jetons et appels ────────────────────────────────────────────────────────
@@ -241,7 +241,7 @@ async function refresh(): Promise<string> {
     if ((e as { code?: string }).code === 'invalid_grant') {
       // Accès retiré, mot de passe changé, ou application en mode « Test » (7 jours).
       secrets.setGoogleRefreshToken(null)
-      settings.update({ google: { ...settings.get().google, email: '', calendar: false, mail: false } })
+      settings.update({ google: { ...settings.get().google, email: '', calendar: false, mail: false, tasks: false } })
       throw new GoogleAuthError('La connexion Google a expiré ou a été retirée : reconnecte-toi dans Réglages › Comptes.')
     }
     throw new Error(`Google ne répond pas : ${(e as Error).message}`, { cause: e })

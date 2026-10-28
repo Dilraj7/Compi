@@ -3,7 +3,22 @@
 
 import type { ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { AppWindow, BellRing, CalendarCheck2, CalendarPlus, CalendarX2, FileText, FolderInput, FolderOpen, Globe, Settings2, Timer } from 'lucide-react'
+import {
+  AppWindow,
+  BellRing,
+  CalendarCheck2,
+  CalendarPlus,
+  CalendarX2,
+  CircleCheck,
+  FileText,
+  FolderInput,
+  FolderOpen,
+  Globe,
+  ListPlus,
+  ListTodo,
+  Settings2,
+  Timer
+} from 'lucide-react'
 import type { StageDetail } from '@shared/stage'
 import { cx } from './ui'
 
@@ -12,6 +27,7 @@ const COLOR: Record<StageDetail['kind'], string> = {
   moves: '#FCD34D',
   event: '#4C8DF6',
   reminder: '#F472B6',
+  task: '#4C8DF6',
   timer: '#F472B6',
   opened: '#A78BFA',
   sources: '#34D399'
@@ -56,6 +72,12 @@ const EVENT = {
   created: { label: 'Ajouté à l’agenda', Icon: CalendarPlus },
   updated: { label: 'Rendez-vous modifié', Icon: CalendarCheck2 },
   deleted: { label: 'Supprimé de l’agenda', Icon: CalendarX2 }
+} as const
+
+const TASK = {
+  created: { label: 'Tâche ajoutée', Icon: ListPlus },
+  done: { label: 'Tâche terminée', Icon: CircleCheck },
+  updated: { label: 'Tâche modifiée', Icon: ListTodo }
 } as const
 
 const OPENED = {
@@ -122,6 +144,10 @@ export function StageCard({ detail }: { detail: StageDetail }) {
     }
     case 'reminder':
       return <Shell kind="reminder" icon={<BellRing size={13} />} title={detail.text} sub={detail.when} />
+    case 'task': {
+      const { label, Icon } = TASK[detail.action]
+      return <Shell kind="task" icon={<Icon size={13} />} title={detail.text} sub={label} />
+    }
     case 'timer':
       return <Shell kind="timer" icon={<Timer size={13} />} title={detail.text} />
     case 'opened': {

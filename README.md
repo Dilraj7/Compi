@@ -23,7 +23,7 @@ Compi vit dans un « îlot » noir collé en haut de l'écran, à la manière du
 
 ## Ce qu'il sait faire
 
-- **Ta journée en une question** : agenda (Google, lien `.ics` ou connecteur), e-mails Gmail, météo, rappels.
+- **Ta journée en une question** : agenda (Google, lien `.ics` ou connecteur), e-mails Gmail, tâches Google, météo, rappels.
 - **Actions rapides** sur n'importe quel texte sélectionné, dans toutes tes applis : corriger, reformuler, traduire, résumer.
 - **Il agit, avec ton OK** : déplacer un rendez-vous, ranger un dossier, régler le son, ouvrir une appli. Une carte avant chaque action.
 - **Parle-lui** : ta voix est transcrite sur ton PC, jamais envoyée. Il peut aussi te répondre à voix haute, avec la voix de Windows ou une voix naturelle calculée sur ton PC, puis t'écouter pour la suite, sans toucher au clavier (conversation vocale, en option).
@@ -93,12 +93,12 @@ Lance ensuite `dist/Compi-Setup-0.4.0.exe`. L'installateur n'est pas signé : Sm
 | `Alt + Maj + O` / `N` | autoriser / refuser une demande                      |
 
 <details>
-<summary><b>Connecter Google (agenda et Gmail)</b></summary>
+<summary><b>Connecter Google (agenda, Gmail et tâches)</b></summary>
 
 Compi utilise ta propre « identité » chez Google, à créer une seule fois (10 minutes environ) :
 
 1. Sur [console.cloud.google.com](https://console.cloud.google.com), crée un projet « Compi ».
-2. **API et services › Bibliothèque** : active **Gmail API** et **Google Calendar API**.
+2. **API et services › Bibliothèque** : active **Gmail API** et **Google Calendar API** (et **Google Tasks API** pour tes tâches).
 3. **Google Auth Platform › Commencer** : nom « Compi », ton e-mail, audience **Externe**, puis **Créer**.
 4. **Audience › Publier l'application**. En mode « Test », Google coupe la connexion tous les 7 jours.
 5. **Clients › Créer un client** : type **Application de bureau**. Télécharge le fichier JSON.
@@ -106,7 +106,7 @@ Compi utilise ta propre « identité » chez Google, à créer une seule fois (1
 
 « Google n'a pas validé cette application » est normal pour une application personnelle : **Paramètres avancés › Accéder à Compi**.
 
-Compi lit ton agenda et tes e-mails, crée des brouillons et des rendez-vous avec ton accord. Il n'envoie **jamais** d'e-mail.
+Compi lit ton agenda, tes e-mails et tes tâches, crée des brouillons, des rendez-vous et des tâches avec ton accord. Il n'envoie **jamais** d'e-mail. Les tâches s'ajoutent à part : **Réglages › Comptes › Ajouter les tâches**.
 
 </details>
 

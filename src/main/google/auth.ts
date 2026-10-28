@@ -11,6 +11,7 @@ export interface GoogleEndpoints {
   revoke: string
   gmail: string
   calendar: string
+  tasks: string
 }
 
 export const GOOGLE_ENDPOINTS: GoogleEndpoints = {
@@ -18,7 +19,8 @@ export const GOOGLE_ENDPOINTS: GoogleEndpoints = {
   token: 'https://oauth2.googleapis.com/token',
   revoke: 'https://oauth2.googleapis.com/revoke',
   gmail: 'https://gmail.googleapis.com/gmail/v1',
-  calendar: 'https://www.googleapis.com/calendar/v3'
+  calendar: 'https://www.googleapis.com/calendar/v3',
+  tasks: 'https://tasks.googleapis.com/tasks/v1'
 }
 
 /**
@@ -34,7 +36,14 @@ export function endpointsFor(testBase: string | undefined): GoogleEndpoints {
     return GOOGLE_ENDPOINTS
   }
   const b = testBase.replace(/\/+$/, '')
-  return { auth: `${b}/o/oauth2/v2/auth`, token: `${b}/token`, revoke: `${b}/revoke`, gmail: `${b}/gmail/v1`, calendar: `${b}/calendar/v3` }
+  return {
+    auth: `${b}/o/oauth2/v2/auth`,
+    token: `${b}/token`,
+    revoke: `${b}/revoke`,
+    gmail: `${b}/gmail/v1`,
+    calendar: `${b}/calendar/v3`,
+    tasks: `${b}/tasks/v1`
+  }
 }
 
 const G = 'https://www.googleapis.com/auth/'
@@ -44,21 +53,25 @@ const G = 'https://www.googleapis.com/auth/'
  * - agenda : lire et créer des événements, voir la liste des agendas ;
  * - e-mails : lire, et créer des brouillons. Google n'a pas d'autorisation
  *   « brouillons seulement » : gmail.compose permettrait aussi d'envoyer, mais
- *   Compi n'a aucune fonction d'envoi (vérifié par un test).
+ *   Compi n'a aucune fonction d'envoi (vérifié par un test) ;
+ * - tâches : lire, et avec l'accord de l'utilisateur ajouter, cocher, modifier
+ *   (Google n'a pas d'autorisation plus étroite pour écrire).
  */
 export const SCOPES = {
   base: ['openid', 'email'],
   calendar: [`${G}calendar.events`, `${G}calendar.calendarlist.readonly`],
-  mail: [`${G}gmail.readonly`, `${G}gmail.compose`]
+  mail: [`${G}gmail.readonly`, `${G}gmail.compose`],
+  tasks: [`${G}tasks`]
 } as const
 
 export interface GoogleWants {
   calendar: boolean
   mail: boolean
+  tasks: boolean
 }
 
 export function scopesFor(want: GoogleWants): string[] {
-  return [...SCOPES.base, ...(want.calendar ? SCOPES.calendar : []), ...(want.mail ? SCOPES.mail : [])]
+  return [...SCOPES.base, ...(want.calendar ? SCOPES.calendar : []), ...(want.mail ? SCOPES.mail : []), ...(want.tasks ? SCOPES.tasks : [])]
 }
 
 /** Ce que l'utilisateur a vraiment accordé (il peut décocher des cases sur l'écran de Google). */
@@ -67,7 +80,8 @@ export function grantedFrom(scope: string | undefined): GoogleWants & { drafts: 
   return {
     calendar: list.includes(`${G}calendar.events`),
     mail: list.includes(`${G}gmail.readonly`),
-    drafts: list.includes(`${G}gmail.compose`)
+    drafts: list.includes(`${G}gmail.compose`),
+    tasks: list.includes(`${G}tasks`)
   }
 }
 
@@ -143,7 +157,13 @@ export function emailFromIdToken(idToken: string | undefined): string | undefine
 /** Message clair pour une erreur de l'API Google. */
 export function googleErrorMessage(status: number, body: string): string {
   if (status === 403 && /accessNotConfigured|SERVICE_DISABLED|has not been used in project|is disabled/i.test(body)) {
-    const api = /gmail/i.test(body) ? '« Gmail API »' : /calendar/i.test(body) ? '« Google Calendar API »' : 'l’API'
+    const api = /gmail/i.test(body)
+      ? '« Gmail API »'
+      : /calendar/i.test(body)
+        ? '« Google Calendar API »'
+        : /tasks/i.test(body)
+          ? '« Google Tasks API »'
+          : 'l’API'
     return `${api} n'est pas activée dans ton projet Google Cloud. Active-la (console Google › API et services › Bibliothèque), puis réessaie.`
   }
   if (status === 403 && /forbiddenForNonOrganizer|requiredAccessLevel|writer access|organizer/i.test(body)) {

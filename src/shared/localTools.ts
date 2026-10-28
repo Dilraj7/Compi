@@ -137,6 +137,13 @@ export const COMPI_GROUPS: CompiGroup[] = [
     tools: ['mail_create_draft'],
     keywords: ['brouillon', 'reponds', 'repondre', 'mail', 'mails', 'e-mail', 'e-mails', 'email', 'emails', 'courriel'],
     summary: 'préparer un brouillon Gmail'
+  },
+  {
+    id: 'taches',
+    name: 'Tâches Google',
+    tools: ['tasks_list', 'tasks_create', 'tasks_complete', 'tasks_update'],
+    keywords: ['tache', 'taches', 'todo', 'to-do', 'to do', 'a faire', 'google tasks', 'coche', 'cocher'],
+    summary: 'lire, ajouter, cocher ou modifier une tâche Google'
   }
 ]
 

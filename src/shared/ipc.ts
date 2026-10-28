@@ -100,6 +100,11 @@ export const IPC = {
   googleConnect: 'google:connect',
   googleCancel: 'google:cancel',
   googleDisconnect: 'google:disconnect',
+  // tâches Google
+  tasksList: 'tasks:list',
+  tasksSetDone: 'tasks:set-done',
+  tasksAdd: 'tasks:add',
+  tasksChanged: 'tasks:changed',
   // sources de l'agenda
   agendaGoogleCalendars: 'agenda:google-calendars',
   agendaSetGoogleCalendars: 'agenda:set-google-calendars',

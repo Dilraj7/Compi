@@ -33,7 +33,7 @@ describe('connexion Google', () => {
       auth.authUrl(auth.GOOGLE_ENDPOINTS, {
         clientId: 'x.apps.googleusercontent.com',
         redirectUri: 'http://127.0.0.1:5123',
-        scopes: auth.scopesFor({ calendar: true, mail: false }),
+        scopes: auth.scopesFor({ calendar: true, mail: false, tasks: false }),
         state: 'st',
         challenge: 'ch'
       })
@@ -51,7 +51,7 @@ describe('connexion Google', () => {
   })
 
   it('autorisations : les plus étroites, et ce que l’utilisateur a vraiment coché', () => {
-    expect(auth.scopesFor({ calendar: true, mail: true })).toEqual([
+    expect(auth.scopesFor({ calendar: true, mail: true, tasks: false })).toEqual([
       'openid',
       'email',
       'https://www.googleapis.com/auth/calendar.events',
@@ -60,9 +60,13 @@ describe('connexion Google', () => {
       'https://www.googleapis.com/auth/gmail.compose'
     ])
     // Jamais l'accès complet à Gmail (suppression définitive possible).
-    expect(auth.scopesFor({ calendar: true, mail: true })).not.toContain('https://mail.google.com/')
-    expect(auth.grantedFrom('openid https://www.googleapis.com/auth/gmail.readonly')).toEqual({ calendar: false, mail: true, drafts: false })
-    expect(auth.grantedFrom(undefined)).toEqual({ calendar: false, mail: false, drafts: false })
+    expect(auth.scopesFor({ calendar: true, mail: true, tasks: true })).not.toContain('https://mail.google.com/')
+    expect(auth.scopesFor({ calendar: false, mail: false, tasks: true })).toEqual(['openid', 'email', 'https://www.googleapis.com/auth/tasks'])
+    expect(auth.grantedFrom('openid https://www.googleapis.com/auth/gmail.readonly')).toEqual({ calendar: false, mail: true, drafts: false, tasks: false })
+    expect(auth.grantedFrom('openid https://www.googleapis.com/auth/tasks')).toEqual({ calendar: false, mail: false, drafts: false, tasks: true })
+    // Lecture seule des tâches : pas assez pour ajouter ou cocher.
+    expect(auth.grantedFrom('https://www.googleapis.com/auth/tasks.readonly').tasks).toBe(false)
+    expect(auth.grantedFrom(undefined)).toEqual({ calendar: false, mail: false, drafts: false, tasks: false })
   })
 
   it('fichier du client : « Application de bureau » seulement', () => {
@@ -91,6 +95,12 @@ describe('connexion Google', () => {
       auth.googleErrorMessage(403, '{"error":{"message":"Gmail API has not been used in project 123 before or it is disabled","status":"PERMISSION_DENIED"}}')
     ).toMatch(/« Gmail API » n'est pas activée/)
     expect(auth.googleErrorMessage(403, '{"error":{"message":"Request had insufficient authentication scopes."}}')).toMatch(/Reconnecte/)
+    expect(
+      auth.googleErrorMessage(
+        403,
+        '{"error":{"message":"Google Tasks API has not been used in project 123 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/tasks.googleapis.com"}}'
+      )
+    ).toMatch(/« Google Tasks API » n'est pas activée/)
     expect(auth.googleErrorMessage(429, '')).toMatch(/réessaie dans une minute/)
   })
 })

@@ -6,6 +6,7 @@ import { BellRing, CalendarDays, CloudSun, Mail, MessageCircle, RefreshCw } from
 import { useCompi } from '../store'
 import { Button, IconButton, LedDots } from '../components/ui'
 import { Block, dayTitle, Empty, EventRow, MessagesBlock, ReminderRow, TimerBlock, UnreadRows, useToday } from '../components/Day'
+import { TasksBlock } from '../components/Tasks'
 import { RoutinesSection } from './RoutinesSection'
 
 export function TodayView() {
@@ -130,6 +131,8 @@ export function TodayView() {
           <Empty>Aucun rappel. Dis-moi « rappelle-moi… », une fois ou chaque semaine.</Empty>
         )}
       </Block>
+
+      <TasksBlock />
 
       <MessagesBlock />
 

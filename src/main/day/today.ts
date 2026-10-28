@@ -11,6 +11,8 @@ import { log } from '../log'
 import { readJson, writeJson } from '../store/jsonFile'
 import { settings } from '../store/settings'
 import { unreadInbox } from '../google/gmail'
+import { listTasks } from '../google/tasks'
+import { dueTodayCount } from '../../shared/tasks'
 import { agendaActive, agendaEvents } from './agenda'
 import { listReminders } from './reminders'
 import { forecast } from './weather'
@@ -54,13 +56,15 @@ export async function buildToday(now = new Date()): Promise<TodayInfo> {
 }
 
 /** Phrase du résumé du matin (pure, testée). */
-export function morningLine(t: TodayInfo, name: string, now = new Date(), waiting = 0): string {
+export function morningLine(t: TodayInfo, name: string, now = new Date(), waiting = 0, tasks = 0): string {
   const nowMs = now.getTime()
   const upcoming = t.events.filter((e) => e.allDay || new Date(e.end).getTime() > nowMs)
   const bits = [
     t.agenda ? (upcoming.length ? `${upcoming.length} rendez-vous` : 'aucun rendez-vous') : '',
     t.unread ? `${t.unread.count} e-mail${t.unread.count > 1 ? 's' : ''} non lu${t.unread.count > 1 ? 's' : ''}` : '',
     t.reminders.length ? `${t.reminders.length} rappel${t.reminders.length > 1 ? 's' : ''}` : '',
+    // Tâches Google pour aujourd'hui, retards compris.
+    tasks ? `${tasks} tâche${tasks > 1 ? 's' : ''} à faire` : '',
     // Messages en attente : seulement le nombre (l'îlot est visible de tous).
     waiting ? `${waiting} message${waiting > 1 ? 's' : ''} en attente` : '',
     t.weather ? `${t.weather.label.toLowerCase()}, ${t.weather.max} °C` : ''
@@ -75,7 +79,7 @@ let morningTimer: NodeJS.Timeout | undefined
 
 async function checkMorning(): Promise<void> {
   const s = settings.get()
-  const configured = agendaActive() || s.google.mail || Boolean(s.day.city)
+  const configured = agendaActive() || s.google.mail || s.google.tasks || Boolean(s.day.city)
   if (!s.day.morning || !configured) return
   const now = new Date()
   const [h, m] = s.day.morningTime.split(':').map(Number)
@@ -87,8 +91,20 @@ async function checkMorning(): Promise<void> {
   if (state.lastMorning === today) return
   writeJson(stateFile(), { ...state, lastMorning: today })
   try {
-    const t = await buildToday(now)
-    emit(IPC.islandNotify, { pill: 'today', text: morningLine(t, s.userName, now, s.messages.enabled ? pendingCount() : 0), duration: 15_000, view: 'today' })
+    const [t, tasks] = await Promise.all([
+      buildToday(now),
+      s.google.tasks
+        ? listTasks()
+            .then((list) => dueTodayCount(list, today))
+            .catch(() => 0)
+        : Promise.resolve(0)
+    ])
+    emit(IPC.islandNotify, {
+      pill: 'today',
+      text: morningLine(t, s.userName, now, s.messages.enabled ? pendingCount() : 0, tasks),
+      duration: 15_000,
+      view: 'today'
+    })
   } catch (e) {
     log('warn', `Résumé du matin : ${(e as Error).message}`)
   }

@@ -16,6 +16,7 @@ import type {
   MeetingStartOptions,
   MeetingTrack,
   PublicSettings,
+  TasksInfo,
   RoutineDraft,
   Settings,
   SkillDraft,
@@ -38,6 +39,7 @@ import { addSource, agendaTools, calendarChoices, previewSource, removeSource, s
 import { findCity } from './day/weather'
 import { GOOGLE_ENDPOINTS } from './google/auth'
 import { cancelGoogleConnect, connectGoogle, disconnectGoogle, googleEndpoints, hasGoogleClient, importGoogleClient } from './google/connect'
+import { createTask, forgetTaskLists, listTasks, setTaskDone } from './google/tasks'
 import { approvals } from './approvals'
 import { hardwareInfo } from './brains/hardware'
 import { stopGateway } from './brains/gateway'
@@ -687,16 +689,38 @@ function registerIpc(): void {
     await importGoogleClient(r.filePaths[0])
     return publicSettings()
   })
-  ipcMain.handle(IPC.googleConnect, async (_e, want: { calendar: boolean; mail: boolean }) => {
-    const result = await connectGoogle({ calendar: Boolean(want?.calendar), mail: Boolean(want?.mail) })
-    if (result.ok) startMeetings()
+  ipcMain.handle(IPC.googleConnect, async (_e, want: { calendar: boolean; mail: boolean; tasks: boolean }) => {
+    const result = await connectGoogle({ calendar: Boolean(want?.calendar), mail: Boolean(want?.mail), tasks: Boolean(want?.tasks) })
+    if (result.ok) {
+      forgetTaskLists()
+      startMeetings()
+    }
     return result
   })
   ipcMain.handle(IPC.googleCancel, () => cancelGoogleConnect())
   ipcMain.handle(IPC.googleDisconnect, async () => {
     stopMeetings()
+    forgetTaskLists()
     await disconnectGoogle()
     return publicSettings()
+  })
+
+  // Tâches Google : lecture, et clics de l'utilisateur (cocher, ajouter)
+  ipcMain.handle(IPC.tasksList, async (): Promise<TasksInfo> => {
+    if (!settings.get().google.tasks) return { items: [] }
+    try {
+      return { items: await listTasks() }
+    } catch (e) {
+      return { items: [], error: `Tâches : ${(e as Error).message}` }
+    }
+  })
+  ipcMain.handle(IPC.tasksSetDone, (_e, listId: unknown, id: unknown, done: unknown) => {
+    if (!settings.get().google.tasks) throw new Error('Tâches Google non connectées.')
+    return setTaskDone(String(listId), String(id), done === true)
+  })
+  ipcMain.handle(IPC.tasksAdd, (_e, title: unknown, due: unknown) => {
+    if (!settings.get().google.tasks) throw new Error('Tâches Google non connectées.')
+    return createTask({ title: String(title ?? ''), ...(typeof due === 'string' && due ? { due } : {}) })
   })
 
   // Sources de l'agenda (une source ajoutée sert aussi aux alertes de réunion)

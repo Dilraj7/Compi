@@ -106,6 +106,8 @@ export interface GoogleSettings {
   /** Autorisations réellement accordées par l'utilisateur sur l'écran de Google. */
   calendar: boolean
   mail: boolean
+  /** Tâches Google (Google Tasks). */
+  tasks: boolean
 }
 
 /** « Ta journée » : résumé du matin et alertes de réunion. */
@@ -744,7 +746,28 @@ export interface TodayInfo {
   errors: string[]
 }
 
-export type GoogleConnectResult = { ok: true; email: string; calendar: boolean; mail: boolean } | { ok: false; message: string }
+export type GoogleConnectResult = { ok: true; email: string; calendar: boolean; mail: boolean; tasks: boolean } | { ok: false; message: string }
+
+/** Une tâche Google. Seules les tâches à faire sont lues ; `done` : cochée à l'instant dans Compi. */
+export interface TaskItem {
+  id: string
+  listId: string
+  /** Nom de la liste (« Mes tâches »). */
+  list: string
+  title: string
+  notes?: string
+  /** Échéance, jour seulement (« AAAA-MM-JJ ») : Google ne garde pas l'heure. */
+  due?: string
+  done: boolean
+  /** La tâche dans Google Tasks. */
+  link?: string
+}
+
+export interface TasksInfo {
+  items: TaskItem[]
+  /** Ce qui n'a pas pu être lu. */
+  error?: string
+}
 
 // ─── Îlot vivant : musique, minuteur, voix ───────────────────────────────────
 

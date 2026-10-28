@@ -59,7 +59,7 @@ Désactivée par défaut (Réglages › Cerveau › Recherche web). Avec Claude,
 
 **Les services que tu branches**
 
-- **Google** (agenda, e-mails), avec ton propre client Google.
+- **Google** (agenda, e-mails, tâches), avec ton propre client Google.
 - **Connecteurs** : chaque outil demande ton accord avant de servir. Les connecteurs « Local » lancent la commande que tu as choisie, souvent `npx`, qui télécharge le connecteur depuis npm. Une fois le connecteur téléchargé, Compi lance directement la copie gardée par npx, sans repasser par npm.
 - **Liens d'agenda** `.ics` que tu ajoutes.
 
@@ -118,6 +118,15 @@ Désactivé par défaut (Réglages › Journée › Ta journée). Tout se calcul
 - **Tes derniers e-mails avec eux** : seulement quand tu ouvres la préparation, et seulement si tu as autorisé Gmail. Compi cherche dans Gmail (de, à ou en copie, 30 derniers jours, 5 au plus) et n'affiche que l'expéditeur, le sujet et la date. Rien n'est gardé.
 - **La fois d'avant** : la réunion enregistrée la plus récente avec eux, et ses tâches, prises dans tes appels déjà enregistrés.
 - **« Enregistrer »** depuis la préparation relie l'appel au rendez-vous : `meetings\` garde alors aussi son titre, son horaire, sa série et les adresses des participants (pas leurs noms), pour retrouver la fois d'avant.
+
+## Tâches Google
+
+Désactivées tant que tu ne les ajoutes pas (Réglages › Journée › Comptes › « Ajouter les tâches »). Google demande alors ton accord pour l'accès à tes tâches.
+
+- **Aujourd'hui et le plein écran** affichent tes tâches à faire, relues chez Google toutes les 5 minutes tant qu'elles sont à l'écran. Compi ne les enregistre pas : seule une discussion où le cerveau les a lues les garde, avec le reste de la discussion.
+- **Cocher, décocher ou ajouter une tâche d'un clic** part tout de suite chez Google : c'est toi qui le fais.
+- **Le cerveau** ne reçoit tes tâches que s'il les lit avec l'outil prévu. Avec un cerveau en ligne, c'est le réglage « Agenda » du garde-fou qui décide (Me demander par défaut). Ajouter, cocher ou modifier une tâche demande ton accord **à chaque fois**, sans « Toujours », quel que soit le cerveau.
+- Une tâche peut venir d'une autre personne (tâche assignée) : elle est traitée comme un contenu venu d'ailleurs.
 
 ## Lecture à voix haute
 
