@@ -9,7 +9,7 @@ import { brainLabel, defaultBrain } from '@shared/brains'
 import { clockAt, CONSENT_SENTENCE, followUpPrompt, formatDuration, PEOPLE_CHOICES, speakerLabel, transcriptText } from '@shared/meetings'
 import { isOnline } from '@shared/privacy'
 import { SPEECH_MODELS } from '@shared/speechModels'
-import type { Meeting, MeetingMeta, SpeechModelId, SpeechModelStatus } from '@shared/types'
+import type { Meeting, MeetingEventLink, MeetingMeta, SpeechModelId, SpeechModelStatus } from '@shared/types'
 import { useCompi } from '../store'
 import { REC } from '../components/CallLive'
 import { Badge, Button, cx, Segmented, TextInput, Toggle, timeAgo } from '../components/ui'
@@ -117,8 +117,11 @@ function MeetingRow({ m, index, onOpen }: { m: MeetingMeta; index: number; onOpe
   )
 }
 
-/** Avant d'enregistrer : prévenir les participants, choisir la langue et ce qui est capté. */
-function StartCallCard({ onClose }: { onClose: () => void }) {
+/**
+ * Avant d'enregistrer : prévenir les participants, choisir la langue et ce qui est capté.
+ * `event` : lancé depuis la préparation d'une réunion de l'agenda (l'enregistrement prend son titre).
+ */
+export function StartCallCard({ onClose, event }: { onClose: () => void; event?: MeetingEventLink }) {
   const settings = useCompi((s) => s.settings)
   const [engine, setEngine] = useState<SpeechModelId>(settings?.meetings.engine ?? 'parakeet')
   const [others, setOthers] = useState(true)
@@ -140,7 +143,9 @@ function StartCallCard({ onClose }: { onClose: () => void }) {
   const start = (): void => {
     if (settings && settings.meetings.engine !== engine) void window.compi.updateSettings({ meetings: { ...settings.meetings, engine } })
     onClose()
-    void useCompi.getState().startCall({ engine, others, people: separate && people !== 'auto' ? Number(people) : undefined }, separate)
+    void useCompi
+      .getState()
+      .startCall({ engine, others, people: separate && people !== 'auto' ? Number(people) : undefined, ...(event ? { event } : {}) }, separate)
   }
 
   return (

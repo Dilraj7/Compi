@@ -86,7 +86,8 @@ export async function startMeeting(opts: MeetingStartOptions): Promise<MeetingSt
   const now = Date.now()
   const meeting: Meeting = {
     id,
-    title: defaultMeetingTitle(now),
+    // Lancé depuis la préparation d'une réunion : son titre, et le lien pour retrouver la suivante.
+    title: opts.event?.title ?? defaultMeetingTitle(now),
     startedAt: now,
     durationMs: 0,
     status: 'recording',
@@ -96,7 +97,8 @@ export async function startMeeting(opts: MeetingStartOptions): Promise<MeetingSt
     audio: true,
     lines: [],
     names: {},
-    people: opts.others ? peopleChoice(opts.people) : undefined
+    people: opts.others ? peopleChoice(opts.people) : undefined,
+    ...(opts.event ? { event: opts.event } : {})
   }
   mkdirSync(meetingDir(id), { recursive: true })
   const tracks: Active['tracks'] = {}

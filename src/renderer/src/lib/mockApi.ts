@@ -58,6 +58,7 @@ import { newPomodoro, newTimer, paused, resumed } from '@shared/timer'
 import { cleanFact, sameFact } from '@shared/memory'
 import { cleanDraft } from '@shared/routines'
 import { icsUrl } from '@shared/agenda'
+import { pickPrevious, prepKey } from '@shared/meetingPrep'
 import { hourStart, messageCost, type ClaudeCodeUsage, type CompiUsageRow, type UsageRow } from '@shared/usage'
 import type { ApprovalLogEntry, Reread } from '@shared/types'
 import type { PerfSnapshot } from '@shared/perf'
@@ -370,7 +371,10 @@ export function createMockApi(): CompiApi {
       cityLat: 47.22,
       cityLon: -1.55,
       meetingAlerts: true,
-      meetingMinutes: 5
+      meetingMinutes: 5,
+      // ?prep=on : « Préparer mes réunions » activé (participants, e-mails, fois d'avant).
+      meetingPrep: params.get('prep') === 'on',
+      prepMinutes: 10
     },
     showMusic: true,
     // ?tts=natural : la voix naturelle choisie et téléchargée (l'aperçu lit en silence).
@@ -381,7 +385,10 @@ export function createMockApi(): CompiApi {
       shortcut: 'Alt+Shift+V',
       model: 'small',
       engine: params.get('tts') === 'natural' ? 'natural' : 'windows',
-      naturalVoice: DEFAULT_NATURAL_VOICE
+      naturalVoice: DEFAULT_NATURAL_VOICE,
+      // ?converse=on : conversation vocale activée.
+      conversation: params.get('converse') === 'on',
+      bargeIn: true
     },
     voiceShortcutActive: true,
     dictation: { ...DEFAULT_DICTATION, enabled: params.get('dictation') === 'on' },
@@ -534,7 +541,8 @@ export function createMockApi(): CompiApi {
     d.setHours(h, m, 0, 0)
     return d.toISOString()
   }
-  const inMinutes = (min: number): string => new Date(Date.now() + min * 60_000).toISOString()
+  // Arrondi à la minute : l'événement garde le même début (et la même clé de préparation) d'un rafraîchissement à l'autre.
+  const inMinutes = (min: number): string => new Date(Math.ceil((Date.now() + min * 60_000) / 60_000) * 60_000).toISOString()
   let reminders: Reminder[] = [
     { id: 'r1', message: 'Appeler le garage', dueAt: Date.now() + 2 * 3600_000 },
     { id: 'r2', message: 'Sortir les poubelles', dueAt: Date.now() + 26 * 3600_000, repeat: { every: 'week', days: [1, 4], time: '19:30' } }
@@ -708,7 +716,13 @@ export function createMockApi(): CompiApi {
               end: inMinutes(34),
               allDay: false,
               meetUrl: 'https://meet.google.com/abc-defg-hij',
-              calendar: 'Travail'
+              calendar: 'Travail',
+              seriesId: 'serie-point-equipe',
+              attendees: [
+                { email: 'claire@exemple.fr', name: 'Claire Martin', organizer: true },
+                { email: 'paul@exemple.fr', name: 'Paul' },
+                { email: 'lea@exemple.fr' }
+              ]
             },
             { id: 'e3', title: 'Dentiste', start: at(17, 30), end: at(18), allDay: false, location: '12 rue Garibaldi' }
           ]
@@ -1001,6 +1015,12 @@ export function createMockApi(): CompiApi {
         view: 'today',
         action: { label: 'Rejoindre', url: 'https://meet.google.com/abc-defg-hij' }
       }),
+    // Préparation (?prep=on) : même clé que le « Point équipe » de demoToday().
+    prep: () => {
+      const e = demoToday().events.find((x) => x.id === 'e2')
+      if (e)
+        notices.emit({ pill: 'meeting', text: 'Point équipe dans 4 min', duration: 60_000, view: 'today', action: { label: 'Préparer', prep: prepKey(e) } })
+    },
     // Actions rapides sur une sélection (Alt+Maj+C).
     quick: () =>
       quickOpenCh.emit({
@@ -1407,7 +1427,7 @@ export function createMockApi(): CompiApi {
       const startedAt = Date.now()
       const meeting: Meeting = {
         id: crypto.randomUUID(),
-        title: defaultMeetingTitle(startedAt),
+        title: opts.event?.title ?? defaultMeetingTitle(startedAt),
         startedAt,
         durationMs: 0,
         status: 'recording',
@@ -1417,7 +1437,8 @@ export function createMockApi(): CompiApi {
         audio: true,
         lines: [],
         names: {},
-        people: opts.others ? opts.people : undefined
+        people: opts.others ? opts.people : undefined,
+        ...(opts.event ? { event: opts.event } : {})
       }
       let i = 0
       const timer = setInterval(() => {
@@ -1466,6 +1487,25 @@ export function createMockApi(): CompiApi {
       return true
     },
     onMeetingEvent: meetingCh.on,
+    meetingPrep: async (ev) => {
+      await new Promise((r) => setTimeout(r, 600))
+      const prev = pickPrevious(ev, meetingList())
+      const full = prev ? demoMeetings.find((m) => m.id === prev.id) : undefined
+      return {
+        mails: settings.google.mail
+          ? [
+              {
+                id: 'p1a2b3c4',
+                from: 'Claire Martin <claire@exemple.fr>',
+                subject: 'Ordre du jour de jeudi',
+                date: new Date(Date.now() - 86_400_000).toISOString()
+              },
+              { id: 'p2b3c4d5', from: 'Paul <paul@exemple.fr>', subject: 'Re: Captures de la page', date: new Date(Date.now() - 3 * 86_400_000).toISOString() }
+            ]
+          : null,
+        previous: prev ? { id: prev.id, title: prev.title, startedAt: prev.startedAt, tasks: full?.summary?.tasks ?? [] } : null
+      }
+    },
     meetings: async () => meetingList(),
     meeting: async (id) => demoMeetings.find((m) => m.id === id) ?? null,
     deleteMeeting: async (id) => {
@@ -1918,6 +1958,14 @@ function DEMO_MEETINGS(): Meeting[] {
       audio: false,
       names: { s1: 'Léa' },
       summary: DEMO_SUMMARY,
+      // La fois d'avant du « Point équipe » de démonstration (même série).
+      event: {
+        id: 'e2-prev',
+        seriesId: 'serie-point-equipe',
+        title: 'Point équipe',
+        start: new Date(t0).toISOString(),
+        attendees: ['claire@exemple.fr', 'paul@exemple.fr']
+      },
       lines: [
         { start: 2, end: 6, who: 's1', text: 'Bonjour à tous, on commence par le point sur le lancement.' },
         { start: 7, end: 11, who: 'me', text: 'Oui, la page est prête, il manque juste les captures.' },

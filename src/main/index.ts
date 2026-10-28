@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, writeFileSync } from 'node:fs'
-import { app, globalShortcut, ipcMain, shell } from 'electron'
+import { app, globalShortcut, ipcMain, powerMonitor, shell } from 'electron'
 import { IPC } from '../shared/ipc'
 import { recommend } from '../shared/recommend'
 import type {
@@ -126,6 +126,8 @@ import {
 import { deleteMeeting, getMeeting, isMeetingId, listMeetings, updateMeeting } from './meetings/store'
 import { summarizeMeeting } from './meetings/summary'
 import { meetingMarkdown, nameVoice, peopleChoice } from '../shared/meetings'
+import { cleanEventLink } from '../shared/meetingPrep'
+import { meetingPrep } from './day/prep'
 import { clearSent, listSent } from './privacy/log'
 import { clearApprovalLog, listApprovalLog } from './privacy/approvalLog'
 import { claudeCodeUsage, refreshClaudeCodeUsage, startUsageWatch, stopUsageWatch } from './usage/claudeCode'
@@ -191,6 +193,8 @@ function cleanDay(d: Partial<DaySettings>): Partial<DaySettings> {
   if (typeof d.morningTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(d.morningTime)) out.morningTime = d.morningTime
   if (typeof d.meetingAlerts === 'boolean') out.meetingAlerts = d.meetingAlerts
   if (typeof d.meetingMinutes === 'number' && d.meetingMinutes >= 0 && d.meetingMinutes <= 60) out.meetingMinutes = Math.round(d.meetingMinutes)
+  if (typeof d.meetingPrep === 'boolean') out.meetingPrep = d.meetingPrep
+  if (typeof d.prepMinutes === 'number' && d.prepMinutes >= 5 && d.prepMinutes <= 60) out.prepMinutes = Math.round(d.prepMinutes)
   return out
 }
 
@@ -218,6 +222,8 @@ function cleanVoice(v: Partial<VoiceSettings>): Partial<VoiceSettings> {
   if (isVoiceModel(v.model)) out.model = v.model
   if (v.engine === 'windows' || v.engine === 'natural') out.engine = v.engine
   if (NATURAL_VOICES.some((x) => x.id === v.naturalVoice)) out.naturalVoice = v.naturalVoice
+  if (typeof v.conversation === 'boolean') out.conversation = v.conversation
+  if (typeof v.bargeIn === 'boolean') out.bargeIn = v.bargeIn
   return out
 }
 
@@ -408,7 +414,14 @@ function registerIpc(): void {
     const dayBefore = settings.get().day
     const foldersBefore = settings.get().folders.join('|')
     const next = settings.update(patch).claudeCode
-    if (patch.day && (dayBefore.meetingAlerts !== settings.get().day.meetingAlerts || dayBefore.meetingMinutes !== settings.get().day.meetingMinutes))
+    const dayAfter = settings.get().day
+    if (
+      patch.day &&
+      (dayBefore.meetingAlerts !== dayAfter.meetingAlerts ||
+        dayBefore.meetingMinutes !== dayAfter.meetingMinutes ||
+        dayBefore.meetingPrep !== dayAfter.meetingPrep ||
+        dayBefore.prepMinutes !== dayAfter.prepMinutes)
+    )
       startMeetings()
     if (patch.showMusic !== undefined) syncMedia()
     if (patch.clipboardHistory !== undefined) syncClipboardHistory()
@@ -794,8 +807,18 @@ function registerIpc(): void {
     return id
   }
   ipcMain.handle(IPC.meetingStart, (_e, opts: MeetingStartOptions) =>
-    startMeeting({ engine: opts?.engine === 'omnilingual' ? 'omnilingual' : 'parakeet', others: opts?.others === true, people: peopleChoice(opts?.people) })
+    startMeeting({
+      engine: opts?.engine === 'omnilingual' ? 'omnilingual' : 'parakeet',
+      others: opts?.others === true,
+      people: peopleChoice(opts?.people),
+      event: cleanEventLink(opts?.event)
+    })
   )
+  ipcMain.handle(IPC.meetingPrep, (_e, event: unknown) => {
+    const link = cleanEventLink(event)
+    if (!link) throw new Error('Rendez-vous invalide.')
+    return meetingPrep(link)
+  })
   ipcMain.handle(IPC.meetingPeople, (_e, id: string, people: unknown) => setMeetingPeople(String(id), people))
   ipcMain.on(IPC.meetingAudio, (_e, id: string, track: MeetingTrack, data: Int16Array) => {
     if (track === 'me' || track === 'others') meetingAudio(String(id), track, data)
@@ -990,6 +1013,9 @@ app.whenReady().then(async () => {
   startMemoryAlert()
   hookDictationPower()
   hookMeetingsPower()
+  // PC verrouillé ou en veille : le micro de l'îlot (Me parler, conversation vocale) se coupe.
+  powerMonitor.on('lock-screen', () => sendIslandCommand('voice-stop'))
+  powerMonitor.on('suspend', () => sendIslandCommand('voice-stop'))
   onDictationKeyActive(() => emit(IPC.settingsChanged, publicSettings()))
   syncMessages()
   onApprovalShortcut(onApprovalKey)

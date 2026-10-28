@@ -12,12 +12,12 @@ const { DEFAULT_MEETINGS } = await import('../src/shared/meetings')
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
-describe('réglages v17', () => {
+describe('réglages v19', () => {
   it('un profil v7 garde ses choix et reçoit les nouveautés désactivées', () => {
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ settingsVersion: 7, userName: 'Alex', folders: ['D:\\Docs'], privacy: { mail: 'always' } }))
     const s = settings.load()
-    expect(SETTINGS_VERSION).toBe(17)
-    expect(s.settingsVersion).toBe(17)
+    expect(SETTINGS_VERSION).toBe(19)
+    expect(s.settingsVersion).toBe(19)
     expect(s.userName).toBe('Alex')
     expect(s.folders).toEqual(['D:\\Docs'])
     expect(s.privacy.mail).toBe('always')
@@ -25,7 +25,7 @@ describe('réglages v17', () => {
     // Presse-papier et recherche par le sens : rien sans l'accord de l'utilisateur.
     expect(s.clipboardHistory).toBe(false)
     expect(s.semantic).toEqual({ enabled: false, model: DEFAULT_EMBED_MODEL })
-    expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')).settingsVersion).toBe(17)
+    expect(JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')).settingsVersion).toBe(19)
   })
 
   it('modifier la recherche par le sens ne perd pas le modèle', () => {
@@ -36,7 +36,7 @@ describe('réglages v17', () => {
   it('un profil v8 reçoit les messages désactivés, avec accord à chaque lecture', () => {
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ settingsVersion: 8, userName: 'Alex', clipboardHistory: true }))
     const s = settings.load()
-    expect(s.settingsVersion).toBe(17)
+    expect(s.settingsVersion).toBe(19)
     expect(s.clipboardHistory).toBe(true)
     expect(s.messages).toEqual({ enabled: false, apps: [], remindAfterMin: 60, quietStart: '22:00', quietEnd: '08:00', preview: false, readByCompi: false })
     expect(s.privacy.messages).toBe('ask')
@@ -59,7 +59,7 @@ describe('réglages v17', () => {
       })
     )
     const s = settings.load()
-    expect(s.settingsVersion).toBe(17)
+    expect(s.settingsVersion).toBe(19)
     expect(s.local.model).toBe('gemma4:12b')
     expect(s.local.keepAlive).toBe('30m')
     expect(s.sounds).toEqual({
@@ -86,7 +86,7 @@ describe('réglages v17', () => {
   it('un profil v10 reçoit les sources de l’agenda : Google comme avant, rien d’autre', () => {
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ settingsVersion: 10, userName: 'Alex', google: { calendar: true } }))
     const s = settings.load()
-    expect(s.settingsVersion).toBe(17)
+    expect(s.settingsVersion).toBe(19)
     expect(s.agenda).toEqual({ googleCalendars: null, sources: [] })
   })
 
@@ -108,7 +108,7 @@ describe('réglages v17', () => {
     const v11 = JSON.stringify({ settingsVersion: 11, userName: 'Alex', voice: { shortcut: 'Alt+Shift+D', model: 'base' }, folders: ['D:\\Docs'] })
     writeFileSync(join(dir, 'settings.json'), v11)
     const s = settings.load()
-    expect(s.settingsVersion).toBe(17)
+    expect(s.settingsVersion).toBe(19)
     expect(s.userName).toBe('Alex')
     expect(s.folders).toEqual(['D:\\Docs'])
     expect(s.voice.shortcut).toBe('Alt+Shift+D')
@@ -123,10 +123,10 @@ describe('réglages v17', () => {
   })
 
   it('un profil à jour n’écrit pas de copie', () => {
-    rmSync(join(dir, 'settings.v17.bak.json'), { force: true })
-    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ settingsVersion: 17, userName: 'Alex' }))
+    rmSync(join(dir, 'settings.v19.bak.json'), { force: true })
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ settingsVersion: 19, userName: 'Alex' }))
     settings.load()
-    expect(existsSync(join(dir, 'settings.v17.bak.json'))).toBe(false)
+    expect(existsSync(join(dir, 'settings.v19.bak.json'))).toBe(false)
   })
 
   it('un profil v16 garde ses raccourcis et reçoit celui du plein écran, avec une copie de l’ancien fichier', () => {
@@ -134,20 +134,48 @@ describe('réglages v17', () => {
     const v16 = JSON.stringify({ settingsVersion: 16, userName: 'Alex', shortcut: 'Alt+Shift+K', quickShortcut: 'Alt+Shift+C' })
     writeFileSync(join(dir, 'settings.json'), v16)
     const s = settings.load()
-    expect(s.settingsVersion).toBe(17)
+    expect(s.settingsVersion).toBe(19)
     expect(s.shortcut).toBe('Alt+Shift+K')
     expect(s.quickShortcut).toBe('Alt+Shift+C')
     expect(s.fullShortcut).toBe('Alt+Shift+Return')
     expect(readFileSync(join(dir, 'settings.v16.bak.json'), 'utf8')).toBe(v16)
   })
 
-  it('retour à une version plus ancienne : un fichier plus récent garde sa version et ses champs inconnus', () => {
-    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ settingsVersion: 18, userName: 'Alex', plusTard: { a: 1 } }))
+  it('un profil v17 garde sa voix et reçoit la conversation vocale désactivée, avec une copie de l’ancien fichier', () => {
+    rmSync(join(dir, 'settings.v17.bak.json'), { force: true })
+    const v17 = JSON.stringify({ settingsVersion: 17, userName: 'Alex', voice: { speak: 'always', rate: 1.2, engine: 'natural' } })
+    writeFileSync(join(dir, 'settings.json'), v17)
     const s = settings.load()
-    expect(s.settingsVersion).toBe(18)
+    expect(s.settingsVersion).toBe(19)
+    expect(s.voice.speak).toBe('always')
+    expect(s.voice.rate).toBe(1.2)
+    expect(s.voice.engine).toBe('natural')
+    expect(s.voice.conversation).toBe(false)
+    expect(s.voice.bargeIn).toBe(true)
+    expect(readFileSync(join(dir, 'settings.v17.bak.json'), 'utf8')).toBe(v17)
+  })
+
+  it('un profil v18 garde sa journée et reçoit la préparation des réunions désactivée, avec une copie de l’ancien fichier', () => {
+    rmSync(join(dir, 'settings.v18.bak.json'), { force: true })
+    const v18 = JSON.stringify({ settingsVersion: 18, userName: 'Alex', day: { meetingAlerts: false, meetingMinutes: 10, city: 'Lyon' } })
+    writeFileSync(join(dir, 'settings.json'), v18)
+    const s = settings.load()
+    expect(s.settingsVersion).toBe(19)
+    expect(s.day.meetingAlerts).toBe(false)
+    expect(s.day.meetingMinutes).toBe(10)
+    expect(s.day.city).toBe('Lyon')
+    expect(s.day.meetingPrep).toBe(false)
+    expect(s.day.prepMinutes).toBe(10)
+    expect(readFileSync(join(dir, 'settings.v18.bak.json'), 'utf8')).toBe(v18)
+  })
+
+  it('retour à une version plus ancienne : un fichier plus récent garde sa version et ses champs inconnus', () => {
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ settingsVersion: 20, userName: 'Alex', plusTard: { a: 1 } }))
+    const s = settings.load()
+    expect(s.settingsVersion).toBe(20)
     settings.update({ userName: 'Alex B.' })
     const written = JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8'))
-    expect(written.settingsVersion).toBe(18)
+    expect(written.settingsVersion).toBe(20)
     expect(written.plusTard).toEqual({ a: 1 })
     expect(written.userName).toBe('Alex B.')
   })
@@ -162,7 +190,7 @@ describe('réglages v17', () => {
     })
     writeFileSync(join(dir, 'settings.json'), v14)
     const s = settings.load()
-    expect(s.settingsVersion).toBe(17)
+    expect(s.settingsVersion).toBe(19)
     expect(s.webSearch).toEqual({ provider: 'off', searxngUrl: '' })
     expect(s.privacy).toMatchObject({ files: 'always', memory: 'never', web: 'ask' })
     expect(s.voice.engine).toBe('natural')
@@ -179,7 +207,7 @@ describe('réglages v17', () => {
     })
     writeFileSync(join(dir, 'settings.json'), v15)
     const s = settings.load()
-    expect(s.settingsVersion).toBe(17)
+    expect(s.settingsVersion).toBe(19)
     expect(s.monitor).toEqual({ island: true, memoryAlert: true })
     expect(s.webSearch).toEqual({ provider: 'searxng', searxngUrl: 'http://localhost:8080' })
     expect(readFileSync(join(dir, 'settings.v15.bak.json'), 'utf8')).toBe(v15)
@@ -200,7 +228,7 @@ describe('réglages v17', () => {
     const v13 = JSON.stringify({ settingsVersion: 13, userName: 'Alex', voice: { speak: 'always', voice: 'MSTTS_V110_frFR_JulieM', rate: 1.2 } })
     writeFileSync(join(dir, 'settings.json'), v13)
     const s = settings.load()
-    expect(s.settingsVersion).toBe(17)
+    expect(s.settingsVersion).toBe(19)
     expect(s.voice).toMatchObject({ speak: 'always', voice: 'MSTTS_V110_frFR_JulieM', rate: 1.2, shortcut: 'Alt+Shift+V', model: 'small' })
     expect(s.voice.engine).toBe('windows')
     expect(s.voice.naturalVoice).toBe('F1')
@@ -219,7 +247,7 @@ describe('réglages v17', () => {
     })
     writeFileSync(join(dir, 'settings.json'), v12)
     const s = settings.load()
-    expect(s.settingsVersion).toBe(17)
+    expect(s.settingsVersion).toBe(19)
     expect(s.dictation.enabled).toBe(true)
     expect(s.dictation.engine).toBe('omnilingual')
     expect(s.meetings).toEqual(DEFAULT_MEETINGS)

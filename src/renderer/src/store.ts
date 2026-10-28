@@ -25,8 +25,10 @@ import type {
 } from '@shared/types'
 import type { PerfSnapshot } from '@shared/perf'
 import { noticeDuration } from '@shared/notice'
-import { onSpeaking, speak, speakStream, stopSpeaking, type SpeechStream } from './lib/speech'
-import { cancelListening, isRecording, loadModel, startListening, stopListening, TOO_SHORT, type VoicePhase } from './lib/voice'
+import { isSpeaking, onSpeaking, onSpeechEnd, speak, speakStream, stopSpeaking, type SpeechStream } from './lib/speech'
+import { cancelListening, isRecording, loadModel, startListening, stopListening, TOO_SHORT, transcribeWhisper, type VoicePhase } from './lib/voice'
+import { micError, startConverseCapture, type ConverseCapture } from './lib/converse'
+import { CONVERSE_OFF, converseStep, micWanted, type ConverseEvent, type ConversePhase, type ConverseState } from '@shared/converse'
 import { startCallCapture, type CallCapture } from './lib/callCapture'
 import { formatDuration } from '@shared/meetings'
 import { SETTINGS_TAB_OF, type ActivityTab, type SettingsFocus, type SettingsTab } from '@shared/settingsTabs'
@@ -112,6 +114,8 @@ interface CompiState {
    * `everywhere` : dictée partout en cours (touche maintenue), vers l'application visée.
    */
   dictation: { phase: VoicePhase; level: number; preparing: number | null; error: string | null; everywhere: DictationEverywhere | null }
+  /** Conversation vocale : phase, fin de la fenêtre d'écoute (ms), niveau du micro (0 à 1). */
+  converse: { phase: ConversePhase; until: number; level: number }
   /** Activité du PC (Ce PC, îlot) : dernier instantané reçu. */
   perf: PerfSnapshot | null
   /** Jeton : la première carte en attente prend le clavier (Alt+Maj+Espace, question par raccourci). */
@@ -128,6 +132,8 @@ interface CompiState {
   historyTab: 'chats' | 'meetings'
   /** Réunion à ouvrir dans l'historique (fin d'un enregistrement). */
   openMeetingId: string | null
+  /** Réunion de l'agenda dont la préparation s'ouvre dans Aujourd'hui (clé « id|début »). */
+  prepFocus: string | null
 
   setSettings(s: PublicSettings): void
   open(view?: PanelView, opts?: { focus?: boolean; attention?: boolean }): void
@@ -184,6 +190,8 @@ interface CompiState {
   cancelDictation(): void
   /** Ordre de la touche de dictée partout (processus principal). */
   onDictationCommand(c: DictationCommand): Promise<void>
+  /** Arrête la conversation vocale (Échap, bouton, saisie au clavier, PC verrouillé…) ; la lecture en cours continue. */
+  endConversation(): void
   setPerf(p: PerfSnapshot | null): void
   focusPending(): void
   setPalette(on: boolean): void
@@ -199,6 +207,7 @@ interface CompiState {
   onMeetingEvent(e: MeetingEvent): void
   setHistoryTab(tab: 'chats' | 'meetings'): void
   openMeeting(id: string | null): void
+  setPrepFocus(key: string | null): void
 }
 
 /** Enregistrement d'un appel, vu par l'îlot. */
@@ -242,6 +251,14 @@ let dictationErrorTimer: ReturnType<typeof setTimeout> | undefined
 let pendingEnd: 'stop' | 'cancel' | null = null
 /** Capture du micro et du son de l'appel en cours. */
 let callCapture: CallCapture | null = null
+/** Conversation vocale : automate, micro, phrase entendue en attente d'envoi. */
+let converse: ConverseState = CONVERSE_OFF
+let converseMic: ConverseCapture | null = null
+let converseMicOpening = false
+let converseText = ''
+/** Phrase entendue, le temps du pas qui la fait transcrire. */
+let converseAudio: Float32Array | null = null
+let converseTimer: ReturnType<typeof setInterval> | undefined
 
 const SLEEP_AFTER_MS = 4 * 60_000
 
@@ -288,6 +305,110 @@ export const useCompi = create<CompiState>((set, get) => {
     } else if (wantsSpeech() && text.trim()) get().speak(text, messageId)
   }
 
+  // ─── Conversation vocale ───────────────────────────────────────────────────
+  // Après une question dite à voix haute, le micro se rouvre à la fin de la lecture ;
+  // la phrase entendue part comme nouvelle question. Désactivée par défaut.
+
+  const converseOn = (): boolean => {
+    const v = get().settings?.voice
+    return v?.conversation === true && v.speak !== 'never'
+  }
+
+  const setConverse = (patch: Partial<CompiState['converse']>): void => set((st) => ({ converse: { ...st.converse, ...patch } }))
+
+  // Le micro suit la phase : ouvert pour écouter (et pendant la lecture si on peut la couper en parlant).
+  const syncConverseMic = (): void => {
+    const want = micWanted(converse, isSpeaking(), get().settings?.voice.bargeIn !== false)
+    if (!want) {
+      converseMic?.stop()
+      converseMic = null
+      setConverse({ level: 0 })
+      return
+    }
+    if (converseMic) return converseMic.setMode(want)
+    if (converseMicOpening) return
+    converseMicOpening = true
+    startConverseCapture(
+      {
+        level: (level) => setConverse({ level }),
+        onset: () => stepConverse({ type: 'onset', reading: isSpeaking() }),
+        phrase: (audio) => {
+          converseAudio = audio
+          stepConverse({ type: 'phrase' })
+          converseAudio = null
+        },
+        error: (message) => {
+          get().showNotice({ pill: 'chat', text: message, duration: 6000 })
+          stopConverse()
+        }
+      },
+      want
+    ).then(
+      (mic) => {
+        converseMicOpening = false
+        converseMic = mic
+        // La phase a pu changer pendant l'ouverture du micro.
+        syncConverseMic()
+      },
+      (e) => {
+        converseMicOpening = false
+        get().showNotice({ pill: 'chat', text: micError(e), duration: 8000 })
+        stopConverse()
+      }
+    )
+  }
+
+  const stepConverse = (e: ConverseEvent): void => {
+    const r = converseStep(converse, e)
+    converse = r.state
+    if (get().converse.phase !== converse.phase || get().converse.until !== converse.until) setConverse({ phase: converse.phase, until: converse.until })
+    clearInterval(converseTimer)
+    if (converse.phase === 'listening') converseTimer = setInterval(() => stepConverse({ type: 'tick', now: Date.now() }), 250)
+    // Rien ne reste en attente une fois la conversation finie (sauf la phrase, rendue dans la saisie).
+    if (converse.phase === 'off' && converseText) {
+      set({ draft: converseText })
+      converseText = ''
+    }
+    syncConverseMic()
+    for (const fx of r.effects) {
+      if (fx === 'cut-reading') stopSpeaking()
+      else if (fx === 'transcribe' && converseAudio) void transcribePhrase(converseAudio)
+      else if (fx === 'send') {
+        const text = converseText
+        converseText = ''
+        void get().send(text, { voice: true })
+      }
+    }
+  }
+
+  const stopConverse = (): void => {
+    if (converse.phase !== 'off') stepConverse({ type: 'stop' })
+  }
+
+  // Même moteur que « Me parler » : celui de la dictée partout s'il est installé, sinon Whisper.
+  const transcribePhrase = async (audio: Float32Array): Promise<void> => {
+    const s = get().settings
+    if (!s) return stopConverse()
+    let text: string
+    try {
+      const engine = s.dictation.engine
+      if (engine !== 'whisper' && (await api().speechModelStatus(engine)).installed) text = (await api().dictationTranscribe(audio)).trim()
+      else {
+        const status = await api().voiceModelStatus(s.voice.model)
+        if (!status.installed || !status.variant) throw new Error('Pour parler à Compi, installe d’abord la dictée : Réglages › Voix › Me parler.')
+        await loadModel(s.voice.model, status.variant)
+        text = await transcribeWhisper(audio)
+      }
+    } catch (e) {
+      get().showNotice({ pill: 'chat', text: (e as Error).message, duration: 8000 })
+      return stopConverse()
+    }
+    // Arrêtée pendant la transcription (Échap, saisie…) : la phrase est oubliée.
+    if (converse.phase !== 'transcribing') return
+    converseText = text
+    stepConverse({ type: 'heard', text, busy: get().streamingId !== null, now: Date.now() })
+  }
+
   // La notification s'efface à la fin de sa durée, prolongée le temps de son défilement,
   // sauf si la souris la retient.
   const scheduleNotice = (): void => {
@@ -301,7 +422,10 @@ export const useCompi = create<CompiState>((set, get) => {
 
   onSpeaking((speaking) => {
     if (get().speaking !== speaking) set(speaking ? { speaking } : { speaking, speakingId: null })
+    // La lecture commence : le micro s'ouvre si l'on peut la couper en parlant. (Sa fin passe par onSpeechEnd.)
+    if (speaking && converse.phase !== 'off') syncConverseMic()
   })
+  onSpeechEnd((reason) => stepConverse({ type: 'speech-end', reason, now: Date.now() }))
 
   scheduleSleep()
 
@@ -339,6 +463,7 @@ export const useCompi = create<CompiState>((set, get) => {
     speakingId: null,
     spokenInput: false,
     dictation: { phase: 'idle', level: 0, preparing: null, error: null, everywhere: null },
+    converse: { phase: 'off', until: 0, level: 0 },
     perf: null,
     focusPendingAt: 0,
     palette: false,
@@ -347,6 +472,7 @@ export const useCompi = create<CompiState>((set, get) => {
     call: null,
     historyTab: 'chats',
     openMeetingId: null,
+    prepFocus: null,
 
     setSettings: (settings) => {
       set({ settings })
@@ -448,7 +574,10 @@ export const useCompi = create<CompiState>((set, get) => {
       scheduleSleep()
     },
 
-    newConversation: () => set({ conversationId: null, conversationBrain: null, messages: [], streamingId: null, phase: null, view: 'chat' }),
+    newConversation: () => {
+      stopConverse()
+      set({ conversationId: null, conversationBrain: null, messages: [], streamingId: null, phase: null, view: 'chat' })
+    },
 
     loadConversation: async (id) => {
       const conv = await api().getConversation(id)
@@ -496,6 +625,9 @@ export const useCompi = create<CompiState>((set, get) => {
       stopSpeaking()
       liveSpeech = null
       set({ attachments: [], spokenInput: opts.voice ?? false })
+      // Question dite à voix haute : la conversation continue après la lecture de la réponse.
+      if (opts.voice && converseOn()) stepConverse({ type: 'ask' })
+      else stopConverse()
       const res = await api().send({ conversationId: get().conversationId ?? undefined, text: prompt, attachments, external: opts.external })
       const settings = get().settings
       set((s) => ({
@@ -546,11 +678,16 @@ export const useCompi = create<CompiState>((set, get) => {
           if (e.stats || e.sentTo || e.notice) patch((m) => ({ ...m, stats: e.stats ?? m.stats, sentTo: e.sentTo ?? m.sentTo, notice: e.notice ?? m.notice }))
           flashOutcome('done')
           finishSpeech(e.messageId)
+          // Phrase entendue pendant que la réponse s'écrivait : elle part maintenant.
+          if (converse.phase === 'queued') stepConverse({ type: 'answer-end' })
+          // Rien à lire (réponse vide) : la conversation s'arrête là.
+          else if (converse.phase === 'answering' && !isSpeaking()) stepConverse({ type: 'answer-silent' })
           break
         case 'error':
           if (get().streamingId === e.messageId) set({ streamingId: null, phase: null })
           patch((m) => ({ ...m, error: e.error }))
           flashOutcome('error')
+          stopConverse()
           // Ce qui était déjà en file est lu, rien de plus.
           if (liveSpeech?.messageId === e.messageId) {
             liveSpeech.stream.end()
@@ -563,12 +700,15 @@ export const useCompi = create<CompiState>((set, get) => {
     setApprovals: (approvals) => {
       const before = get().approvals.length + get().questions.length
       set({ approvals })
+      // Une carte attend un clic : la conversation vocale s'arrête (jamais d'accord à la voix).
+      if (approvals.length) stopConverse()
       const after = approvals.length + get().questions.length
       if (after === 0 && before > 0 && get().attention && !get().focused) setTimeout(() => get().collapse(), 700)
     },
     setQuestions: (questions) => {
       const before = get().approvals.length + get().questions.length
       set({ questions })
+      if (questions.length) stopConverse()
       const after = get().approvals.length + questions.length
       if (after === 0 && before > 0 && get().attention && !get().focused) setTimeout(() => get().collapse(), 700)
     },
@@ -624,6 +764,8 @@ export const useCompi = create<CompiState>((set, get) => {
       if (isRecording() || get().dictation.phase !== 'idle') return
       const s = get().settings
       if (!s) return
+      // « Me parler » pendant une conversation : une seule prise du micro, la dictée prend la main.
+      stopConverse()
       // Le modèle de la dictée partout (Parakeet, tamoul) s'il est installé, sinon Whisper.
       const engine = s.dictation.engine
       const speech = engine !== 'whisper' && (await api().speechModelStatus(engine)).installed
@@ -700,6 +842,7 @@ export const useCompi = create<CompiState>((set, get) => {
         return
       }
       pendingEnd = null
+      stopConverse()
       // La voix de Compi se tait : le micro ne doit pas l'entendre.
       stopSpeaking()
       setDictation({ error: null, everywhere: { handsFree: c.handsFree, keyLabel: c.keyLabel } })
@@ -746,6 +889,8 @@ export const useCompi = create<CompiState>((set, get) => {
       )
     },
 
+    endConversation: () => stopConverse(),
+
     setPerf: (perf) => set({ perf }),
     focusPending: () => set({ focusPendingAt: Date.now() }),
     setPalette: (palette) => set({ palette }),
@@ -754,6 +899,7 @@ export const useCompi = create<CompiState>((set, get) => {
 
     startCall: async (opts, choosePeople = false) => {
       if (get().call) return
+      stopConverse()
       const people = opts.others ? opts.people : undefined
       set({ call: { id: '', startedAt: Date.now(), others: opts.others, choosePeople: false, people, phase: 'starting', lines: [] } })
       let id = ''
@@ -844,6 +990,7 @@ export const useCompi = create<CompiState>((set, get) => {
       })
     },
     setHistoryTab: (historyTab) => set({ historyTab }),
-    openMeeting: (openMeetingId) => set({ openMeetingId })
+    openMeeting: (openMeetingId) => set({ openMeetingId }),
+    setPrepFocus: (prepFocus) => set({ prepFocus })
   }
 })

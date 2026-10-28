@@ -48,6 +48,8 @@ import type {
   MeetingMeta,
   MeetingStart,
   MeetingStartOptions,
+  MeetingEventLink,
+  MeetingPrep,
   MeetingTrack,
   SemanticPassage,
   SemanticStatus,
@@ -255,6 +257,8 @@ export interface CompiApi {
   // réunions (enregistreur d'appels)
   /** Commence un enregistrement (après le clic sur « Commencer »). */
   meetingStart(opts: MeetingStartOptions): Promise<MeetingStart>
+  /** Préparer une réunion de l'agenda : derniers e-mails avec les participants, tâches de la fois d'avant (sur le PC). */
+  meetingPrep(event: MeetingEventLink): Promise<MeetingPrep>
   /** Morceau de son d'une piste (16 bits, 16 kHz). */
   meetingAudio(id: string, track: MeetingTrack, data: Int16Array): void
   meetingStop(): Promise<MeetingMeta | null>

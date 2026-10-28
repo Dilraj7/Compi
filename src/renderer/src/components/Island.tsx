@@ -12,10 +12,10 @@ import { useMood } from '../mascot/useMood'
 import { LedEyes, useLook } from '../mascot/LedEyes'
 import { LedDots, prettyShortcut, Ticker } from './ui'
 import { GAUGE_COLOR, MiniGauges, perfLevels } from './Gauges'
-import { PILL_ICONS, openFromNotice } from './Notice'
+import { PILL_ICONS, openFromNotice, runNoticeAction } from './Notice'
 import { Panel } from './Panel'
 import { FullScreen } from './FullScreen'
-import { CompactArt, CompactTimer, LedEq, ListeningPeek, MediaPeek, SpeakingPeek, TimerPeek, useLiveMedia } from './Live'
+import { CompactArt, CompactTimer, ConversePeek, LedEq, ListeningPeek, MediaPeek, SpeakingPeek, TimerPeek, useLiveMedia } from './Live'
 import { CallPeek, CompactCall, REC } from './CallLive'
 
 const SIZE = {
@@ -179,9 +179,12 @@ function PeekContent() {
   const perf = useCompi((s) => (s.settings?.monitor.island ? s.perf : null))
   const noticeScrollTime = useCompi((s) => s.noticeScrollTime)
   const calling = useCompi((s) => s.call !== null)
+  // Conversation vocale entre deux réponses (pendant la réponse : « Je réfléchis », puis la lecture).
+  const conversing = useCompi((s) => s.converse.phase !== 'off' && s.converse.phase !== 'answering')
 
   // Ce qui demande l'attention passe avant l'îlot vivant.
   if (dictating && !pending) return <ListeningPeek eyes={<Eyes size="md" />} />
+  if (conversing && !pending) return <ConversePeek eyes={<Eyes size="md" />} />
   if (calling && !pending && !notice) return <CallPeek eyes={<Eyes size="md" />} />
   if (!notice && !pending && !streamingId) {
     if (speaking) return <SpeakingPeek eyes={<Eyes size="md" />} />
@@ -235,10 +238,9 @@ function PeekContent() {
             className="rounded-full px-3 py-1.5 text-[12px] font-medium text-ink-950 transition-transform hover:scale-[1.04]"
             style={{ background: def.color, boxShadow: `0 0 16px ${def.color}66` }}
             onClick={(e) => {
-              // Le clic ne doit pas aussi ouvrir le panneau.
+              // Le clic ne doit pas aussi ouvrir le panneau (sauf « Préparer », qui ouvre Aujourd'hui).
               e.stopPropagation()
-              void window.compi.openExternal(notice.action!.url)
-              useCompi.getState().dismissNotice()
+              runNoticeAction(notice)
             }}
           >
             {notice.action.label}
@@ -284,14 +286,15 @@ export function Island() {
   const open = useCompi((s) => s.open)
   const addAttachments = useCompi((s) => s.addAttachments)
   const everywhere = useCompi((s) => s.dictation.everywhere !== null)
+  const conversing = useCompi((s) => s.converse.phase !== 'off')
   const calling = useCompi((s) => s.call !== null)
   const full = useCompi((s) => s.full)
   const viewport = useViewport()
   const { color } = useMood()
 
-  // Une notification (ou une dictée partout) force l'aperçu le temps de l'afficher, sans prendre le focus.
+  // Une notification (ou une dictée partout, une conversation vocale) force l'aperçu le temps de l'afficher, sans prendre le focus.
   // Un appel enregistré n'est jamais caché : au moins la pastille, avec son point rouge.
-  const shown = (notice || everywhere) && mode !== 'expanded' ? 'peek' : calling && mode === 'hidden' ? 'compact' : mode
+  const shown = (notice || everywhere || conversing) && mode !== 'expanded' ? 'peek' : calling && mode === 'hidden' ? 'compact' : mode
   const size = full ? { ...viewport, radius: 0 } : shown === 'peek' && notice ? SIZE.notice : SIZE[shown]
   const expanded = shown === 'expanded'
 
@@ -318,6 +321,8 @@ export function Island() {
       const s = useCompi.getState()
       // Échap pendant la dictée : on l'abandonne, sans refermer.
       if (s.dictation.phase === 'recording' || s.dictation.phase === 'starting') s.cancelDictation()
+      // Puis la conversation vocale (la lecture en cours continue).
+      else if (s.converse.phase !== 'off') s.endConversation()
       // En plein écran, Échap ramène d'abord le panneau de l'encoche.
       else if (s.full) s.exitFull()
       else if (s.mode === 'expanded') s.collapse()

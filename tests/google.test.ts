@@ -214,6 +214,40 @@ describe('agenda', () => {
     expect(toDayEvent({ id: '2', start: { date: '2026-10-14' }, end: { date: '2026-10-15' } })).toMatchObject({ allDay: true, title: '(sans titre)' })
   })
 
+  it('participants : les autres seulement (organisateur marqué), et la série d’un événement répété', () => {
+    const e = toDayEvent({
+      id: 'r1_20261028T090000Z',
+      recurringEventId: 'r1',
+      summary: 'Point',
+      start: { dateTime: '2026-10-28T10:00:00+01:00' },
+      end: { dateTime: '2026-10-28T10:30:00+01:00' },
+      organizer: { email: 'claire@example.com', displayName: 'Claire Martin' },
+      attendees: [
+        { email: 'claire@example.com', organizer: true, responseStatus: 'accepted' },
+        { email: 'alex@example.com', self: true, responseStatus: 'accepted' },
+        { email: 'paul@example.com', displayName: 'Paul', responseStatus: 'needsAction' },
+        { email: 'lea@example.com', responseStatus: 'declined' },
+        { email: 'salle@resource.calendar.google.com', displayName: 'Salle B', resource: true }
+      ]
+    })
+    expect(e?.seriesId).toBe('r1')
+    expect(e?.attendees).toEqual([
+      { email: 'claire@example.com', name: 'Claire Martin', organizer: true },
+      { email: 'paul@example.com', name: 'Paul' }
+    ])
+    // Les participants ne partent jamais vers un cerveau : la liste lisible ne les montre pas.
+    expect(formatEvents(e ? [e] : [])).not.toMatch(/claire|paul/i)
+    // Seul, ou organisateur seul : rien à préparer.
+    expect(
+      toDayEvent({
+        id: '3',
+        start: { dateTime: '2026-10-28T10:00:00Z' },
+        end: { dateTime: '2026-10-28T11:00:00Z' },
+        organizer: { email: 'alex@example.com', self: true }
+      })?.attendees
+    ).toBeUndefined()
+  })
+
   it('création : heure locale + fuseau, 1 h par défaut, journée entière, jamais d’invités', () => {
     expect(eventBody({ title: 'Dentiste', start: '2026-10-14T17:30' }, 'Europe/Paris')).toEqual({
       summary: 'Dentiste',

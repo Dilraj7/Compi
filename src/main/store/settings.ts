@@ -36,8 +36,11 @@ export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
  * v16 : alerte de l'îlot quand la mémoire du PC est presque pleine (activée).
  * v17 : raccourci du plein écran (Alt+Maj+Entrée). Champ ajouté seulement : la version
  * précédente relit ces réglages sans rien perdre (retour arrière possible).
+ * v18 : conversation vocale (désactivée) et « couper la lecture en parlant ». Champs
+ * ajoutés seulement, comme en v17.
+ * v19 : préparer mes réunions (désactivé), 10 min avant. Champs ajoutés seulement.
  */
-export const SETTINGS_VERSION = 17
+export const SETTINGS_VERSION = 19
 
 /** Modèle d'Ollama pour la recherche par le sens : multilingue, bon en français, ~640 Mo. */
 export const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b'
@@ -72,10 +75,20 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   privacy: DEFAULT_PRIVACY,
   google: { clientId: '', email: '', calendar: false, mail: false },
-  day: { morning: true, morningTime: '08:30', city: '', meetingAlerts: true, meetingMinutes: 5 },
+  day: { morning: true, morningTime: '08:30', city: '', meetingAlerts: true, meetingMinutes: 5, meetingPrep: false, prepMinutes: 10 },
   agenda: { googleCalendars: null, sources: [] },
   showMusic: true,
-  voice: { speak: 'voice', voice: '', rate: 1, shortcut: DEFAULT_VOICE_SHORTCUT, model: 'small', engine: 'windows', naturalVoice: DEFAULT_NATURAL_VOICE },
+  voice: {
+    speak: 'voice',
+    voice: '',
+    rate: 1,
+    shortcut: DEFAULT_VOICE_SHORTCUT,
+    model: 'small',
+    engine: 'windows',
+    naturalVoice: DEFAULT_NATURAL_VOICE,
+    conversation: false,
+    bargeIn: true
+  },
   dictation: DEFAULT_DICTATION,
   meetings: DEFAULT_MEETINGS,
   clipboardHistory: false,

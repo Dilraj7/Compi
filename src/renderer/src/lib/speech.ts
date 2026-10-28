@@ -2,20 +2,49 @@
 // (fichier WAV préparé par le processus principal), et le morceau suivant se
 // prépare pendant que le précédent est lu. Un seul texte à la fois ; stop()
 // coupe tout de suite. Une réponse en cours d'écriture se lit au fil de l'eau :
-// chaque phrase terminée rejoint la file (speakStream).
+// chaque phrase terminée rejoint la file (speakStream). Fin naturelle et arrêt
+// se distinguent (onSpeechEnd) : la conversation vocale ne reprend qu'après une
+// lecture allée jusqu'au bout.
 
 import { capSpeech, cleanSpeech, SPEECH_CHUNK, SPEECH_MAX, speakableEnd, speechChunks, speechText } from '@shared/speech'
 
 type Listener = (speaking: boolean) => void
+/** Lecture allée jusqu'au bout, ou coupée (stopSpeaking, autre lecture). */
+export type SpeechEnd = 'end' | 'stopped'
 
 let session = 0
 let current: { audio: HTMLAudioElement; finish: () => void } | null = null
-let listener: Listener = () => undefined
+const listeners = new Set<Listener>()
+const endListeners = new Set<(reason: SpeechEnd) => void>()
+/** Une lecture a commencé et n'est pas encore finie. */
+let active = false
 /** Lecture au fil de l'eau en attente de la suite : à réveiller si on l'arrête. */
 let wakeStream: (() => void) | null = null
 
-export function onSpeaking(cb: Listener): void {
-  listener = cb
+export function onSpeaking(cb: Listener): () => void {
+  listeners.add(cb)
+  return () => listeners.delete(cb)
+}
+
+/** Fin d'une lecture commencée, avec sa raison. */
+export function onSpeechEnd(cb: (reason: SpeechEnd) => void): () => void {
+  endListeners.add(cb)
+  return () => endListeners.delete(cb)
+}
+
+/** Une lecture est en cours (ou attend la suite d'une réponse qui s'écrit). */
+export const isSpeaking = (): boolean => active
+
+function started(): void {
+  active = true
+  for (const l of listeners) l(true)
+}
+
+function ended(reason: SpeechEnd): void {
+  const was = active
+  active = false
+  for (const l of listeners) l(false)
+  if (was) for (const l of endListeners) l(reason)
 }
 
 function play(wav: Uint8Array): Promise<void> {
@@ -45,7 +74,7 @@ export async function speak(markdown: string): Promise<void> {
   const chunks = speechChunks(speechText(markdown))
   if (!chunks.length) return
   const mine = ++session
-  listener(true)
+  started()
   let next = fetchChunk(chunks[0])
   for (let i = 0; i < chunks.length; i++) {
     const wav = await next
@@ -55,7 +84,7 @@ export async function speak(markdown: string): Promise<void> {
     await play(wav)
     if (mine !== session) return
   }
-  if (mine === session) listener(false)
+  if (mine === session) ended('end')
 }
 
 /** Lecture d'une réponse pendant qu'elle s'écrit. */
@@ -106,7 +135,7 @@ export function speakStream(): SpeechStream {
 
   const run = async (): Promise<void> => {
     running = true
-    listener(true)
+    started()
     let i = 0
     while (mine === session) {
       if (i >= queue.length) {
@@ -126,7 +155,7 @@ export function speakStream(): SpeechStream {
       playing = -1
       i++
     }
-    if (mine === session) listener(false)
+    if (mine === session) ended('end')
   }
 
   return {
@@ -164,5 +193,5 @@ export function stopSpeaking(): void {
   const wake = wakeStream
   wakeStream = null
   wake?.()
-  listener(false)
+  ended('stopped')
 }

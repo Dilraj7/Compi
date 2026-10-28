@@ -120,6 +120,10 @@ export interface DaySettings {
   meetingAlerts: boolean
   /** Minutes avant le début d'une réunion. */
   meetingMinutes: number
+  /** Préparer mes réunions : participants, derniers e-mails, tâches de la fois d'avant (désactivé par défaut). */
+  meetingPrep: boolean
+  /** Minutes avant la réunion pour la préparer. */
+  prepMinutes: number
 }
 
 export interface ClaudeCodeBridgeSettings {
@@ -534,7 +538,19 @@ export interface ConnectorTestResult {
 
 /** `attention` : une validation attend (affichée sur place si on discute, sinon dans Activité). `full` : entrer ou sortir du plein écran. */
 export type IslandCommand =
-  'open-chat' | 'toggle' | 'collapse' | 'open-settings' | 'open-activity' | 'attention' | 'open-quick' | 'open-today' | 'voice' | 'focus-pending' | 'full'
+  | 'open-chat'
+  | 'toggle'
+  | 'collapse'
+  | 'open-settings'
+  | 'open-activity'
+  | 'attention'
+  | 'open-quick'
+  | 'open-today'
+  | 'voice'
+  | 'focus-pending'
+  | 'full'
+  /** PC verrouillé ou en veille : la dictée de l'îlot et la conversation vocale s'arrêtent. */
+  | 'voice-stop'
 
 // ─── Actions rapides sur la sélection ────────────────────────────────────────
 
@@ -564,8 +580,8 @@ export interface IslandNotice {
   duration?: number
   /** Vue ouverte par un clic sur l'îlot (la discussion sinon). */
   view?: PanelView
-  /** Bouton à droite de la notification : ouvrir un lien (réunion…). */
-  action?: { label: string; url: string }
+  /** Bouton à droite de la notification : ouvrir un lien (réunion…), ou la préparation d'une réunion (clé de l'événement). */
+  action?: { label: string; url: string } | { label: string; prep: string }
   /** Discussion ouverte par un clic (résultat d'une routine). */
   conversationId?: string
   /** Son joué : celui de la pastille par défaut, `null` pour rester muet. */
@@ -606,6 +622,17 @@ export interface DayEvent {
   /** Lien de visioconférence reconnu (Meet, Zoom, Teams…). */
   meetUrl?: string
   htmlLink?: string
+  /** Autres participants (sans toi), lus dans l'agenda ; restent sur le PC, jamais envoyés à un cerveau. */
+  attendees?: EventAttendee[]
+  /** Série d'un événement qui se répète (toutes ses occurrences ont la même). */
+  seriesId?: string
+}
+
+export interface EventAttendee {
+  email?: string
+  name?: string
+  /** Organisateur de la réunion. */
+  organizer?: boolean
 }
 
 export interface DayMail {
@@ -779,6 +806,10 @@ export interface VoiceSettings {
   engine: SpeakEngine
   /** Voix naturelle choisie (« F1 »… « M5 »). */
   naturalVoice: string
+  /** Après une question posée à la voix, le micro se rouvre à la fin de la lecture (désactivé par défaut). */
+  conversation: boolean
+  /** En conversation : parler pendant la lecture la coupe (micro ouvert pendant la lecture). */
+  bargeIn: boolean
 }
 
 export type SpeakEngine = 'windows' | 'natural'
@@ -921,6 +952,29 @@ export interface MeetingMeta {
   hasSummary: boolean
   /** Le son est encore sur le PC (option « garder le son », ou transcription à reprendre). */
   audio: boolean
+  /** Rendez-vous de l'agenda enregistré depuis sa préparation (pour retrouver « la fois d'avant »). */
+  event?: MeetingEventLink
+}
+
+/** Rendez-vous relié à un enregistrement : de quoi reconnaître la réunion suivante de la même série. */
+export interface MeetingEventLink {
+  id: string
+  seriesId?: string
+  title: string
+  /** Début (ISO). */
+  start: string
+  /** Adresses des autres participants. */
+  attendees: string[]
+}
+
+/** Préparation d'une réunion, calculée sur le PC (rien n'est envoyé à un cerveau). */
+export interface MeetingPrep {
+  /** Derniers e-mails échangés avec les participants (30 jours) ; `null` : Gmail n'est pas autorisé. */
+  mails: Array<{ id: string; from: string; subject: string; date?: string }> | null
+  /** Recherche Gmail impossible (connexion perdue…). */
+  mailError?: string
+  /** Réunion précédente enregistrée avec eux, et ses tâches. */
+  previous: { id: string; title: string; startedAt: number; tasks: MeetingTask[] } | null
 }
 
 export interface Meeting extends MeetingMeta {
@@ -938,6 +992,8 @@ export interface MeetingStartOptions {
   others: boolean
   /** Une seule personne en face (1), si l'utilisateur le sait ; sinon automatique. */
   people?: number
+  /** Enregistrement lancé depuis la préparation d'une réunion de l'agenda. */
+  event?: MeetingEventLink
 }
 
 export interface MeetingStart {

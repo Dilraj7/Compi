@@ -4,6 +4,7 @@
 
 import ICAL from 'ical.js'
 import { findMeetingUrl, localDay } from '../../shared/agenda'
+import { otherAttendees } from '../../shared/meetingPrep'
 import type { DayEvent } from '../../shared/types'
 
 /** Répétitions examinées au plus par événement (un événement quotidien depuis 1990 en compte ~13 000). */
@@ -52,7 +53,32 @@ function instant(t: ICAL.Time): Date {
 
 const dateOf = (t: ICAL.Time): string => `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`
 
-function toDayEvent(e: ICAL.Event, start: ICAL.Time, end: ICAL.Time | null, label?: string): DayEvent | null {
+const param = (p: ICAL.Property, name: string): string => {
+  const v = p.getParameter(name) as unknown
+  return String((Array.isArray(v) ? v[0] : v) ?? '')
+}
+
+/** Organisateur et invités (ORGANIZER, ATTENDEE), sans toi ni les salles : ils restent sur le PC. */
+function attendeesOf(e: ICAL.Event, me?: string): DayEvent['attendees'] {
+  const person = (p: ICAL.Property, organizer: boolean) => {
+    const kind = param(p, 'cutype').toUpperCase()
+    return {
+      email: String(p.getFirstValue() ?? '').replace(/^mailto:/i, ''),
+      name: param(p, 'cn') || undefined,
+      organizer,
+      resource: kind === 'ROOM' || kind === 'RESOURCE',
+      declined: param(p, 'partstat').toUpperCase() === 'DECLINED'
+    }
+  }
+  const list = [
+    ...e.component.getAllProperties('organizer').map((p) => person(p, true)),
+    ...e.component.getAllProperties('attendee').map((p) => person(p, false))
+  ]
+  const others = otherAttendees(list, me)
+  return others.length ? others : undefined
+}
+
+function toDayEvent(e: ICAL.Event, start: ICAL.Time, end: ICAL.Time | null, label?: string, series?: string, me?: string): DayEvent | null {
   const status = String(e.component.getFirstPropertyValue('status') ?? '').toUpperCase()
   if (status === 'CANCELLED') return null
   const allDay = start.isDate
@@ -65,6 +91,7 @@ function toDayEvent(e: ICAL.Event, start: ICAL.Time, end: ICAL.Time | null, labe
   } else finish = end ? instant(end).toISOString() : s
   const url = String(e.component.getFirstPropertyValue('url') ?? '')
   const location = e.location?.trim() || undefined
+  const attendees = attendeesOf(e, me)
   return {
     id: `${e.uid}|${s}`,
     title: e.summary?.trim() || '(sans titre)',
@@ -74,7 +101,9 @@ function toDayEvent(e: ICAL.Event, start: ICAL.Time, end: ICAL.Time | null, labe
     ...(location ? { location } : {}),
     ...(label ? { calendar: label } : {}),
     meetUrl: findMeetingUrl([url], [location, e.description]),
-    ...(/^https:\/\//i.test(url) ? { htmlLink: url } : {})
+    ...(/^https:\/\//i.test(url) ? { htmlLink: url } : {}),
+    ...(attendees ? { attendees } : {}),
+    ...(series ? { seriesId: series } : {})
   }
 }
 
@@ -82,7 +111,8 @@ const startMs = (e: DayEvent): number => (e.allDay ? new Date(`${e.start}T00:00:
 const endMs = (e: DayEvent): number => (e.allDay ? new Date(`${e.end}T00:00:00`).getTime() : Date.parse(e.end))
 
 /** Événements d'un fichier .ics qui touchent la période [from, to[, du plus tôt au plus tard. */
-export function parseIcs(text: string, from: Date, to: Date, label?: string): DayEvent[] {
+/** `me` : ton adresse, retirée des participants. */
+export function parseIcs(text: string, from: Date, to: Date, label?: string, me?: string): DayEvent[] {
   const root = new ICAL.Component(ICAL.parse(text))
   for (const tz of root.getAllSubcomponents('vtimezone')) ICAL.TimezoneService.register(tz)
   const masters = new Map<string, ICAL.Event>()
@@ -100,7 +130,7 @@ export function parseIcs(text: string, from: Date, to: Date, label?: string): Da
   for (const e of masters.values()) {
     if (!e.startDate) continue
     if (!e.isRecurring()) {
-      const ev = toDayEvent(e, e.startDate, e.endDate, label)
+      const ev = toDayEvent(e, e.startDate, e.endDate, label, undefined, me)
       if (ev && inRange(ev)) out.push(ev)
       continue
     }
@@ -109,7 +139,7 @@ export function parseIcs(text: string, from: Date, to: Date, label?: string): Da
       if (instant(next).getTime() >= to.getTime() && !next.isDate) break
       if (next.isDate && new Date(`${dateOf(next)}T00:00:00`).getTime() >= to.getTime()) break
       const d = e.getOccurrenceDetails(next)
-      const ev = toDayEvent(d.item, d.startDate, d.endDate, label)
+      const ev = toDayEvent(d.item, d.startDate, d.endDate, label, e.uid, me)
       if (ev && inRange(ev)) out.push(ev)
     }
   }

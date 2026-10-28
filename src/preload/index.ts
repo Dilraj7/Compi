@@ -150,6 +150,7 @@ const api: CompiApi = {
   clearDictationStats: () => ipcRenderer.invoke(IPC.dictationStatsClear),
   onDictationStats: (cb) => listen(IPC.dictationStatsChanged, cb),
   meetingStart: (opts) => ipcRenderer.invoke(IPC.meetingStart, opts),
+  meetingPrep: (event) => ipcRenderer.invoke(IPC.meetingPrep, event),
   meetingAudio: (id, track, data) => ipcRenderer.send(IPC.meetingAudio, id, track, data),
   meetingStop: () => ipcRenderer.invoke(IPC.meetingStop),
   meetingDiscard: () => ipcRenderer.invoke(IPC.meetingDiscard),

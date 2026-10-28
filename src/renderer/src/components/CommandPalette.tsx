@@ -60,6 +60,7 @@ const SETTINGS: Array<{ focus: SettingsFocus; label: string; icon: LucideIcon; k
   { focus: 'voice', label: 'Dictée', icon: Mic, keywords: 'micro voix whisper parler' },
   { focus: 'dictation', label: 'Dictée partout', icon: Mic, keywords: 'ctrl droit coller curseur style parakeet tamoul' },
   { focus: 'speak', label: 'Lecture à voix haute', icon: AudioLines, keywords: 'voix windows lire reponses vitesse' },
+  { focus: 'converse', label: 'Conversation vocale', icon: AudioLines, keywords: 'parler discuter micro ecoute suite couper lecture' },
   { focus: 'meetings', label: 'Appels et réunions', icon: Phone, keywords: 'enregistrer appel transcription voix resume' },
   { focus: 'accounts', label: 'Comptes Google', icon: Mail, keywords: 'google gmail agenda connexion compte' },
   { focus: 'morning', label: 'Résumé du matin et météo', icon: Sun, keywords: 'journee matin meteo ville alerte reunion' },

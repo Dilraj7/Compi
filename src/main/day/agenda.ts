@@ -155,7 +155,7 @@ async function sourceEvents(src: AgendaSource, from: Date, to: Date): Promise<Da
     if (src.kind === 'ics') {
       const url = secrets.get(icsKey(src.id))
       if (!url) throw new Error('lien introuvable : retire la source et ajoute-la de nouveau')
-      events = (await ics()).parseIcs(await fetchIcs(url), dayFrom, dayTo, src.name)
+      events = (await ics()).parseIcs(await fetchIcs(url), dayFrom, dayTo, src.name, settings.get().google.email)
     } else {
       events = await withConnector(
         src.connectorId,

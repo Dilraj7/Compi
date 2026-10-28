@@ -238,6 +238,30 @@ export function DaySection({ s, apply, update }: Props) {
           <Toggle checked={d.meetingAlerts} onChange={(meetingAlerts) => update({ day: { ...d, meetingAlerts } })} label="Alerte avant une réunion" />
         </div>
       </Row>
+      <Row
+        label="Préparer mes réunions"
+        hint={
+          g(s)
+            ? 'Avant une réunion avec d’autres personnes : qui sera là, vos derniers e-mails et les tâches de la fois d’avant. Tout reste sur ton PC.'
+            : 'Ajoute une source d’agenda (ci-dessous) pour l’activer.'
+        }
+      >
+        <div className="flex items-center gap-2">
+          {d.meetingPrep && g(s) && (
+            <Segmented<string>
+              id="prep-minutes"
+              value={String(d.prepMinutes)}
+              options={[
+                { value: '10', label: '10 min' },
+                { value: '15', label: '15 min' },
+                { value: '30', label: '30 min' }
+              ]}
+              onChange={(v) => update({ day: { ...d, prepMinutes: Number(v) } })}
+            />
+          )}
+          <Toggle checked={d.meetingPrep} onChange={(meetingPrep) => update({ day: { ...d, meetingPrep } })} label="Préparer mes réunions" />
+        </div>
+      </Row>
     </Section>
   )
 }

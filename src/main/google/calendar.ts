@@ -2,6 +2,7 @@
 // (sans prévenir personne), et reconnaître les liens de visioconférence.
 
 import { findMeetingUrl } from '../../shared/agenda'
+import { otherAttendees } from '../../shared/meetingPrep'
 import type { DayEvent, GoogleCalendarChoice } from '../../shared/types'
 import { settings } from '../store/settings'
 import { GoogleApiError, googleApi, googleEndpoints } from './connect'
@@ -22,7 +23,26 @@ interface RawEvent {
   start?: { date?: string; dateTime?: string }
   end?: { date?: string; dateTime?: string }
   conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] }
-  attendees?: { self?: boolean; responseStatus?: string }[]
+  attendees?: { email?: string; displayName?: string; self?: boolean; organizer?: boolean; resource?: boolean; responseStatus?: string }[]
+  organizer?: { email?: string; displayName?: string; self?: boolean }
+  recurringEventId?: string
+}
+
+/** Les autres participants (et l'organisateur), pour préparer la réunion : ils restent sur le PC. */
+function attendeesOf(ev: RawEvent): DayEvent['attendees'] {
+  const list = [
+    ...(ev.organizer ? [{ email: ev.organizer.email, name: ev.organizer.displayName, self: ev.organizer.self, organizer: true }] : []),
+    ...(ev.attendees ?? []).map((a) => ({
+      email: a.email,
+      name: a.displayName,
+      self: a.self,
+      organizer: a.organizer,
+      resource: a.resource,
+      declined: a.responseStatus === 'declined'
+    }))
+  ]
+  const others = otherAttendees(list, settings.get().google.email)
+  return others.length ? others : undefined
 }
 
 /** Lien de visio d'un événement : Meet, ou un lien reconnu dans le lieu ou la description. */
@@ -50,8 +70,14 @@ export function toDayEvent(ev: RawEvent, calendar?: string, calendarId?: string)
     calendar,
     ...(calendarId ? { calendarId } : {}),
     meetUrl: meetingLink(ev),
-    htmlLink: ev.htmlLink
+    htmlLink: ev.htmlLink,
+    ...withAttendees(ev)
   }
+}
+
+function withAttendees(ev: RawEvent): Pick<DayEvent, 'attendees' | 'seriesId'> {
+  const attendees = attendeesOf(ev)
+  return { ...(attendees ? { attendees } : {}), ...(ev.recurringEventId ? { seriesId: ev.recurringEventId } : {}) }
 }
 
 const startMs = (e: DayEvent): number => (e.allDay ? new Date(`${e.start}T00:00:00`).getTime() : new Date(e.start).getTime())

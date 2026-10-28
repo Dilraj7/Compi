@@ -373,8 +373,7 @@ function Message({ m, streaming, last }: { m: ChatMessage; streaming: boolean; l
 }
 
 /** Niveau du micro en colonnes de points LED, qui défilent de droite à gauche. */
-function MicMeter() {
-  const level = useCompi((s) => s.dictation.level)
+function MicMeter({ level }: { level: number }) {
   const history = useRef<number[]>(Array(18).fill(0))
   history.current = [...history.current.slice(1), level]
   return (
@@ -399,13 +398,15 @@ function MicMeter() {
 
 /** Bandeau de la dictée au-dessus de la saisie : écoute, transcription, erreur. */
 function DictationBar() {
-  const { phase, preparing, error } = useCompi(useShallow((s) => ({ phase: s.dictation.phase, preparing: s.dictation.preparing, error: s.dictation.error })))
-  if (phase === 'idle' && !error) return null
+  const { phase, preparing, error, level } = useCompi(
+    useShallow((s) => ({ phase: s.dictation.phase, preparing: s.dictation.preparing, error: s.dictation.error, level: s.dictation.level }))
+  )
+  if (phase === 'idle' && !error) return <ConverseBar />
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="mb-1.5 flex items-center gap-2.5 px-2 text-[11.5px]">
       {phase === 'recording' && (
         <>
-          <MicMeter />
+          <MicMeter level={level} />
           <span className="text-fog-100">Je t’écoute…</span>
           <span className="truncate text-fog-700">relâche ou fais une pause pour envoyer · Échap pour annuler</span>
         </>
@@ -418,6 +419,36 @@ function DictationBar() {
         </>
       )}
       {phase === 'idle' && error && <span className="text-led-amber">{error}</span>}
+    </motion.div>
+  )
+}
+
+/** Conversation vocale : où elle en est, au-dessus de la saisie. */
+function ConverseBar() {
+  const { phase, level } = useCompi(useShallow((s) => ({ phase: s.converse.phase, level: s.converse.level })))
+  if (phase === 'off') return null
+  const [label, hint] =
+    phase === 'answering'
+      ? ['Conversation vocale', 'je t’écoute après ma réponse · Échap pour arrêter']
+      : phase === 'listening'
+        ? ['J’écoute la suite…', 'parle quand tu veux · Échap pour arrêter']
+        : phase === 'hearing'
+          ? ['Je t’écoute…', 'fais une pause pour envoyer']
+          : phase === 'transcribing'
+            ? ['Je transcris…', 'sur ton PC']
+            : ['Je t’ai entendu', 'ta question part à la fin de ma réponse']
+  const mic = phase === 'listening' || phase === 'hearing'
+  return (
+    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="mb-1.5 flex items-center gap-2.5 px-2 text-[11.5px]">
+      {mic ? <MicMeter level={level} /> : phase === 'transcribing' ? <LedDots /> : <Mic size={12} className="shrink-0 text-[var(--led)]" />}
+      <span className={mic ? 'text-fog-100' : 'text-fog-300'}>{label}</span>
+      <span className="truncate text-fog-700">{hint}</span>
+      <button
+        onClick={() => useCompi.getState().endConversation()}
+        className="ml-auto shrink-0 rounded-md px-1.5 py-0.5 text-fog-500 transition-colors hover:bg-white/[0.06] hover:text-fog-100"
+      >
+        Arrêter
+      </button>
     </motion.div>
   )
 }
@@ -542,7 +573,11 @@ function Composer() {
             data-chat-input
             rows={1}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value)
+              // Écrire au clavier reprend la main : la conversation vocale s'arrête.
+              if (useCompi.getState().converse.phase !== 'off') useCompi.getState().endConversation()
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault()

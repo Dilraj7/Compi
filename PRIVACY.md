@@ -21,7 +21,7 @@ Tout est dans le dossier `%APPDATA%\Compi`.
 | Index de la recherche par le sens                        | `semantic\`                                                       | seulement si tu l'actives                                                                        |
 | Modèles de dictée et voix naturelle                      | `models\`                                                         | seulement si tu les télécharges                                                                  |
 | Temps gagné (dictée partout)                             | `dictation-stats.json`                                            | par jour et par programme : dictées, mots, temps de parole ; **jamais le texte**                 |
-| Appels enregistrés                                       | `meetings\`                                                       | transcriptions, noms des voix, résumés ; le son, le temps de la transcription                    |
+| Appels enregistrés                                       | `meetings\`                                                       | transcriptions, noms des voix, résumés, rendez-vous relié ; le son, le temps de la transcription |
 | Journal des rangements                                   | `moves\`                                                          | noms des fichiers déplacés, pour pouvoir annuler ; les 20 derniers rangements                    |
 | Fichiers texte modifiés par Compi                        | `edits\`                                                          | **l'ancienne version de chaque fichier**, pour pouvoir annuler ; les 30 dernières modifications  |
 | Utilisation                                              | `usage-claude-code.json`, `usage-compi.json`                      | des totaux seulement, aucun texte                                                                |
@@ -90,6 +90,14 @@ Désactivée par défaut (Réglages › Dictée partout).
 - **« Compi, … »** : une dictée qui commence ainsi devient une demande à Compi, avec les règles habituelles.
 - Compi retient le nom du programme (« outlook »), jamais le titre de la fenêtre.
 
+## Conversation vocale
+
+Désactivée par défaut (Réglages › Voix › Lecture à voix haute).
+
+- **Le micro** se rouvre seulement après une question posée à la voix, à la fin de la lecture de la réponse, pendant 6 secondes au plus si personne ne parle. Avec « Couper ma lecture en parlant », il est aussi ouvert pendant la lecture. L'îlot le montre tout le temps où il écoute.
+- **Le son** est découpé en phrases sur ton PC, gardé en mémoire le temps d'une phrase (30 secondes au plus), jamais écrit sur le disque ni envoyé. Seul le texte transcrit part, comme une question tapée.
+- **Elle s'arrête** sur Échap, « Arrêter », dès que tu écris au clavier, quand une carte d'accord attend (jamais d'accord à la voix), pendant un appel enregistré, et quand le PC se verrouille ou se met en veille.
+
 ## Appels et réunions
 
 Rien ne commence sans ton clic (Historique › Réunions › Enregistrer un appel), et Compi ne propose jamais d'enregistrer tout seul.
@@ -101,6 +109,15 @@ Rien ne commence sans ton clic (Historique › Réunions › Enregistrer un appe
 - **Le résumé** est fait par ton cerveau. Sur ce PC, rien ne part. Avec un cerveau en ligne, la catégorie « Réunions » s'applique (Me demander par défaut) : seul le texte part, secrets masqués, et le résumé automatique n'a lieu qu'avec « Toujours ».
 - **« Suite avec Compi »** ouvre une discussion à partir de la transcription. Elle est traitée comme un contenu venu d'ailleurs : toute action vers l'extérieur demande ton accord.
 - Aucune reconnaissance d'émotions.
+
+## Préparer mes réunions
+
+Désactivé par défaut (Réglages › Journée › Ta journée). Tout se calcule sur ton PC, sans cerveau.
+
+- **Les participants** (noms et adresses, sans toi, sans les salles, sans ceux qui ont décliné) sont lus dans ton agenda, en même temps que tes rendez-vous. Ils ne sont jamais envoyés à un cerveau : quand tu demandes ton programme à Compi, il ne reçoit que l'heure, le titre, le lieu, la visio et le nom de l'agenda.
+- **Tes derniers e-mails avec eux** : seulement quand tu ouvres la préparation, et seulement si tu as autorisé Gmail. Compi cherche dans Gmail (de, à ou en copie, 30 derniers jours, 5 au plus) et n'affiche que l'expéditeur, le sujet et la date. Rien n'est gardé.
+- **La fois d'avant** : la réunion enregistrée la plus récente avec eux, et ses tâches, prises dans tes appels déjà enregistrés.
+- **« Enregistrer »** depuis la préparation relie l'appel au rendez-vous : `meetings\` garde alors aussi son titre, son horaire, sa série et les adresses des participants (pas leurs noms), pour retrouver la fois d'avant.
 
 ## Lecture à voix haute
 

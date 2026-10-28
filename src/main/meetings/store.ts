@@ -34,7 +34,8 @@ export const metaOf = (m: Meeting): MeetingMeta => ({
   others: m.others,
   speakers: m.speakers,
   hasSummary: Boolean(m.summary),
-  audio: m.audio
+  audio: m.audio,
+  ...(m.event ? { event: m.event } : {})
 })
 
 export function listMeetings(): MeetingMeta[] {

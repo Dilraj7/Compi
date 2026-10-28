@@ -150,6 +150,11 @@ function useBridge(): void {
           case 'voice':
             onVoiceKey()
             break
+          case 'voice-stop':
+            // PC verrouillé ou en veille : plus de micro ouvert (la dictée partout s'arrête côté Compi).
+            s.endConversation()
+            if (s.dictation.phase !== 'idle' && !s.dictation.everywhere) s.cancelDictation()
+            break
           case 'attention': {
             // Plein écran : la carte est déjà dans la colonne « À toi », la vue du centre ne change pas.
             if (s.full) break

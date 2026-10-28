@@ -23,6 +23,7 @@ import {
   Video,
   X
 } from 'lucide-react'
+import { fullLayout } from '@shared/fullLayout'
 import { PILLS, type PillId } from '@shared/pills'
 import type { IslandNotice } from '@shared/types'
 import { useCompi } from '../store'
@@ -64,6 +65,20 @@ export function openFromNotice(notice: IslandNotice | null): void {
   } else s.open('chat', { focus: true })
 }
 
+/** Bouton de la notification : ouvrir le lien (Rejoindre), ou la préparation de la réunion dans Aujourd'hui. */
+export function runNoticeAction(notice: IslandNotice): void {
+  const s = useCompi.getState()
+  const action = notice.action
+  if (!action) return
+  if ('url' in action) void window.compi.openExternal(action.url)
+  else {
+    s.setPrepFocus(action.prep)
+    // En plein écran large, la journée est déjà dans la colonne de gauche ; sinon, dans Aujourd'hui.
+    if (!s.full || fullLayout(window.innerWidth).left === null) s.open('today', { focus: true })
+  }
+  s.dismissNotice()
+}
+
 /** Panneau ouvert : la notification descend en bandeau sous l'en-tête. */
 export function NoticeBanner() {
   const notice = useCompi((s) => s.notice)
@@ -90,10 +105,8 @@ export function NoticeBanner() {
           <button
             className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
             onClick={() => {
-              if (notice.action) {
-                void window.compi.openExternal(notice.action.url)
-                dismiss()
-              } else openFromNotice(notice)
+              if (notice.action) runNoticeAction(notice)
+              else openFromNotice(notice)
             }}
           >
             <Icon size={15} className="shrink-0" style={{ color: def.color }} />

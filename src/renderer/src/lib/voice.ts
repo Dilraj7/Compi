@@ -84,6 +84,11 @@ export async function loadModel(model: VoiceModelId, variant: VoiceVariant, prog
   workerKey = key
 }
 
+/** Transcription par Whisper d'un son déjà en 16 kHz (modèle chargé par loadModel). */
+export async function transcribeWhisper(audio: Float32Array): Promise<string> {
+  return cleanTranscript((await call({ type: 'transcribe', audio, language: 'french' })) ?? '')
+}
+
 export function unloadModel(): void {
   worker?.terminate()
   worker = null

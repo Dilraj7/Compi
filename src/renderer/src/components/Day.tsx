@@ -1,15 +1,19 @@
 // Blocs de la journée, communs à « Aujourd'hui » (encoche) et à la colonne
 // « Ta journée » du plein écran : agenda, rappels, messages, minuteur.
 
-import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
-import { ExternalLink, MessageSquareText, Pause, Play, Repeat, Timer, Video, X } from 'lucide-react'
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { motion } from 'motion/react'
+import { ClipboardList, ExternalLink, MessageSquareText, Pause, Play, Repeat, Timer, Video, X } from 'lucide-react'
 import { gmailWebUrl, repeatLabel, senderName } from '@shared/day'
+import { attendeeLabel, eventLink, isPreparable, prepKey, PREP_MAIL_DAYS } from '@shared/meetingPrep'
 import { groupLabel, groupPending, waitingFor } from '@shared/messages'
 import { formatClock } from '@shared/media'
 import { remainingMs, timerTitle } from '@shared/timer'
-import type { DayEvent, MessagesStatus, Reminder, TodayInfo } from '@shared/types'
+import type { DayEvent, MeetingPrep, MessagesStatus, Reminder, TodayInfo } from '@shared/types'
 import { useCompi } from '../store'
-import { Button, cx, IconButton } from './ui'
+import { StartCallCard } from '../views/MeetingsView'
+import { REC } from './CallLive'
+import { Button, cx, IconButton, LedDots } from './ui'
 import { useNow } from './Live'
 
 export const TIME = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -76,8 +80,61 @@ export function EventRow({ e, now }: { e: DayEvent; now: number }) {
   const past = !e.allDay && end < now
   const live = !e.allDay && start <= now && now < end
   const soon = !e.allDay && start > now && start - now < 15 * 60_000
+  // « Préparer » (option de Ta journée) : réunion avec d'autres personnes, pas encore finie.
+  const prepOn = useCompi((s) => s.settings?.day.meetingPrep === true) && isPreparable(e) && !past
+  const focused = useCompi((s) => s.prepFocus === prepKey(e))
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!focused) return
+    setOpen(true)
+    setTimeout(() => ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 250)
+    // Les deux journées (encoche et plein écran) peuvent l'afficher : la demande s'efface un peu après.
+    const t = setTimeout(() => useCompi.getState().setPrepFocus(null), 600)
+    return () => clearTimeout(t)
+  }, [focused])
   return (
-    <div className={cx('flex items-center gap-3 px-3.5 py-2.5 [&+&]:border-t [&+&]:border-white/[0.05]', past && 'opacity-45')}>
+    <div ref={ref} className="@container [&+&]:border-t [&+&]:border-white/[0.05]">
+      <EventLine e={e} past={past} live={live} soon={soon} start={start} end={end}>
+        {prepOn && (
+          // Colonne étroite (plein écran) : l'icône seule, pour laisser la place au titre.
+          <Button
+            size="sm"
+            variant={open ? 'primary' : 'subtle'}
+            accent="#A78BFA"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-label="Préparer"
+            title="Préparer"
+          >
+            <ClipboardList size={13} /> <span className="hidden @sm:inline">Préparer</span>
+          </Button>
+        )}
+      </EventLine>
+      {prepOn && open && <PrepCard e={e} />}
+    </div>
+  )
+}
+
+function EventLine({
+  e,
+  past,
+  live,
+  soon,
+  start,
+  end,
+  children
+}: {
+  e: DayEvent
+  past: boolean
+  live: boolean
+  soon: boolean
+  start: number
+  end: number
+  children?: ReactNode
+}) {
+  return (
+    <div className={cx('flex items-center gap-3 px-3.5 py-2.5', past && 'opacity-45')}>
       <div className="w-[52px] shrink-0 text-right">
         {e.allDay ? (
           <span className="text-[11px] text-fog-500">journée</span>
@@ -98,12 +155,155 @@ export function EventRow({ e, now }: { e: DayEvent; now: number }) {
           {[e.location, e.calendar].filter(Boolean).join(' · ')}
         </div>
       </div>
+      {children}
       {e.meetUrl && !past && (
-        <Button size="sm" variant={live || soon ? 'primary' : 'subtle'} accent="#34D399" onClick={() => void window.compi.openExternal(e.meetUrl!)}>
-          <Video size={13} /> Rejoindre
+        <Button
+          size="sm"
+          variant={live || soon ? 'primary' : 'subtle'}
+          accent="#34D399"
+          onClick={() => void window.compi.openExternal(e.meetUrl!)}
+          aria-label="Rejoindre"
+          title="Rejoindre"
+        >
+          {/* Avec « Préparer » à côté, dans une colonne étroite : l'icône seule. */}
+          <Video size={13} /> <span className={children ? 'hidden @sm:inline' : undefined}>Rejoindre</span>
         </Button>
       )}
     </div>
+  )
+}
+
+const SHORT_DATE = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' })
+const cleanError = (e: Error): string => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+
+function PrepPart({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[10.5px] font-medium tracking-wide text-fog-700 uppercase">{title}</div>
+      {children}
+    </div>
+  )
+}
+
+/** Préparation d'une réunion : qui sera là, vos derniers e-mails, ce qui avait été décidé la fois d'avant. Tout reste sur le PC. */
+function PrepCard({ e }: { e: DayEvent }) {
+  const email = useCompi((s) => s.settings?.google.email ?? '')
+  const calling = useCompi((s) => s.call !== null)
+  const [prep, setPrep] = useState<MeetingPrep | null>(null)
+  const [error, setError] = useState('')
+  const [recording, setRecording] = useState(false)
+  const people = e.attendees ?? []
+
+  useEffect(() => {
+    let alive = true
+    window.compi.meetingPrep(eventLink(e)).then(
+      (p) => alive && setPrep(p),
+      (err: Error) => alive && setError(cleanError(err))
+    )
+    return () => {
+      alive = false
+    }
+    // Une seule lecture par rendez-vous (pas à chaque rafraîchissement de la journée).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [e.id, e.start])
+
+  const openMeeting = (id: string): void => {
+    const s = useCompi.getState()
+    s.setHistoryTab('meetings')
+    s.openMeeting(id)
+    s.setView('history')
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="px-3.5 pb-3" data-meeting-prep>
+      <div className="space-y-3 rounded-xl bg-white/[0.035] p-3 ring-1 ring-white/[0.06] ring-inset">
+        <PrepPart title="Avec">
+          <div className="flex flex-wrap gap-1.5">
+            {people.map((a) => (
+              <span
+                key={a.email ?? a.name}
+                title={a.email}
+                className="inline-flex max-w-full items-center gap-1 truncate rounded-full bg-white/[0.06] px-2 py-0.5 text-[11.5px] text-fog-100"
+              >
+                {attendeeLabel(a)}
+                {a.organizer && <span className="text-fog-500">· organise</span>}
+              </span>
+            ))}
+          </div>
+        </PrepPart>
+
+        <PrepPart title="Vos derniers e-mails">
+          {error ? (
+            <div className="text-[11.5px] text-led-amber">{error}</div>
+          ) : !prep ? (
+            <LedDots color="#A78BFA" />
+          ) : prep.mails === null ? (
+            <div className="text-[11.5px] text-fog-500">Autorise Gmail (Réglages › Journée › Comptes) pour les voir ici.</div>
+          ) : prep.mailError ? (
+            <div className="text-[11.5px] text-led-amber">Gmail : {prep.mailError}</div>
+          ) : prep.mails.length ? (
+            <div className="-mx-1.5">
+              {prep.mails.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => void window.compi.openExternal(gmailWebUrl(email, { messageId: m.id }))}
+                  className="group flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[11.5px] hover:bg-white/[0.05]"
+                >
+                  <span className="w-24 shrink-0 truncate text-fog-300">{senderName(m.from)}</span>
+                  <span className="min-w-0 flex-1 truncate text-fog-100">{m.subject}</span>
+                  {m.date && <span className="shrink-0 text-fog-700 tabular-nums">{SHORT_DATE.format(new Date(m.date))}</span>}
+                  <ExternalLink size={11} className="shrink-0 text-fog-700 opacity-0 group-hover:opacity-100" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[11.5px] text-fog-500">Aucun échange ces {PREP_MAIL_DAYS} derniers jours.</div>
+          )}
+        </PrepPart>
+
+        <PrepPart title="La dernière fois">
+          {!prep ? (
+            error ? null : (
+              <LedDots color="#A78BFA" />
+            )
+          ) : prep.previous ? (
+            <div className="space-y-1">
+              <button className="flex items-baseline gap-1.5 text-left text-[12px] text-fog-100 hover:underline" onClick={() => openMeeting(prep.previous!.id)}>
+                {prep.previous.title}
+                <span className="text-[11px] text-fog-500">· {SHORT_DATE.format(new Date(prep.previous.startedAt))}</span>
+              </button>
+              {prep.previous.tasks.length ? (
+                <ul className="space-y-0.5">
+                  {prep.previous.tasks.map((t, i) => (
+                    <li key={i} className="flex gap-1.5 text-[11.5px] leading-snug text-fog-300">
+                      <span className="text-fog-700">•</span>
+                      <span>
+                        {t.text}
+                        {(t.owner || t.due) && <span className="text-fog-500"> — {[t.owner, t.due].filter(Boolean).join(', ')}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-[11.5px] text-fog-500">Pas de tâche notée.</div>
+              )}
+            </div>
+          ) : (
+            <div className="text-[11.5px] text-fog-500">Pas de réunion enregistrée avec eux.</div>
+          )}
+        </PrepPart>
+
+        {!recording && (
+          <div className="flex items-center justify-end gap-2">
+            <Button size="sm" variant="subtle" disabled={calling} onClick={() => setRecording(true)}>
+              <span className="size-2 rounded-full" style={{ background: REC, boxShadow: `0 0 6px ${REC}` }} />
+              {calling ? 'Enregistrement en cours' : 'Enregistrer'}
+            </Button>
+          </div>
+        )}
+        {recording && <StartCallCard event={eventLink(e)} onClose={() => setRecording(false)} />}
+      </div>
+    </motion.div>
   )
 }
 

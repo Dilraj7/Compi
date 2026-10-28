@@ -15,8 +15,11 @@ export const MEETING_MAX_MS = 4 * 3600_000
 
 // ─── Découpage de la parole (en direct) ──────────────────────────────────────
 
-/** Tranches de 30 ms ; une phrase finit après 0,7 s de silence, ou au bout de 15 s. */
-export const SEGMENT = { frame: 480, preRoll: 3200, tail: 2400, endSilence: 11_200, minSpeech: 4800, max: 240_000, floor: 0.012 } as const
+/** Tranches de 30 ms ; une phrase finit après 0,7 s de silence, ou au bout de 15 s. Voix : 3 fois le bruit de fond. */
+export const SEGMENT = { frame: 480, preRoll: 3200, tail: 2400, endSilence: 11_200, minSpeech: 4800, max: 240_000, floor: 0.012, factor: 3 } as const
+
+/** Réglages du découpage, en échantillons (la conversation vocale a les siens). */
+export type SegmentOptions = { [K in Exclude<keyof typeof SEGMENT, 'frame'>]: number }
 
 export interface SegmenterState {
   /** Échantillons déjà lus depuis le début de la piste. */
@@ -31,6 +34,8 @@ export interface SegmenterState {
   lastVoice: number
   /** Reste d'une tranche incomplète, lue au prochain morceau. */
   carry: number[]
+  /** Tranches de voix de la phrase en cours (sans les silences entre elles). */
+  voiced: number
 }
 
 export interface SpeechSpan {
@@ -39,7 +44,7 @@ export interface SpeechSpan {
   to: number
 }
 
-export const newSegmenter = (): SegmenterState => ({ pos: 0, noise: 0, speechStart: null, firstVoice: 0, lastVoice: 0, carry: [] })
+export const newSegmenter = (): SegmenterState => ({ pos: 0, noise: 0, speechStart: null, firstVoice: 0, lastVoice: 0, carry: [], voiced: 0 })
 
 function rms(samples: ArrayLike<number>, from: number, n: number): number {
   let sum = 0
@@ -51,7 +56,7 @@ function rms(samples: ArrayLike<number>, from: number, n: number): number {
  * Lit un morceau de son (16 kHz, de -1 à 1) et renvoie les phrases terminées.
  * Le seuil suit le bruit de fond : un micro bruyant ne coupe pas en continu.
  */
-export function segmentChunk(state: SegmenterState, chunk: ArrayLike<number>): { state: SegmenterState; spans: SpeechSpan[] } {
+export function segmentChunk(state: SegmenterState, chunk: ArrayLike<number>, o: SegmentOptions = SEGMENT): { state: SegmenterState; spans: SpeechSpan[] } {
   const s: SegmenterState = { ...state, carry: [] }
   const data = state.carry.length ? [...state.carry, ...Array.from(chunk)] : chunk
   const spans: SpeechSpan[] = []
@@ -62,21 +67,24 @@ export function segmentChunk(state: SegmenterState, chunk: ArrayLike<number>): {
     const frameEnd = s.pos + SEGMENT.frame
     s.pos = frameEnd
     if (s.speechStart === null) s.noise = s.noise === 0 ? Math.max(level, 0.001) : s.noise * 0.95 + level * 0.05
-    const voiced = level > Math.max(SEGMENT.floor, s.noise * 3)
+    const voiced = level > Math.max(o.floor, s.noise * o.factor)
     if (voiced) {
       if (s.speechStart === null) {
-        s.speechStart = Math.max(0, frameStart - SEGMENT.preRoll)
+        s.speechStart = Math.max(0, frameStart - o.preRoll)
         s.firstVoice = frameStart
+        s.voiced = 0
       }
       s.lastVoice = frameEnd
+      s.voiced++
     }
     if (s.speechStart === null) continue
-    const long = frameEnd - s.speechStart >= SEGMENT.max
-    if (frameEnd - s.lastVoice >= SEGMENT.endSilence || long) {
-      if (s.lastVoice - s.firstVoice >= SEGMENT.minSpeech) spans.push({ from: s.speechStart, to: Math.min(frameEnd, s.lastVoice + SEGMENT.tail) })
+    const long = frameEnd - s.speechStart >= o.max
+    if (frameEnd - s.lastVoice >= o.endSilence || long) {
+      if (s.lastVoice - s.firstVoice >= o.minSpeech) spans.push({ from: s.speechStart, to: Math.min(frameEnd, s.lastVoice + o.tail) })
       // Phrase coupée à 15 s alors qu'on parle encore : la suite repart d'ici.
       s.speechStart = long && voiced ? frameEnd : null
       s.firstVoice = frameEnd
+      s.voiced = 0
     }
   }
   for (; i < data.length; i++) s.carry.push(data[i])

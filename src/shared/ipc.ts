@@ -150,6 +150,7 @@ export const IPC = {
   speechModelProgress: 'speech:model-progress',
   // réunions (enregistreur d'appels)
   meetingStart: 'meetings:start',
+  meetingPrep: 'meetings:prep',
   meetingAudio: 'meetings:audio',
   meetingStop: 'meetings:stop',
   meetingDiscard: 'meetings:discard',

@@ -301,6 +301,30 @@ export function SpeakSection({ s, update }: Props) {
       <Row label="Vitesse">
         <Segmented<string> id="voice-rate" value={rate.value} options={RATES} onChange={(r) => setVoice({ rate: Number(r) })} />
       </Row>
+      <div data-settings-focus="converse" className="scroll-mt-2">
+        <Row
+          label="Conversation vocale"
+          hint={
+            v.speak === 'never'
+              ? 'Après une question posée à la voix, je t’écoute à la fin de ma réponse. L’activer lit aussi mes réponses « Quand je parle ».'
+              : 'Après une question posée à la voix, je t’écoute 6 s à la fin de ma réponse : tu continues sans touche. Échap ou « Arrêter » pour finir.'
+          }
+        >
+          <Toggle
+            checked={v.conversation && v.speak !== 'never'}
+            onChange={(conversation) => setVoice(conversation && v.speak === 'never' ? { conversation, speak: 'voice' } : { conversation })}
+            label="Conversation vocale"
+          />
+        </Row>
+        {v.conversation && v.speak !== 'never' && (
+          <Row
+            label="Couper ma lecture en parlant"
+            hint="Le micro reste ouvert pendant que je lis. Avec des haut-parleurs, je peux m’entendre moi-même : un casque marche mieux."
+          >
+            <Toggle checked={v.bargeIn} onChange={(bargeIn) => setVoice({ bargeIn })} label="Couper ma lecture en parlant" />
+          </Row>
+        )}
+      </div>
     </Section>
   )
 }

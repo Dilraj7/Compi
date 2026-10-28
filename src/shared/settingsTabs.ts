@@ -10,6 +10,7 @@ export type SettingsFocus =
   | 'voice'
   | 'dictation'
   | 'speak'
+  | 'converse'
   | 'meetings'
   | 'accounts'
   | 'morning'
@@ -40,6 +41,7 @@ export const SETTINGS_TAB_OF: Record<SettingsFocus, SettingsTab> = {
   voice: 'voice',
   dictation: 'voice',
   speak: 'voice',
+  converse: 'voice',
   meetings: 'voice',
   accounts: 'day',
   morning: 'day',

@@ -305,6 +305,24 @@ describe('agendas .ics', () => {
     expect(events).toEqual([{ id: 'd1|2026-10-15', title: 'Sortie scolaire', start: '2026-10-15', end: '2026-10-16', allDay: true, meetUrl: undefined }])
   })
 
+  it('participants .ics : sans toi, les salles ni ceux qui ont décliné ; série pour un événement répété', () => {
+    const text = ics(
+      'BEGIN:VEVENT\nUID:rep1\nDTSTART:20261015T090000Z\nDTEND:20261015T093000Z\nRRULE:FREQ=DAILY;COUNT=2\nSUMMARY:Point\nORGANIZER;CN="Martin, Claire":mailto:claire@example.com\nATTENDEE;CN=Claire Martin;PARTSTAT=ACCEPTED:mailto:claire@example.com\nATTENDEE;CN=Alex;PARTSTAT=ACCEPTED:MAILTO:alex@example.com\nATTENDEE;CN=Paul;PARTSTAT=NEEDS-ACTION:mailto:paul@example.com\nATTENDEE;PARTSTAT=DECLINED:mailto:lea@example.com\nATTENDEE;CUTYPE=ROOM;CN=Salle B:mailto:salle@example.com\nEND:VEVENT',
+      'BEGIN:VEVENT\nUID:one1\nDTSTART:20261015T140000Z\nDTEND:20261015T150000Z\nSUMMARY:Seul\nEND:VEVENT'
+    )
+    const events = parseIcs(text, new Date('2026-10-15T00:00:00Z'), new Date('2026-10-17T00:00:00Z'), undefined, 'alex@example.com')
+    const reps = events.filter((e) => e.title === 'Point')
+    expect(reps).toHaveLength(2)
+    expect(reps[0].seriesId).toBe('rep1')
+    expect(reps[0].attendees).toEqual([
+      { email: 'claire@example.com', name: 'Martin, Claire', organizer: true },
+      { email: 'paul@example.com', name: 'Paul' }
+    ])
+    const alone = events.find((e) => e.title === 'Seul')
+    expect(alone?.attendees).toBeUndefined()
+    expect(alone?.seriesId).toBeUndefined()
+  })
+
   it('événement quotidien depuis des années : seulement la période, rapidement', () => {
     const text = ics('BEGIN:VEVENT\nUID:q1\nDTSTART:20000101T070000Z\nDTEND:20000101T071500Z\nRRULE:FREQ=DAILY\nSUMMARY:Médicament\nEND:VEVENT')
     const t0 = Date.now()

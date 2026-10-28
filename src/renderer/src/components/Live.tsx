@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
 import { Music2, Pause, Play, SkipBack, SkipForward, Square, Timer, X } from 'lucide-react'
 import { PILLS } from '@shared/pills'
+import { CONVERSE } from '@shared/converse'
 import { formatClock, mediaPosition } from '@shared/media'
 import { progress, remainingMs, timerTitle } from '@shared/timer'
 import type { MediaAction, MediaInfo, TimerState } from '@shared/types'
@@ -265,6 +266,9 @@ export function TimerPeek({ timer }: { timer: TimerState }) {
 
 export function SpeakingPeek({ eyes }: { eyes: ReactNode }) {
   const color = PILLS.speaking.color
+  // En conversation vocale : on dit comment reprendre la parole.
+  const conversing = useCompi((s) => s.converse.phase === 'answering')
+  const bargeIn = useCompi((s) => s.settings?.voice.bargeIn !== false)
   return (
     <div className="flex h-full items-center gap-3.5 pr-3.5 pl-5">
       {eyes}
@@ -275,7 +279,9 @@ export function SpeakingPeek({ eyes }: { eyes: ReactNode }) {
           </span>
           <LedEq color={color} on />
         </div>
-        <div className="mt-0.5 truncate text-[12px] text-fog-300">Ma réponse, à voix haute</div>
+        <div className="mt-0.5 truncate text-[12px] text-fog-300">
+          {conversing ? (bargeIn ? 'Parle pour me couper' : 'Je t’écoute juste après') : 'Ma réponse, à voix haute'}
+        </div>
       </div>
       <LiveButton label="Arrêter la lecture" onClick={() => useCompi.getState().stopSpeaking()} big color={color}>
         <Square size={12} fill="currentColor" />
@@ -315,6 +321,50 @@ export function ListeningPeek({ eyes }: { eyes: ReactNode }) {
         <LiveButton label="Terminer la dictée" onClick={() => useCompi.getState().stopDictation()} big color={color}>
           <Square size={12} fill="currentColor" />
         </LiveButton>
+      )}
+    </div>
+  )
+}
+
+/** Conversation vocale : le micro attend la suite (anneau du temps restant), entend, transcrit. */
+export function ConversePeek({ eyes }: { eyes: ReactNode }) {
+  const phase = useCompi((s) => s.converse.phase)
+  const until = useCompi((s) => s.converse.until)
+  const color = PILLS.chat.color
+  const waiting = phase === 'listening'
+  const now = useNow(waiting, 250)
+  const elapsed = waiting ? 1 - Math.max(0, until - now) / CONVERSE.listenMs : 0
+  const [title, hint] =
+    phase === 'listening'
+      ? ['J’écoute la suite', 'Parle quand tu veux, sinon je m’arrête']
+      : phase === 'hearing'
+        ? ['Je t’écoute', 'Fais une pause pour envoyer']
+        : phase === 'transcribing'
+          ? ['Je transcris', 'Sur ton PC, rien n’est envoyé']
+          : ['Je t’ai entendu', 'Ta question part à la fin de ma réponse']
+  const end = (
+    <LiveButton label="Terminer la conversation" onClick={() => useCompi.getState().endConversation()} big={!waiting} color={color}>
+      {waiting ? <X size={14} /> : <Square size={12} fill="currentColor" />}
+    </LiveButton>
+  )
+  return (
+    <div className="flex h-full items-center gap-3.5 pr-3.5 pl-5">
+      {eyes}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="led-text text-[12px] leading-tight" style={{ color, textShadow: `0 0 10px ${color}88` }}>
+            {title}
+          </span>
+          <LedEq color={color} on={phase === 'hearing'} />
+        </div>
+        <div className="mt-0.5 truncate text-[12px] text-fog-300">{hint}</div>
+      </div>
+      {waiting ? (
+        <Ring value={elapsed} size={38} color={color}>
+          {end}
+        </Ring>
+      ) : (
+        end
       )}
     </div>
   )
