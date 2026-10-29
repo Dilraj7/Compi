@@ -4,6 +4,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import {
+  AArrowDown,
+  AArrowUp,
   Activity,
   AudioLines,
   BellOff,
@@ -69,6 +71,7 @@ const SETTINGS: Array<{ focus: SettingsFocus; label: string; icon: LucideIcon; k
   { focus: 'general', label: 'Comportement', icon: Settings2, keywords: 'prenom nom raccourci demarrer windows discret mode avance' },
   { focus: 'keys', label: 'Raccourcis des autorisations', icon: Keyboard, keywords: 'clavier autoriser refuser alt maj' },
   { focus: 'island', label: 'Moniteur du PC dans l’îlot', icon: MonitorCog, keywords: 'ilot jauges processeur memoire carte graphique' },
+  { focus: 'zoom', label: 'Taille du texte', icon: AArrowUp, keywords: 'police agrandir grossir zoom ecran lisible petit plein ecran' },
   { focus: 'sounds', label: 'Sons', icon: Volume2, keywords: 'bip volume heures calmes notification' },
   { focus: 'claude', label: 'Claude Code', icon: TerminalSquare, keywords: 'sessions hooks permissions terminal' },
   { focus: 'privacy', label: 'Confidentialité', icon: ShieldCheck, keywords: 'toujours jamais envoyer donnees' }
@@ -166,6 +169,27 @@ function useItems(conversations: ConversationMeta[]): Item[] {
         }
       )
     }
+    // Taille du texte du mode affiché (encoche ou plein écran).
+    items.push(
+      {
+        id: 'zoom-in',
+        group: 'Actions',
+        label: 'Agrandir le texte',
+        icon: AArrowUp,
+        hint: 'Ctrl +',
+        keywords: 'taille police zoom grossir lisible plus grand',
+        run: () => void window.compi.zoomStep(1)
+      },
+      {
+        id: 'zoom-out',
+        group: 'Actions',
+        label: 'Réduire le texte',
+        icon: AArrowDown,
+        hint: 'Ctrl −',
+        keywords: 'taille police zoom plus petit',
+        run: () => void window.compi.zoomStep(-1)
+      }
+    )
     TAB_ORDER.forEach((v, i) => {
       const m = VIEW_META[v]
       items.push({ id: `view-${v}`, group: 'Vues', label: m.label, icon: m.icon, keywords: m.keywords, hint: `Ctrl+${i + 1}`, run: () => go(v) })

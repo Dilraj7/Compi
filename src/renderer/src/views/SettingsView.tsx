@@ -10,7 +10,7 @@ import { BrainSection } from './BrainSection'
 import { WebSearchSection } from './WebSearchSection'
 import { DaySection, GoogleSection } from './AccountsSection'
 import { AgendaSourcesSection } from './AgendaSourcesSection'
-import { IslandSection, SpeakSection } from './LiveSection'
+import { IslandSection, SpeakSection, ZoomSection } from './LiveSection'
 import { DictationSection } from './DictationSection'
 import { DictationEverywhereSection } from './DictationEverywhere'
 import { MeetingsSection } from './MeetingsSection'
@@ -225,7 +225,12 @@ export function SettingsView() {
             <MessagesSection s={s} update={update} />
           </>
         )}
-        {tab === 'island' && <IslandSection s={s} update={update} />}
+        {tab === 'island' && (
+          <>
+            <ZoomSection s={s} update={update} />
+            <IslandSection s={s} update={update} />
+          </>
+        )}
         {tab === 'general' && (
           <>
             <div data-settings-focus="general" className="scroll-mt-2">

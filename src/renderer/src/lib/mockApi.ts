@@ -61,6 +61,7 @@ import { cleanDraft } from '@shared/routines'
 import { icsUrl } from '@shared/agenda'
 import { pickPrevious, prepKey } from '@shared/meetingPrep'
 import { addDays, localDay, sortTasks } from '@shared/tasks'
+import { stepZoom } from '@shared/zoom'
 import { hourStart, messageCost, type ClaudeCodeUsage, type CompiUsageRow, type UsageRow } from '@shared/usage'
 import type { ApprovalLogEntry, Reread } from '@shared/types'
 import type { PerfSnapshot } from '@shared/perf'
@@ -426,8 +427,12 @@ export function createMockApi(): CompiApi {
       provider: params.get('web') === 'ollama' ? 'ollama' : params.get('web') === 'searxng' ? 'searxng' : 'off',
       searxngUrl: params.get('web') === 'searxng' ? 'http://localhost:8080' : ''
     },
-    hasWebSearchKey: params.get('web') === 'ollama'
+    hasWebSearchKey: params.get('web') === 'ollama',
+    zoom: { notch: 100, full: 100 }
   }
+  // Taille du texte : la maquette garde le choix (le vrai zoom est celui de la fenêtre d'Electron).
+  const zoomCh = channel<{ mode: 'notch' | 'full'; pct: number }>()
+  let mockFull = false
 
   // Ce PC (scénarios : ?perf=ok, ?perf=spill, ?perf=nogpu) : instantanés simulés, qui bougent un peu.
   const perfCh = channel<PerfSnapshot>()
@@ -1190,7 +1195,18 @@ export function createMockApi(): CompiApi {
     setInteractive: () => undefined,
     setFocusable: () => undefined,
     setActivatable: () => undefined,
-    setFull: () => undefined,
+    setFull: (v) => {
+      mockFull = v
+    },
+    zoomStep: async (dir) => {
+      const mode = mockFull ? 'full' : 'notch'
+      const pct = stepZoom(settings.zoom[mode], dir, mode)
+      settings = { ...settings, zoom: { ...settings.zoom, [mode]: pct } }
+      settingsCh.emit(settings)
+      zoomCh.emit({ mode, pct })
+      return pct
+    },
+    onZoomStepped: zoomCh.on,
     onIslandCommand: commands.on,
     onIslandNotice: notices.on,
 

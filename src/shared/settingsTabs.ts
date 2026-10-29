@@ -19,6 +19,7 @@ export type SettingsFocus =
   | 'general'
   | 'keys'
   | 'island'
+  | 'zoom'
   | 'sounds'
   | 'claude'
   | 'privacy'
@@ -50,6 +51,7 @@ export const SETTINGS_TAB_OF: Record<SettingsFocus, SettingsTab> = {
   general: 'general',
   keys: 'general',
   island: 'island',
+  zoom: 'island',
   sounds: 'island',
   claude: 'general',
   privacy: 'privacy'

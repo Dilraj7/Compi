@@ -15,6 +15,8 @@ const api: CompiApi = {
   setFocusable: (v) => ipcRenderer.send(IPC.setFocusable, v),
   setActivatable: (v) => ipcRenderer.send(IPC.setActivatable, v),
   setFull: (v) => ipcRenderer.send(IPC.setFull, v),
+  zoomStep: (dir) => ipcRenderer.invoke(IPC.zoomStep, dir),
+  onZoomStepped: (cb) => listen(IPC.zoomStepped, cb),
   onIslandCommand: (cb) => listen(IPC.islandCommand, cb),
   onIslandNotice: (cb) => listen(IPC.islandNotify, cb),
 

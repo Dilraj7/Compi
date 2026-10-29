@@ -87,6 +87,9 @@ export interface CompiApi {
   setActivatable(activatable: boolean): void
   /** Plein écran : `true` la fenêtre prend tout l'écran ; `false` elle reprend sa taille (après l'animation). */
   setFull(full: boolean): void
+  /** Taille du texte d'un cran (1, −1) ou 100 % (0) dans le mode affiché ; renvoie la nouvelle taille (pour cent). */
+  zoomStep(dir: -1 | 0 | 1): Promise<number>
+  onZoomStepped(cb: (z: { mode: 'notch' | 'full'; pct: number }) => void): Unsubscribe
   onIslandCommand(cb: (cmd: IslandCommand) => void): Unsubscribe
   onIslandNotice(cb: (notice: IslandNotice) => void): Unsubscribe
   // réglages

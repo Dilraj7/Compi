@@ -2,6 +2,8 @@
 // collée en haut au centre de l'écran. Elle a une taille fixe (celle du
 // panneau ouvert) : c'est l'interface qui anime la forme de l'îlot à
 // l'intérieur. Hors de l'îlot, les clics traversent vers le bureau.
+// La taille du texte (zoom de la page) agrandit aussi la fenêtre de l'encoche,
+// pour que le panneau garde la même place en points de la page.
 
 import { join } from 'node:path'
 import {
@@ -16,7 +18,8 @@ import {
   type SaveDialogReturnValue
 } from 'electron'
 import { IPC } from '../shared/ipc'
-import type { IslandCommand } from '../shared/types'
+import type { IslandCommand, ZoomSettings } from '../shared/types'
+import { DEFAULT_ZOOM, zoomFactor } from '../shared/zoom'
 
 export const WIN_WIDTH = 760
 export const WIN_HEIGHT = 540
@@ -42,21 +45,51 @@ let full = false
 /** Tests de bout en bout : décale l'îlot pour ne pas recouvrir celui de Compi installé. */
 const TEST_OFFSET_X = Number(process.env.COMPI_TEST_OFFSET_X) || 0
 
+/** Taille choisie (pour cent), encoche et plein écran. */
+let zoom: ZoomSettings = DEFAULT_ZOOM
+
+/** Facteur appliqué à la page dans le mode actuel, borné par l'écran. */
+function currentFactor(): number {
+  const { width, height } = screen.getPrimaryDisplay().bounds
+  return zoomFactor(full ? 'full' : 'notch', full ? zoom.full : zoom.notch, { width, height }, { width: WIN_WIDTH, height: WIN_HEIGHT })
+}
+
 function targetBounds(): Electron.Rectangle {
   const display = screen.getPrimaryDisplay()
   const { x, y, width } = display.bounds
   if (full) return display.bounds
+  const f = currentFactor()
+  const w = Math.round(WIN_WIDTH * f)
   return {
-    x: Math.round(x + (width - WIN_WIDTH) / 2) + TEST_OFFSET_X,
+    x: Math.round(x + (width - w) / 2) + TEST_OFFSET_X,
     y,
-    width: WIN_WIDTH,
-    height: WIN_HEIGHT
+    width: w,
+    height: Math.round(WIN_HEIGHT * f)
   }
 }
 
-export function reposition(): void {
-  if (win && !win.isDestroyed()) win.setBounds(targetBounds())
+/** Taille et zoom de la fenêtre pour le mode actuel. Qui grandit change de taille d'abord, qui rétrécit zoome d'abord : l'îlot n'est jamais coupé. */
+function applyBounds(): void {
+  if (!win || win.isDestroyed()) return
+  const f = currentFactor()
+  const grow = f >= win.webContents.getZoomFactor()
+  if (!grow) win.webContents.setZoomFactor(f)
+  win.setBounds(targetBounds())
+  if (grow) win.webContents.setZoomFactor(f)
 }
+
+export function reposition(): void {
+  applyBounds()
+}
+
+/** Nouvelle taille du texte (réglages, Ctrl + molette, Ctrl + / −). */
+export function setZoom(z: ZoomSettings): void {
+  if (z.notch === zoom.notch && z.full === zoom.full) return
+  zoom = { ...z }
+  applyBounds()
+}
+
+export const isFullMode = (): boolean => full
 
 /**
  * Entrer ou sortir du plein écran. En entrant, la fenêtre prend tout l'écran et le clavier
@@ -67,7 +100,7 @@ export function reposition(): void {
 export function setFullMode(on: boolean): void {
   if (!win || win.isDestroyed() || on === full) return
   full = on
-  win.setBounds(targetBounds())
+  applyBounds()
   if (!on) return
   setPanelActivatable(win, true)
   win.focus()
@@ -107,6 +140,8 @@ export function createNotchWindow(): BrowserWindow {
   win.setIgnoreMouseEvents(true, { forward: true })
 
   win.once('ready-to-show', () => win?.showInactive())
+  // Le zoom de la page se règle une fois la page chargée (et après un rechargement).
+  win.webContents.on('did-finish-load', () => win?.webContents.setZoomFactor(currentFactor()))
 
   // Clic ailleurs : on referme le panneau s'il avait pris le focus (sauf pendant un sélecteur de fichiers).
   win.on('focus', () => {

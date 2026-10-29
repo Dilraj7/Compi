@@ -6,6 +6,9 @@ export const IPC = {
   setFocusable: 'island:set-focusable',
   setActivatable: 'island:set-activatable',
   setFull: 'island:set-full',
+  /** Taille du texte : un cran de plus (1), de moins (−1) ou 100 % (0), dans le mode actuel. */
+  zoomStep: 'island:zoom-step',
+  zoomStepped: 'island:zoom-stepped',
   islandCommand: 'island:command',
   islandNotify: 'island:notify',
   // réglages

@@ -31,6 +31,7 @@ Compi vit dans un « îlot » noir collé en haut de l'écran, à la manière du
 - **Connecteurs en un clic** : Notion, Todoist, Linear, Jira… Et tes sessions Claude Code, pilotées depuis l'îlot.
 - **Routines et mémoire** : « chaque lundi à 9 h, résume mes e-mails », et ce qu'il sait de toi, que tu lis et corriges.
 - **Un îlot vivant** : musique en cours, minuteur, alerte avant chaque réunion, et en option sa préparation : qui sera là, vos derniers e-mails, les tâches de la fois d'avant.
+- **Plein écran** (`Alt + Maj + Entrée`) : ta journée, la discussion et ce qui t'attend sur tout l'écran. La taille du texte se règle à part pour l'encoche et pour le plein écran (`Ctrl +`, `Ctrl −`, ou Ctrl + molette).
 
 <table>
   <tr>

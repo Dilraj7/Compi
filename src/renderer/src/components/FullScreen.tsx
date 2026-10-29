@@ -4,8 +4,9 @@
 
 import { useEffect, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { BellRing, CalendarDays, CloudSun, Folder, Hand, Mail, Minimize2, RefreshCw, Search, TerminalSquare, X } from 'lucide-react'
+import { AArrowDown, AArrowUp, BellRing, CalendarDays, CloudSun, Folder, Hand, Mail, Minimize2, RefreshCw, Search, TerminalSquare, X } from 'lucide-react'
 import { fullLayout } from '@shared/fullLayout'
+import { ZOOM_STEPS } from '@shared/zoom'
 import { gaugeLevel } from '@shared/perf'
 import { useCompi } from '../store'
 import { useMood } from '../mascot/useMood'
@@ -67,6 +68,7 @@ function TopBar({ eyes }: { eyes: ReactNode }) {
           <Search size={13} /> Chercher
           <kbd className="rounded-[5px] bg-black/30 px-1.5 py-px font-mono text-[10px] text-fog-500">Ctrl K</kbd>
         </button>
+        <ZoomControl />
         <Clock />
         <PanelNav>
           <IconButton label="Revenir à l’encoche (Échap)" onClick={exitFull}>
@@ -78,6 +80,30 @@ function TopBar({ eyes }: { eyes: ReactNode }) {
         </PanelNav>
       </div>
     </header>
+  )
+}
+
+/** Taille du texte du plein écran, réglable sur place (aussi Ctrl + molette, Ctrl + / −). */
+function ZoomControl() {
+  const pct = useCompi((s) => s.settings?.zoom.full ?? 100)
+  const step = (dir: -1 | 0 | 1): void => void window.compi.zoomStep(dir)
+  return (
+    <div className="flex items-center rounded-xl bg-white/[0.04] ring-1 ring-inset ring-white/[0.06]">
+      <IconButton label="Texte plus petit (Ctrl −)" onClick={() => step(-1)} disabled={pct <= ZOOM_STEPS[0]} className="disabled:opacity-30">
+        <AArrowDown size={15} />
+      </IconButton>
+      <button
+        onClick={() => step(0)}
+        title="Taille du texte : revenir à 100 % (Ctrl 0)"
+        aria-label={`Taille du texte : ${pct} %. Revenir à 100 %`}
+        className="w-11 text-center text-[11.5px] text-fog-500 tabular-nums transition-colors hover:text-fog-100"
+      >
+        {pct} %
+      </button>
+      <IconButton label="Texte plus grand (Ctrl +)" onClick={() => step(1)} disabled={pct >= ZOOM_STEPS[ZOOM_STEPS.length - 1]} className="disabled:opacity-30">
+        <AArrowUp size={15} />
+      </IconButton>
+    </div>
   )
 }
 
@@ -205,7 +231,7 @@ function DockGauges() {
           <div key={g.key} className="w-[86px]" title={g.label}>
             <div className="flex items-baseline justify-between gap-1 text-[10.5px]">
               <span className="truncate text-fog-500">{g.short}</span>
-              <span className="text-fog-300 tabular-nums">{g.text.replace(' Go', '')}</span>
+              <span className="shrink-0 whitespace-nowrap text-fog-300 tabular-nums">{g.text.replace(' Go', '')}</span>
             </div>
             <div className="mt-1 h-[4px] overflow-hidden rounded-full bg-white/[0.08]">
               <div

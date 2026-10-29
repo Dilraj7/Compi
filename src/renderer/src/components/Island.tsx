@@ -15,6 +15,7 @@ import { GAUGE_COLOR, MiniGauges, perfLevels } from './Gauges'
 import { PILL_ICONS, openFromNotice, runNoticeAction } from './Notice'
 import { Panel } from './Panel'
 import { FullScreen } from './FullScreen'
+import { ZoomToast } from './ZoomToast'
 import { CompactArt, CompactTimer, ConversePeek, LedEq, ListeningPeek, MediaPeek, SpeakingPeek, TimerPeek, useLiveMedia } from './Live'
 import { CallPeek, CompactCall, REC } from './CallLive'
 
@@ -430,6 +431,7 @@ export function Island() {
             </motion.div>
           )}
         </AnimatePresence>
+        {expanded && <ZoomToast />}
       </motion.div>
       {!full && (
         <>

@@ -50,6 +50,7 @@ import { startHookServer, stopHookServer } from './bridge/hookServer'
 import { installHooks, previewHooks, uninstallHooks } from './bridge/installHooks'
 import { sessions } from './bridge/sessions'
 import { emit, setBusTarget } from './bus'
+import { stepZoom } from '../shared/zoom'
 import { searchRegistry } from './connectors/mcpRegistry'
 import { cancelOAuth, connectOAuth, forgetOAuth } from './connectors/oauth'
 import { connectorAuthStates, testConnector } from './connectors/registry'
@@ -152,7 +153,7 @@ import type { PillId } from '../shared/pills'
 import { fullscreenNow, hookPerfPower, localBusy, perfWatch, refreshPerf, startMemoryAlert, stopPerf, unloadLocal } from './system/monitor'
 import { setCacheLimit } from './brains/ollamaCache'
 import { healthBook } from './store/modelHealth'
-import { createNotchWindow, onPanelOpen, registerIslandIpc, sendIslandCommand, showOpenDialog, showSaveDialog } from './notchWindow'
+import { createNotchWindow, isFullMode, onPanelOpen, registerIslandIpc, sendIslandCommand, setZoom, showOpenDialog, showSaveDialog } from './notchWindow'
 import { conversations } from './store/conversations'
 import { secrets } from './store/secrets'
 import { OLLAMA_URL, settings } from './store/settings'
@@ -345,10 +346,21 @@ sessions.on((event, s) => {
   }
 })
 
+/** Taille du texte d'un cran (Ctrl + / −, Ctrl + molette, boutons du plein écran), dans le mode affiché. */
+function stepDisplayZoom(dir: -1 | 0 | 1): number {
+  const mode = isFullMode() ? 'full' : 'notch'
+  const zoom = settings.get().zoom
+  const pct = stepZoom(zoom[mode], dir, mode)
+  if (pct !== zoom[mode]) settings.update({ zoom: { ...zoom, [mode]: pct } })
+  emit(IPC.zoomStepped, { mode, pct })
+  return pct
+}
+
 // ─── IPC ─────────────────────────────────────────────────────────────────────
 
 function registerIpc(): void {
   ipcMain.handle(IPC.getSettings, () => publicSettings())
+  ipcMain.handle(IPC.zoomStep, (_e, dir: unknown) => stepDisplayZoom(dir === 1 || dir === -1 ? dir : 0))
 
   ipcMain.handle(IPC.updateSettings, async (_e, patch: Partial<Settings>) => {
     const before = settings.get().claudeCode
@@ -1009,8 +1021,18 @@ app.whenReady().then(async () => {
   allowCallAudio(takeDisplayCapture)
   recoverMeetings()
 
+  setZoom(settings.get().zoom)
   const win = createNotchWindow()
   setBusTarget(win)
+  // Ctrl + molette : Chromium ne zoome pas seul, il le demande. Un même cran peut arriver deux
+  // fois (début et fin du défilement) : un pas toutes les 40 ms au plus.
+  let lastWheelZoom = 0
+  win.webContents.on('zoom-changed', (_e, direction) => {
+    const now = Date.now()
+    if (now - lastWheelZoom < 40) return
+    lastWheelZoom = now
+    stepDisplayZoom(direction === 'in' ? 1 : -1)
+  })
   win.webContents.on('did-finish-load', () => {
     emit(IPC.approvals, approvals.pendingApprovals())
     emit(IPC.questions, approvals.pendingQuestions())
@@ -1076,6 +1098,7 @@ app.whenReady().then(async () => {
       appliedLogin = s.launchAtLogin
     }
     applyDictationSettings(s.dictation)
+    setZoom(s.zoom)
     emit(IPC.settingsChanged, publicSettings())
   }
   applySystemSettings(settings.get())

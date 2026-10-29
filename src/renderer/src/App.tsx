@@ -203,12 +203,27 @@ function useHitTest(): void {
   }, [])
 }
 
-/** Clavier dans le panneau : Ctrl+1…7 (onglets), Ctrl+N (nouvelle discussion), Ctrl+K (recherche). */
+/** Ctrl + / Ctrl − (pavé numérique compris) : taille du texte ; Ctrl 0 : 100 %. */
+function zoomKey(e: KeyboardEvent): -1 | 0 | 1 | null {
+  if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') return 1
+  // Sur un clavier AZERTY, « - » est sur la touche 6 : Ctrl+6 reste l'onglet (pavé numérique ou molette pour réduire).
+  if ((e.key === '-' && !e.code.startsWith('Digit')) || e.code === 'NumpadSubtract') return -1
+  if (e.code === 'Digit0' || e.code === 'Numpad0') return 0
+  return null
+}
+
+/** Clavier dans le panneau : Ctrl+1…7 (onglets), Ctrl+N (nouvelle discussion), Ctrl+K (recherche), Ctrl +/−/0 (taille du texte). */
 function usePanelKeys(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const s = useCompi.getState()
       if (s.mode !== 'expanded' || !e.ctrlKey || e.altKey || e.metaKey) return
+      const zoom = zoomKey(e)
+      if (zoom !== null) {
+        e.preventDefault()
+        void window.compi.zoomStep(zoom)
+        return
+      }
       const k = e.key.toLowerCase()
       // Par la position de la touche : sur un clavier AZERTY, Ctrl+1 donne « & ».
       const n = Number(/^(?:Digit|Numpad)(\d)$/.exec(e.code)?.[1] ?? NaN)

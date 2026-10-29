@@ -191,6 +191,15 @@ export interface Settings {
   monitor: MonitorSettings
   /** Recherche web des cerveaux autres que Claude (désactivée par défaut). */
   webSearch: WebSearchSettings
+  /** Taille du texte et de l'interface, en pour cent (100 par défaut). */
+  zoom: ZoomSettings
+}
+
+export interface ZoomSettings {
+  /** Le panneau de l'encoche. */
+  notch: number
+  /** Le plein écran. */
+  full: number
 }
 
 export type WebSearchProvider = 'off' | 'ollama' | 'searxng'

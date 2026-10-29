@@ -9,6 +9,7 @@ import { NATURAL_VOICES } from '@shared/naturalVoice'
 import type { SoundKind } from '@shared/sounds'
 import { SUPERTONIC_PACK } from '@shared/speechModels'
 import { sizeLabel } from '@shared/voice'
+import { MAX_NOTCH_ZOOM, ZOOM_STEPS, type ZoomMode } from '@shared/zoom'
 import type { PublicSettings, Settings, SoundSettings, SoundVolume, SpeakEngine, SpeechModelStatus, VoiceInfo, VoiceSettings } from '@shared/types'
 import { useCompi } from '../store'
 import { playSound } from '../lib/sounds'
@@ -114,6 +115,34 @@ export function IslandSection({ s, update }: Props) {
 
 const SELECT =
   'h-8 max-w-48 rounded-lg bg-white/[0.05] px-2 text-[12px] text-fog-100 ring-1 ring-white/[0.08] outline-none ring-inset [color-scheme:dark] focus:ring-[var(--led)]/50'
+
+/** Taille du texte et de l'interface, à part pour l'encoche et pour le plein écran. */
+export function ZoomSection({ s, update }: Props) {
+  const choice = (mode: ZoomMode, label: string) => (
+    <select value={s.zoom[mode]} onChange={(e) => update({ zoom: { ...s.zoom, [mode]: Number(e.target.value) } })} aria-label={label} className={SELECT}>
+      {ZOOM_STEPS.filter((p) => mode === 'full' || p <= MAX_NOTCH_ZOOM).map((p) => (
+        <option key={p} value={p}>
+          {p} %{p === 100 ? ' (normal)' : ''}
+        </option>
+      ))}
+    </select>
+  )
+  return (
+    <div data-settings-focus="zoom" className="scroll-mt-2">
+      <Section
+        title="Taille du texte"
+        hint="Agrandit tout, textes, icônes et marges, comme le zoom d’un navigateur. Compi ouvert : Ctrl + et Ctrl − (ou Ctrl + molette), Ctrl 0 pour revenir à 100 %."
+      >
+        <Row label="Dans l’encoche" hint="Le panneau grandit avec, jusqu’à 150 % si ton écran le permet.">
+          {choice('notch', 'Taille du texte dans l’encoche')}
+        </Row>
+        <Row label="En plein écran" hint="Sur un grand écran, 125 à 150 % se lisent sans effort. Réglable aussi en haut du plein écran.">
+          {choice('full', 'Taille du texte en plein écran')}
+        </Row>
+      </Section>
+    </div>
+  )
+}
 
 const NATURAL_LICENSE_URL = 'https://huggingface.co/Supertone/supertonic-3/blob/main/LICENSE'
 
