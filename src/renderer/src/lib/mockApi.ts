@@ -196,7 +196,7 @@ function demoMissed(): MissedInfo {
     ],
     mails: [
       { id: 'm9a8b7c6', from: 'Claire Martin <claire@exemple.fr>', subject: 'Compte rendu à relire avant 17 h', important: true },
-      { id: 'm8b7c6d5', from: 'Banque <info@banque.fr>', subject: 'Votre relevé est disponible', important: false }
+      { id: 'm8b7c6d5', from: 'Banque <info@exemple.fr>', subject: 'Votre relevé est disponible', important: false }
     ],
     mailTotal: 2,
     reminders: [{ message: 'Appeler le garage', at: now - 20 * min }]
