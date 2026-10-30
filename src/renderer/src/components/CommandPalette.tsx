@@ -17,6 +17,7 @@ import {
   Keyboard,
   Mail,
   Maximize2,
+  ScanText,
   MessageCircle,
   MessagesSquare,
   Mic,
@@ -104,6 +105,15 @@ function useItems(conversations: ConversationMeta[]): Item[] {
         run: () => void window.compi.startTimer(25)
       },
       { id: 'pomodoro', group: 'Actions', label: 'Pomodoro', icon: Timer, keywords: 'concentration focus pause', run: () => void window.compi.startPomodoro() },
+      {
+        id: 'zone',
+        group: 'Actions',
+        label: 'Zone d’écran : lire, traduire, expliquer',
+        icon: ScanText,
+        keywords: 'capture encadrer ocr texte image graphique traduire expliquer copier ecran',
+        hint: settings?.zoneShortcutActive && settings.zoneShortcut ? prettyShortcut(settings.zoneShortcut) : undefined,
+        run: () => void window.compi.zoneStart()
+      },
       {
         id: 'full',
         group: 'Actions',

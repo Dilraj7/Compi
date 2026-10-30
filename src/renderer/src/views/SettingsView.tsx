@@ -280,6 +280,18 @@ export function SettingsView() {
                 >
                   <ShortcutInput value={s.fullShortcut} onChange={(fullShortcut) => update({ fullShortcut })} />
                 </Row>
+                <Row
+                  label="Zone d’écran"
+                  hint={
+                    s.zoneShortcutActive ? (
+                      'Encadre une partie de l’écran : son texte est lu sur ton PC, puis Copier, Traduire, Expliquer…'
+                    ) : (
+                      <span className="text-led-amber">Inactif : combinaison déjà utilisée. Choisis-en une autre.</span>
+                    )
+                  }
+                >
+                  <ShortcutInput value={s.zoneShortcut} onChange={(zoneShortcut) => update({ zoneShortcut })} />
+                </Row>
                 <div data-settings-focus="keys" className="scroll-mt-2">
                   <Row
                     label="Répondre aux autorisations au clavier"

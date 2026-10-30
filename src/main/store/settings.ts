@@ -14,6 +14,7 @@ import { readJson, writeJson } from './jsonFile'
 
 export const DEFAULT_SHORTCUT = 'Alt+Shift+Space'
 export const DEFAULT_QUICK_SHORTCUT = 'Alt+Shift+C'
+export const DEFAULT_ZONE_SHORTCUT = 'Alt+Shift+Z'
 export const DEFAULT_VOICE_SHORTCUT = 'Alt+Shift+V'
 export const DEFAULT_FULL_SHORTCUT = 'Alt+Shift+Return'
 export const DEFAULT_ALLOW_KEY = 'Alt+Shift+O'
@@ -44,8 +45,9 @@ export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
  * Champ ajouté seulement.
  * v21 : taille du texte et de l'interface, encoche et plein écran (100 %). Champ ajouté seulement.
  * v22 : « Ce que tu as manqué » (activé). Champ ajouté seulement.
+ * v23 : raccourci de la zone d'écran (Alt+Maj+Z). Champ ajouté seulement.
  */
-export const SETTINGS_VERSION = 22
+export const SETTINGS_VERSION = 23
 
 /** Modèle d'Ollama pour la recherche par le sens : multilingue, bon en français, ~640 Mo. */
 export const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b'
@@ -63,6 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   shortcut: DEFAULT_SHORTCUT,
   quickShortcut: DEFAULT_QUICK_SHORTCUT,
   fullShortcut: DEFAULT_FULL_SHORTCUT,
+  zoneShortcut: DEFAULT_ZONE_SHORTCUT,
   launchAtLogin: true,
   autoHide: false,
   advancedMode: false,

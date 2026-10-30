@@ -348,6 +348,10 @@ export interface CompiApi {
   /** Remet le résultat à la place de la sélection ; `message` explique un échec. */
   quickReplace(id: string): Promise<{ ok: boolean; message?: string }>
   quickCopy(id: string): Promise<boolean>
+  /** Zone d'écran : copie le texte lu (sans cerveau). */
+  quickCopyText(id: string): Promise<boolean>
+  /** Zone d'écran : comme le raccourci (palette Ctrl+K). */
+  zoneStart(): Promise<void>
   // fichiers / divers
   getPathForFile(file: File): string
   openExternal(url: string): Promise<void>

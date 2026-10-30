@@ -746,7 +746,8 @@ export const useCompi = create<CompiState>((set, get) => {
       void api().quickStop()
       get().newConversation()
       const where = q.selection.source ? ` dans « ${q.selection.source} »` : ''
-      set({ quick: null, draft: `Voici un texte que j'ai sélectionné${where} :\n\n« ${excerpt} »\n\n` })
+      const intro = q.selection.zone ? 'Voici un texte lu dans une zone de mon écran' : `Voici un texte que j'ai sélectionné${where}`
+      set({ quick: null, draft: `${intro} :\n\n« ${excerpt} »\n\n` })
       get().open('chat', { focus: true })
     },
 

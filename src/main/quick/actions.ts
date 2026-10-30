@@ -5,21 +5,28 @@
 
 import { randomUUID } from 'node:crypto'
 import type Anthropic from '@anthropic-ai/sdk'
-import { clipboard } from 'electron'
+import { clipboard, screen } from 'electron'
 import { brainLabel, brainMissing, defaultBrain } from '../../shared/brains'
 import { IPC } from '../../shared/ipc'
 import { isOnline } from '../../shared/privacy'
-import type { QuickActionId, QuickEvent, QuickSelection } from '../../shared/types'
+import type { Brain, QuickActionId, QuickEvent, QuickSelection } from '../../shared/types'
+import { visionSize, zoneToImage } from '../../shared/zone'
+import { destinationOf } from '../agent/assistant'
 import { describeAgentError } from '../agent/errors'
+import { prepareLocalBrain } from '../brains/local'
 import { clientFor } from '../brains/probe'
 import { emit } from '../bus'
 import { log } from '../log'
 import { sendIslandCommand } from '../notchWindow'
+import { logSent } from '../privacy/log'
 import { secrets } from '../store/secrets'
 import { settings } from '../store/settings'
+import { grabDisplay, hideIsland } from '../windows/capture'
+import { ocrPng } from '../windows/ocr'
 import { captureSelection, replaceSelection } from '../windows/selection'
 import type { WindowInfo } from '../windows/system'
 import { canReplaceWith, cleanQuickResult, isQuickAction, quickPrompt } from './prompts'
+import { pickZone } from './zonePicker'
 
 interface QuickSession {
   id: string
@@ -28,10 +35,34 @@ interface QuickSession {
   action?: QuickActionId
   result: string
   abort?: AbortController
+  /** Zone d'écran : image de la zone (PNG, en mémoire seulement) et ce qu'on peut en faire. */
+  zone?: { png: Buffer; vision: boolean; blocked: boolean }
 }
 
 let session: QuickSession | null = null
 let capturing = false
+
+/** Cerveau prêt (clé, service) ; sinon le dit dans l'îlot et ouvre les réglages. */
+function brainReady(): Brain | null {
+  const s = settings.get()
+  const brain = defaultBrain(s)
+  const missing = brainMissing(brain, { hasApiKey: secrets.hasApiKey(), hasCustomKey: secrets.hasCustomKey(), custom: s.custom })
+  if (!missing) return brain
+  notify(missing, true)
+  sendIslandCommand('open-settings')
+  return null
+}
+
+/** Le cerveau voit les images : Claude, ou un modèle local qui en est capable (gemma4…). */
+async function seesImages(brain: Brain): Promise<boolean> {
+  if (brain.provider === 'anthropic') return true
+  if (brain.provider !== 'local') return false
+  try {
+    return (await prepareLocalBrain(brain.model)).vision
+  } catch {
+    return false
+  }
+}
 
 const notify = (text: string, error = false): void => emit(IPC.islandNotify, { pill: error ? 'error' : 'chat', text })
 const send = (e: QuickEvent): void => emit(IPC.quickEvent, e)
@@ -55,13 +86,8 @@ export async function onQuickShortcut(): Promise<void> {
       return
     }
     const s = settings.get()
-    const brain = defaultBrain(s)
-    const missing = brainMissing(brain, { hasApiKey: secrets.hasApiKey(), hasCustomKey: secrets.hasCustomKey(), custom: s.custom })
-    if (missing) {
-      notify(missing, true)
-      sendIslandCommand('open-settings')
-      return
-    }
+    const brain = brainReady()
+    if (!brain) return
     session?.abort?.abort()
     session = { id: randomUUID(), text: captured.text, window: captured.window, result: '' }
     const selection: QuickSelection = {
@@ -81,6 +107,69 @@ export async function onQuickShortcut(): Promise<void> {
   }
 }
 
+/**
+ * Zone d'écran : fige l'écran sous la souris, laisse encadrer une zone, en lit le texte
+ * sur le PC (OCR de Windows), puis ouvre les actions rapides. Rien ne part avant un clic.
+ */
+export async function onZoneShortcut(): Promise<void> {
+  if (capturing) return
+  capturing = true
+  try {
+    const brain = brainReady()
+    if (!brain) return
+    const s = settings.get()
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    // L'îlot reste caché jusqu'à la fin de la sélection : ni sur la capture, ni par-dessus.
+    const show = await hideIsland()
+    let pick: Awaited<ReturnType<typeof pickZone>> = null
+    let shot: Electron.NativeImage
+    try {
+      shot = await grabDisplay(display)
+      pick = await pickZone(display, shot)
+    } finally {
+      show()
+    }
+    if (!pick) return
+    const rect = zoneToImage(pick.rect, pick.view, shot.getSize())
+    if (!rect) return
+    const crop = shot.crop(rect)
+    const online = isOnline(brain.provider)
+    const blocked = online && s.privacy.screen === 'never'
+    const [text, vision] = await Promise.all([ocrPng(crop.toPNG()).then((t) => t.trim()), blocked ? false : seesImages(brain)])
+    if (!text && !vision) {
+      notify(blocked ? 'Aucun texte lisible dans cette zone.' : 'Aucun texte lisible dans cette zone, et ton cerveau ne voit pas les images.')
+      return
+    }
+    const size = visionSize(crop.getSize())
+    const png = (size.width === rect.width ? crop : crop.resize({ ...size, quality: 'best' })).toPNG()
+    session?.abort?.abort()
+    session = { id: randomUUID(), text, window: null, result: '', zone: { png, vision, blocked } }
+    const selection: QuickSelection = {
+      id: session.id,
+      text,
+      source: 'Zone d’écran',
+      canReplace: false,
+      brainLabel: brainLabel(brain, s),
+      online,
+      zone: { vision, blocked }
+    }
+    emit(IPC.quickOpen, selection)
+  } catch (e) {
+    log('error', 'zone d’écran', e)
+    notify(`Zone d’écran impossible : ${(e as Error).message}`, true)
+  } finally {
+    capturing = false
+  }
+}
+
+/** Copie le texte lu dans la zone (sans cerveau). */
+export async function copyQuickText(id: string): Promise<boolean> {
+  const q = session
+  if (!q || q.id !== id || !q.text.trim()) return false
+  await clipboard.writeText(q.text)
+  return true
+}
+
 /** Lance une action sur la sélection ; le résultat arrive au fil de l'eau. */
 export async function runQuick(id: string, action: string): Promise<void> {
   const q = session
@@ -91,11 +180,32 @@ export async function runQuick(id: string, action: string): Promise<void> {
   q.action = action
   q.result = ''
   const brain = defaultBrain(settings.get())
+  const zone = q.zone
+  // Seulement « Expliquer » montre l'image (graphique, schéma) ; les autres actions travaillent sur le texte.
+  const image = Boolean(zone?.vision && action === 'explain')
+  const refused = zone?.blocked
+    ? `L’écran est sur « Jamais » (Réglages › Confidentialité) : rien de cette zone ne part vers ${destinationOf(brain)}. Copie le texte, ou choisis un cerveau sur ce PC.`
+    : zone && !image && !q.text
+      ? 'Aucun texte lu dans cette zone : seul « Expliquer » peut regarder l’image.'
+      : null
+  if (refused) {
+    send({ type: 'error', id, error: refused })
+    return
+  }
   try {
     // Toujours en style Vif : une action rapide doit l'être.
     const { client, model, style } = await clientFor(brain, { effort: 'low' })
-    const { system, user } = quickPrompt(action, q.text)
-    const stream = client.messages.stream({ model, ...style(4096), system, messages: [{ role: 'user', content: user }] } as Anthropic.MessageStreamParams, {
+    const { system, user } = quickPrompt(action, q.text, { zone: Boolean(zone), image })
+    const content: Anthropic.MessageParam['content'] =
+      image && zone
+        ? [
+            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: zone.png.toString('base64') } },
+            { type: 'text', text: user }
+          ]
+        : user
+    const destination = zone ? destinationOf(brain) : null
+    if (destination) emit(IPC.sentLogChanged, logSent({ destination, categories: ['screen'], masked: 0 }, 'Zone d’écran'))
+    const stream = client.messages.stream({ model, ...style(4096), system, messages: [{ role: 'user', content }] } as Anthropic.MessageStreamParams, {
       signal: abort.signal
     })
     stream.on('text', (delta) => {

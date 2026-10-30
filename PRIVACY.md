@@ -72,6 +72,16 @@ Désactivée par défaut (Réglages › Cerveau › Recherche web). Avec Claude,
 
 Chaque service applique sa propre politique de confidentialité (Anthropic, Google, OpenRouter…).
 
+## Zone d'écran
+
+`Alt + Maj + Z` (réglable) fige l'écran sous ta souris pour que tu encadres une zone.
+
+- **La capture reste en mémoire**, l'îlot caché pendant ce temps. Seule la zone encadrée est gardée, le temps du panneau ; rien n'est enregistré. Pour la lecture du texte, un fichier temporaire est créé puis effacé aussitôt.
+- **Le texte est lu sur ton PC**, par la reconnaissance de texte de Windows. « Copier le texte » ne passe par aucun cerveau.
+- **Rien ne part avant ton clic** sur une action (Traduire, Résumer, Expliquer…). Le panneau dit quel cerveau la reçoit, sur ton PC ou en ligne.
+- **L'image de la zone** n'accompagne que « Expliquer », et seulement si ton cerveau voit les images (Claude, ou un modèle local comme gemma4). Les autres actions n'envoient que le texte lu.
+- **Avec un cerveau en ligne**, chaque envoi est noté dans le journal « Envoyé en ligne » (catégorie Écran). Si l'écran est sur **Jamais** (Réglages › Confidentialité), rien de la zone ne part : seul « Copier le texte » reste possible.
+
 ## Ce PC et Ollama
 
 - **Ce PC** mesure le processeur, la mémoire et la carte graphique sur ton PC. Pour la mémoire des discussions gardées par Ollama, Compi lit la fin du journal d'Ollama (`%LOCALAPPDATA%\Ollama\server.log`) : seulement des tailles, jamais le contenu.

@@ -302,6 +302,17 @@ export function createMockApi(): CompiApi {
   const settingsCh = channel<PublicSettings>()
   const brainCh = channel<BrainProgress>()
   const quickOpenCh = channel<QuickSelection>()
+  // Zone d'écran de démonstration : un tableau lu sur l'écran d'Alex.
+  const demoZone = (): void =>
+    quickOpenCh.emit({
+      id: uid(),
+      text: 'Ventes T3 · Nord 42 k€ · Sud 37 k€ · Ouest 18 k€\nObjectif annuel : 160 k€',
+      source: 'Zone d’écran',
+      canReplace: false,
+      brainLabel: 'Gemma 4 12B',
+      online: false,
+      zone: { vision: true, blocked: false }
+    })
   const quickCh = channel<QuickEvent>()
 
   // Scénarios de l'aperçu : ?local=running (Ollama prêt avec un modèle), ?brain=none (premier lancement).
@@ -342,6 +353,7 @@ export function createMockApi(): CompiApi {
     shortcut: 'Alt+Shift+Space',
     quickShortcut: 'Alt+Shift+C',
     fullShortcut: 'Alt+Shift+Return',
+    zoneShortcut: 'Alt+Shift+Z',
     launchAtLogin: true,
     autoHide: false,
     advancedMode: false,
@@ -369,6 +381,7 @@ export function createMockApi(): CompiApi {
     shortcutActive: true,
     quickShortcutActive: true,
     fullShortcutActive: true,
+    zoneShortcutActive: true,
     connectorSecrets: {},
     privacy: {
       screen: 'ask',
@@ -1080,6 +1093,7 @@ export function createMockApi(): CompiApi {
         notices.emit({ pill: 'meeting', text: 'Point équipe dans 4 min', duration: 60_000, view: 'today', action: { label: 'Préparer', prep: prepKey(e) } })
     },
     // Actions rapides sur une sélection (Alt+Maj+C).
+    zone: () => demoZone(),
     quick: () =>
       quickOpenCh.emit({
         id: uid(),
@@ -1680,6 +1694,8 @@ export function createMockApi(): CompiApi {
     quickStop: async () => clearInterval(quickTimer),
     quickReplace: async () => ({ ok: false, message: 'Aperçu web : rien à remplacer ici.' }),
     quickCopy: async () => true,
+    quickCopyText: async () => true,
+    zoneStart: async () => demoZone(),
 
     listConversations: async () => conversations.map(({ id, title, updatedAt, brain }) => ({ id, title, updatedAt, brain })),
     getConversation: async (id) => conversations.find((c) => c.id === id) ?? null,

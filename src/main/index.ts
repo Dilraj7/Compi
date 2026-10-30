@@ -84,6 +84,7 @@ import {
   initQuickShortcut,
   initShortcut,
   initVoiceShortcut,
+  initZoneShortcut,
   isMainShortcut,
   onApprovalShortcut,
   prettyShortcut,
@@ -92,10 +93,12 @@ import {
   setQuickShortcut,
   setShortcut,
   setVoiceShortcut,
+  setZoneShortcut,
   shortcutActive,
-  voiceShortcutActive
+  voiceShortcutActive,
+  zoneShortcutActive
 } from './shortcut'
-import { copyQuick, onQuickShortcut, replaceQuick, runQuick, stopQuick } from './quick/actions'
+import { copyQuick, copyQuickText, onQuickShortcut, onZoneShortcut, replaceQuick, runQuick, stopQuick } from './quick/actions'
 import { stopHost, warmHost } from './windows/host'
 import { controlMedia, currentMedia, hookMediaPower, listVoices, synthesize, watchMedia } from './windows/media'
 import {
@@ -194,6 +197,7 @@ function publicSettings(): PublicSettings {
     quickShortcutActive: quickShortcutActive(),
     voiceShortcutActive: voiceShortcutActive(),
     fullShortcutActive: fullShortcutActive(),
+    zoneShortcutActive: zoneShortcutActive(),
     dictationKeyActive: dictationKeyActive(),
     approvalKeysTaken,
     hasGoogleClient: hasGoogleClient(),
@@ -419,7 +423,8 @@ function registerIpc(): void {
     }
     if (patch.local && patch.local.keepAlive !== undefined && !KEEP_ALIVE.includes(patch.local.keepAlive))
       patch = { ...patch, local: { ...patch.local, keepAlive: settings.get().local.keepAlive } }
-    for (const k of [patch.shortcut, patch.quickShortcut, patch.fullShortcut, patch.voice?.shortcut]) if (typeof k === 'string') checkNotApprovalKey(k)
+    for (const k of [patch.shortcut, patch.quickShortcut, patch.fullShortcut, patch.zoneShortcut, patch.voice?.shortcut])
+      if (typeof k === 'string') checkNotApprovalKey(k)
     if (patch.shortcut !== undefined && patch.shortcut !== settings.get().shortcut && !setShortcut(patch.shortcut)) {
       throw new Error(`« ${prettyShortcut(patch.shortcut)} » est déjà utilisé par une autre application (1Password, Claude…). Choisis une autre combinaison.`)
     }
@@ -430,6 +435,9 @@ function registerIpc(): void {
     }
     if (patch.fullShortcut !== undefined && patch.fullShortcut !== settings.get().fullShortcut && !setFullShortcut(patch.fullShortcut)) {
       throw new Error(`« ${prettyShortcut(patch.fullShortcut)} » est déjà utilisé (par une autre application ou par Compi). Choisis une autre combinaison.`)
+    }
+    if (patch.zoneShortcut !== undefined && patch.zoneShortcut !== settings.get().zoneShortcut && !setZoneShortcut(patch.zoneShortcut)) {
+      throw new Error(`« ${prettyShortcut(patch.zoneShortcut)} » est déjà utilisé (par une autre application ou par Compi). Choisis une autre combinaison.`)
     }
     // La recherche par le sens s'active et se désactive par ses propres boutons.
     if (patch.semantic) {
@@ -710,6 +718,8 @@ function registerIpc(): void {
   ipcMain.handle(IPC.quickStop, () => stopQuick())
   ipcMain.handle(IPC.quickReplace, (_e, id: string) => replaceQuick(id))
   ipcMain.handle(IPC.quickCopy, (_e, id: string) => copyQuick(id))
+  ipcMain.handle(IPC.quickCopyText, (_e, id: string) => copyQuickText(id))
+  ipcMain.handle(IPC.zoneStart, () => onZoneShortcut())
 
   // Compte Google
   ipcMain.handle(IPC.googleImportClient, async () => {
@@ -1043,6 +1053,8 @@ app.whenReady().then(async () => {
   if (voiceKey?.replaced) settings.update({ voice: { ...settings.get().voice, shortcut: voiceKey.accelerator } })
   const fullKey = initFullShortcut(settings.get().fullShortcut)
   if (fullKey?.replaced) settings.update({ fullShortcut: fullKey.accelerator })
+  const zoneKey = initZoneShortcut(settings.get().zoneShortcut, () => void onZoneShortcut())
+  if (zoneKey?.replaced) settings.update({ zoneShortcut: zoneKey.accelerator })
   handleModelScheme()
   cleanPartialDownloads()
   cleanPartialSpeechDownloads()

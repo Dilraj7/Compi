@@ -205,6 +205,8 @@ const api: CompiApi = {
   quickStop: () => ipcRenderer.invoke(IPC.quickStop),
   quickReplace: (id) => ipcRenderer.invoke(IPC.quickReplace, id),
   quickCopy: (id) => ipcRenderer.invoke(IPC.quickCopy, id),
+  quickCopyText: (id) => ipcRenderer.invoke(IPC.quickCopyText, id),
+  zoneStart: () => ipcRenderer.invoke(IPC.zoneStart),
 
   getPathForFile: (file) => webUtils.getPathForFile(file),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),

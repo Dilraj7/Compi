@@ -167,6 +167,8 @@ export interface Settings {
   quickShortcut: string
   /** Raccourci du plein écran, le « poste de pilotage » (vide : désactivé). */
   fullShortcut: string
+  /** Raccourci de la zone d'écran : encadrer, lire le texte, actions rapides (vide : désactivé). */
+  zoneShortcut: string
   launchAtLogin: boolean
   autoHide: boolean
   advancedMode: boolean
@@ -304,6 +306,7 @@ export interface PublicSettings extends Settings {
   quickShortcutActive: boolean
   voiceShortcutActive: boolean
   fullShortcutActive: boolean
+  zoneShortcutActive: boolean
   /** La touche de la dictée partout est observée (sinon : module absent ou refusé par Windows). */
   dictationKeyActive: boolean
   /** Les raccourcis des autorisations n'ont pas pu être pris la dernière fois (autre application). */
@@ -595,6 +598,11 @@ export interface QuickSelection {
   /** Le cerveau utilisé, et s'il est en ligne (le texte partira vers lui). */
   brainLabel: string
   online: boolean
+  /**
+   * Zone d'écran : texte lu sur le PC (peut être vide). `vision` : « Expliquer » envoie aussi
+   * l'image de la zone ; `blocked` : écran sur « Jamais » avec un cerveau en ligne, rien ne part.
+   */
+  zone?: { vision: boolean; blocked: boolean }
 }
 
 export type QuickEvent =

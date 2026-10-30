@@ -24,7 +24,7 @@ Compi vit dans un « îlot » noir collé en haut de l'écran, à la manière du
 ## Ce qu'il sait faire
 
 - **Ta journée en une question** : agenda (Google, lien `.ics` ou connecteur), e-mails Gmail, tâches Google, météo, rappels.
-- **Actions rapides** sur n'importe quel texte sélectionné, dans toutes tes applis : corriger, reformuler, traduire, résumer.
+- **Actions rapides** sur n'importe quel texte sélectionné, dans toutes tes applis : corriger, reformuler, traduire, résumer. Ou sur une **zone de l'écran** (`Alt + Maj + Z`) : son texte est lu sur ton PC, même dans une image, et « Expliquer » peut regarder un graphique.
 - **Il agit, avec ton OK** : déplacer un rendez-vous, ranger un dossier, régler le son, ouvrir une appli. Une carte avant chaque action.
 - **Parle-lui** : ta voix est transcrite sur ton PC, jamais envoyée. Il peut aussi te répondre à voix haute, avec la voix de Windows ou une voix naturelle calculée sur ton PC, puis t'écouter pour la suite, sans toucher au clavier (conversation vocale, en option).
 - **Tes documents** : PDF (même scannés), Word, Excel, et une recherche qui comprend le sens.
@@ -90,6 +90,7 @@ Lance ensuite `dist/Compi-Setup-0.4.0.exe`. L'installateur n'est pas signé : Sm
 | --------------------- | ---------------------------------------------------- |
 | `Alt + Maj + Espace`  | ouvrir Compi                                         |
 | `Alt + Maj + C`       | actions rapides sur le texte sélectionné             |
+| `Alt + Maj + Z`       | encadrer une zone de l'écran : lire, traduire…       |
 | `Alt + Maj + V`       | maintenir pour parler (une fois la dictée installée) |
 | `Alt + Maj + O` / `N` | autoriser / refuser une demande                      |
 

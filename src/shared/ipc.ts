@@ -94,6 +94,8 @@ export const IPC = {
   quickStop: 'quick:stop',
   quickReplace: 'quick:replace',
   quickCopy: 'quick:copy',
+  quickCopyText: 'quick:copy-text',
+  zoneStart: 'quick:zone',
   // confidentialité
   sentLog: 'privacy:sent-log',
   clearSentLog: 'privacy:clear-sent-log',

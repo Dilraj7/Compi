@@ -1,4 +1,5 @@
-// Raccourcis globaux : ouvrir Compi, actions rapides sur la sélection, dictée, plein écran.
+// Raccourcis globaux : ouvrir Compi, actions rapides sur la sélection, dictée, plein écran,
+// zone d'écran.
 // Windows réserve un raccourci à la première app qui le demande : s'il est
 // déjà pris (1Password, Claude…), on le détecte au lieu d'échouer en silence.
 
@@ -71,30 +72,37 @@ class GlobalKey {
 }
 
 let onQuick: () => void = () => undefined
+let onZone: () => void = () => undefined
 
 const openKey: GlobalKey = new GlobalKey(
   'd’ouverture',
   ['Alt+Shift+Space', 'Control+Alt+K', 'Alt+Shift+K'],
   () => sendIslandCommand('open-chat'),
-  () => [quickKey, voiceKey, fullKey]
+  () => [quickKey, voiceKey, fullKey, zoneKey]
 )
 const quickKey: GlobalKey = new GlobalKey(
   'des actions rapides',
   ['Alt+Shift+C', 'Alt+Shift+X', 'Control+Alt+Q'],
   () => onQuick(),
-  () => [openKey, voiceKey, fullKey]
+  () => [openKey, voiceKey, fullKey, zoneKey]
 )
 const voiceKey: GlobalKey = new GlobalKey(
   'de la dictée',
   ['Alt+Shift+V', 'Alt+Shift+D', 'Control+Alt+D'],
   () => sendIslandCommand('voice'),
-  () => [openKey, quickKey, fullKey]
+  () => [openKey, quickKey, fullKey, zoneKey]
 )
 const fullKey: GlobalKey = new GlobalKey(
   'du plein écran',
   ['Alt+Shift+Return', 'Control+Alt+Return'],
   () => sendIslandCommand('full'),
-  () => [openKey, quickKey, voiceKey]
+  () => [openKey, quickKey, voiceKey, zoneKey]
+)
+const zoneKey: GlobalKey = new GlobalKey(
+  'de la zone d’écran',
+  ['Alt+Shift+Z', 'Alt+Shift+A', 'Control+Alt+Z'],
+  () => onZone(),
+  () => [openKey, quickKey, voiceKey, fullKey]
 )
 
 export const setShortcut = (accelerator: string): boolean => openKey.set(accelerator)
@@ -115,6 +123,13 @@ export const voiceShortcutActive = (): boolean => voiceKey.active
 export const initVoiceShortcut = (wanted: string): { accelerator: string; replaced: boolean } | null => voiceKey.init(wanted)
 
 export const setFullShortcut = (accelerator: string): boolean => fullKey.set(accelerator)
+export const setZoneShortcut = (accelerator: string): boolean => zoneKey.set(accelerator)
+export const zoneShortcutActive = (): boolean => zoneKey.active
+/** Branche le raccourci de la zone d'écran. */
+export function initZoneShortcut(wanted: string, handler: () => void): { accelerator: string; replaced: boolean } | null {
+  onZone = handler
+  return zoneKey.init(wanted)
+}
 export const fullShortcutActive = (): boolean => fullKey.active
 export const initFullShortcut = (wanted: string): { accelerator: string; replaced: boolean } | null => fullKey.init(wanted)
 
@@ -123,7 +138,7 @@ export const initFullShortcut = (wanted: string): { accelerator: string; replace
 // prises aux autres applications que le temps de répondre.
 
 let onApprovalKey: (decision: 'allow' | 'deny') => void = () => undefined
-const mainKeys = (): GlobalKey[] => [openKey, quickKey, voiceKey, fullKey]
+const mainKeys = (): GlobalKey[] => [openKey, quickKey, voiceKey, fullKey, zoneKey]
 const allowKey: GlobalKey = new GlobalKey(
   'd’autorisation',
   [],

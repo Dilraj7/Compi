@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, extname, join } from 'node:path'
-import { app, clipboard, desktopCapturer, nativeImage, net, Notification, screen, shell } from 'electron'
+import { app, clipboard, nativeImage, net, Notification, screen, shell } from 'electron'
 import { z } from 'zod'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { isPrivateHost } from '../../shared/brains'
@@ -17,7 +17,7 @@ import { emit } from '../bus'
 import { findClips } from '../clipboard/history'
 import { recentMessages } from '../messages/watch'
 import { addMemory, deleteMemory, listMemory, searchMemory } from '../memory/store'
-import { getNotchWindow, sendIslandCommand } from '../notchWindow'
+import { sendIslandCommand } from '../notchWindow'
 import { secrets } from '../store/secrets'
 import { settings } from '../store/settings'
 import { dayTools, GOOGLE_ACTIONS } from './dayTools'
@@ -36,6 +36,7 @@ import { compiGroupServers, connectorKeywords, findServer, usableInRoutine, USE_
 import { cleanQuery, DEFAULT_RESULTS, formatResults, MAX_RESULTS, WEB_SEARCH_TOOL, webSearchLabel, webSearchReady } from '../../shared/webSearch'
 import { searchWeb } from './webSearch'
 import { ocrPdf, ocrPng, tooLittleText } from '../windows/ocr'
+import { grabDisplay, hideIsland } from '../windows/capture'
 import { FILE_KINDS, formatHits, searchFiles } from '../windows/search'
 import {
   focusWindow,
@@ -349,25 +350,15 @@ async function fetchPage(url: string, part: number): Promise<CallToolResult> {
 // ─── Capture d'écran ─────────────────────────────────────────────────────────
 
 async function captureScreen(): Promise<string> {
-  const win = getNotchWindow()
   const display = screen.getPrimaryDisplay()
-  const scale = Math.min(1, 1600 / display.size.width)
+  // 1600 points de large au plus, comme avant (sans la mise à l'échelle de Windows).
+  const scale = Math.min(1, 1600 / display.size.width) / display.scaleFactor
   // L'îlot se rend invisible le temps de la capture pour ne pas s'y voir.
-  win?.setOpacity(0)
-  await new Promise((r) => setTimeout(r, 140))
+  const show = await hideIsland()
   try {
-    const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: {
-        width: Math.round(display.size.width * scale),
-        height: Math.round(display.size.height * scale)
-      }
-    })
-    const source = sources.find((s) => s.display_id === String(display.id)) ?? sources[0]
-    if (!source) throw new Error('Aucun écran trouvé.')
-    return source.thumbnail.toPNG().toString('base64')
+    return (await grabDisplay(display, scale)).toPNG().toString('base64')
   } finally {
-    win?.setOpacity(1)
+    show()
   }
 }
 
