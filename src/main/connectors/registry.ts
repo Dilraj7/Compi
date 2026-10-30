@@ -7,7 +7,7 @@ import { hostEnv } from '../brains/brain'
 import { secrets } from '../store/secrets'
 import { settings } from '../store/settings'
 import { npxDirect } from './npxDirect'
-import { accessTokenFor, loadOAuth } from './oauth'
+import { accessTokenFor, loadOAuth, presetOf } from './oauth'
 
 /** Lanceurs de paquets qui, sous Windows, sont des scripts .cmd à passer par cmd.exe. */
 const CMD_SHIMS = new Set(['npx', 'npm', 'pnpm', 'pnpx', 'yarn', 'bunx', 'uvx'])
@@ -34,7 +34,7 @@ export function serverKey(c: ConnectorConfig): string {
 async function httpHeaders(c: ConnectorConfig): Promise<Record<string, string> | null> {
   const headers = secrets.getConnectorSecrets(c.id, c.headerKeys)
   if (c.auth !== 'oauth' || !c.url) return headers
-  const token = await accessTokenFor(c.id, c.url)
+  const token = await accessTokenFor(c.id, c.url, presetOf(c))
   return token ? { ...headers, Authorization: `Bearer ${token}` } : null
 }
 

@@ -1,6 +1,7 @@
 // Faux serveur MCP protégé par OAuth 2.1, sur 127.0.0.1 : métadonnées,
-// enregistrement dynamique du client, page d'accord (qui redirige tout de
-// suite), jetons avec PKCE, et un point MCP qui exige le jeton.
+// enregistrement dynamique du client (ou un client déclaré à la main, comme chez
+// Salesforce), page d'accord (qui redirige tout de suite), jetons avec PKCE, et un
+// point MCP qui exige le jeton.
 
 import http from 'node:http'
 import { createHash, randomBytes } from 'node:crypto'
@@ -20,8 +21,17 @@ export interface FakeOAuth {
 
 const b64url = (b: Buffer): string => b.toString('base64url')
 
-export async function startFakeOAuth(): Promise<FakeOAuth> {
+export interface FakeOAuthOptions {
+  /** Enregistrement dynamique proposé (par défaut : oui). */
+  registration?: boolean
+  /** Client créé à la main chez le service : identifiant, secret facultatif, adresse de retour exacte. */
+  client?: { id: string; secret?: string; redirect: string }
+}
+
+export async function startFakeOAuth(opts: FakeOAuthOptions = {}): Promise<FakeOAuth> {
+  const registration = opts.registration ?? true
   const clients = new Map<string, string[]>()
+  if (opts.client) clients.set(opts.client.id, [opts.client.redirect])
   const codes = new Map<string, { challenge: string; clientId: string; redirect: string }>()
   const access = new Set<string>()
   const refresh = new Set<string>()
@@ -48,14 +58,14 @@ export async function startFakeOAuth(): Promise<FakeOAuth> {
           issuer: base,
           authorization_endpoint: `${base}/authorize`,
           token_endpoint: `${base}/token`,
-          registration_endpoint: `${base}/register`,
+          ...(registration ? { registration_endpoint: `${base}/register` } : {}),
           response_types_supported: ['code'],
           grant_types_supported: ['authorization_code', 'refresh_token'],
           code_challenge_methods_supported: ['S256'],
-          token_endpoint_auth_methods_supported: ['none']
+          token_endpoint_auth_methods_supported: opts.client?.secret ? ['client_secret_post', 'client_secret_basic'] : ['none']
         })
       }
-      if (u.pathname === '/register' && req.method === 'POST') {
+      if (u.pathname === '/register' && req.method === 'POST' && registration) {
         const meta = JSON.parse(body) as { redirect_uris: string[] }
         const id = `client-${randomBytes(4).toString('hex')}`
         clients.set(id, meta.redirect_uris)
@@ -82,6 +92,14 @@ export async function startFakeOAuth(): Promise<FakeOAuth> {
       }
       if (u.pathname === '/token' && req.method === 'POST') {
         const p = new URLSearchParams(body)
+        // Client déclaré avec un secret : envoyé dans le corps ou en Basic.
+        if (opts.client?.secret) {
+          const basic = /^Basic (.+)$/.exec(req.headers.authorization ?? '')?.[1]
+          const [bid, bsecret] = basic ? Buffer.from(basic, 'base64').toString().split(':').map(decodeURIComponent) : []
+          const id = p.get('client_id') ?? bid
+          const secret = p.get('client_secret') ?? bsecret
+          if (id !== opts.client.id || secret !== opts.client.secret) return json(401, { error: 'invalid_client' })
+        }
         const issue = (): void => {
           const at = `at-${b64url(randomBytes(8))}`
           const rt = `rt-${b64url(randomBytes(8))}`
@@ -112,10 +130,18 @@ export async function startFakeOAuth(): Promise<FakeOAuth> {
         }
         const msg = body ? (JSON.parse(body) as { id?: number; method: string }) : { method: '' }
         if (msg.method === 'initialize') {
-          return json(200, { jsonrpc: '2.0', id: msg.id, result: { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'faux-service', version: '1.0.0' } } })
+          return json(200, {
+            jsonrpc: '2.0',
+            id: msg.id,
+            result: { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'faux-service', version: '1.0.0' } }
+          })
         }
         if (msg.method === 'tools/list') {
-          return json(200, { jsonrpc: '2.0', id: msg.id, result: { tools: [{ name: 'list_pages', description: 'Liste les pages', inputSchema: { type: 'object', properties: {} } }] } })
+          return json(200, {
+            jsonrpc: '2.0',
+            id: msg.id,
+            result: { tools: [{ name: 'list_pages', description: 'Liste les pages', inputSchema: { type: 'object', properties: {} } }] }
+          })
         }
         if (msg.id === undefined) return res.writeHead(202).end()
         return json(200, { jsonrpc: '2.0', id: msg.id, result: {} })

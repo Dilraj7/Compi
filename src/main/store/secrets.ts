@@ -153,6 +153,15 @@ class SecretStore {
     return this.has(`oauth.${connectorId}`)
   }
 
+  /** Secret de l'application créée par l'utilisateur chez le service (« Client Secret »). */
+  getOAuthClientSecret(connectorId: string): string | undefined {
+    return this.get(`oauthclient.${connectorId}`)
+  }
+
+  setOAuthClientSecret(connectorId: string, secret: string | null): void {
+    this.set(`oauthclient.${connectorId}`, secret)
+  }
+
   listConnectorSecretNames(connectorId: string): string[] {
     const prefix = `connector.${connectorId}.`
     return Object.keys(this.vault)

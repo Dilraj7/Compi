@@ -1,6 +1,7 @@
 // Connecteurs « en un clic » : connexion par compte (OAuth 2.1) aux serveurs MCP
 // distants, comme Notion ou Todoist.
-// - Compi s'enregistre tout seul auprès du service (enregistrement dynamique) ;
+// - Compi s'enregistre tout seul auprès du service (enregistrement dynamique), ou utilise
+//   l'application que l'utilisateur y a créée (« Client ID », adresse de retour fixe) ;
 // - le navigateur de l'utilisateur ouvre la page du service, qui renvoie vers
 //   un petit serveur sur 127.0.0.1 (port libre), vérifié par `state` et PKCE ;
 // - les jetons sont chiffrés par Windows et renouvelés avant chaque réponse.
@@ -12,6 +13,7 @@ import { net, shell } from 'electron'
 import type { auth as mcpAuth, OAuthClientProvider, OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js'
+import type { ConnectorConfig } from '../../shared/types'
 import { log } from '../log'
 import { secrets } from '../store/secrets'
 
@@ -47,6 +49,23 @@ function saveOAuth(id: string, patch: Partial<StoredOAuth>): void {
 
 export const forgetOAuth = (id: string): void => secrets.setConnectorOAuth(id, null)
 
+/** Application créée par l'utilisateur chez le service : identifiant, secret facultatif, port de retour fixe. */
+export interface OAuthPreset {
+  clientId: string
+  clientSecret?: string
+  port: number
+}
+
+/** L'application enregistrée pour ce connecteur, avec son secret (chiffré), s'il y en a une. */
+export function presetOf(c: Pick<ConnectorConfig, 'id' | 'oauthClient'>): OAuthPreset | undefined {
+  if (!c.oauthClient?.id) return undefined
+  const clientSecret = secrets.getOAuthClientSecret(c.id)
+  return { clientId: c.oauthClient.id, port: c.oauthClient.port, ...(clientSecret ? { clientSecret } : {}) }
+}
+
+/** Port de retour utilisable pour une application déclarée à la main (pur, testé). */
+export const validClientPort = (p: unknown): p is number => Number.isInteger(p) && (p as number) >= 1024 && (p as number) <= 65535
+
 /** Jeton encore valable assez longtemps pour une réponse (pur, testé). */
 export function tokenUsable(t: StoredOAuth['tokens'], now = Date.now()): boolean {
   if (!t?.access_token) return false
@@ -65,7 +84,8 @@ class CompiOAuthProvider implements OAuthClientProvider {
   constructor(
     private readonly id: string,
     private readonly redirect: string,
-    private readonly onRedirect: ((url: URL) => void) | null
+    private readonly onRedirect: ((url: URL) => void) | null,
+    private readonly preset?: OAuthPreset
   ) {}
 
   get redirectUrl(): string {
@@ -78,7 +98,7 @@ class CompiOAuthProvider implements OAuthClientProvider {
       redirect_uris: [this.redirect],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
-      token_endpoint_auth_method: 'none'
+      token_endpoint_auth_method: this.preset?.clientSecret ? 'client_secret_post' : 'none'
     }
   }
 
@@ -87,12 +107,15 @@ class CompiOAuthProvider implements OAuthClientProvider {
   }
 
   clientInformation(): OAuthClientInformationMixed | undefined {
+    // Application créée par l'utilisateur : jamais d'enregistrement automatique.
+    if (this.preset) return { client_id: this.preset.clientId, ...(this.preset.clientSecret ? { client_secret: this.preset.clientSecret } : {}) }
     const s = loadOAuth(this.id)
     // Client enregistré avec une autre adresse de retour (autre port) : on en réenregistre un.
     return s.client && s.redirectUri === this.redirect ? s.client : undefined
   }
 
   saveClientInformation(client: OAuthClientInformationMixed): void {
+    if (this.preset) return
     saveOAuth(this.id, { client, redirectUri: this.redirect })
   }
 
@@ -128,7 +151,7 @@ class CompiOAuthProvider implements OAuthClientProvider {
 
   invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): void {
     if (scope === 'all') forgetOAuth(this.id)
-    else if (scope === 'client') saveOAuth(this.id, { client: undefined, redirectUri: undefined })
+    else if (scope === 'client' && !this.preset) saveOAuth(this.id, { client: undefined, redirectUri: undefined })
     else if (scope === 'tokens') saveOAuth(this.id, { tokens: undefined })
     else if (scope === 'discovery') saveOAuth(this.id, { discovery: undefined })
   }
@@ -158,7 +181,14 @@ export function previousPort(redirectUri: string | undefined): number | undefine
 }
 
 /** Petit serveur de retour sur 127.0.0.1 (port précédent si libre) : attend le code, vérifie `state`. */
-function waitForCode(name: string, getState: () => string, signal: AbortSignal, preferred?: number): Promise<{ port: number; code: Promise<string> }> {
+function waitForCode(
+  name: string,
+  getState: () => string,
+  signal: AbortSignal,
+  preferred?: number,
+  /** Adresse de retour déclarée chez le service : ce port ou rien. */
+  strict = false
+): Promise<{ port: number; code: Promise<string> }> {
   return new Promise((ready, failStart) => {
     let settle: { resolve: (c: string) => void; reject: (e: Error) => void }
     const code = new Promise<string>((resolve, reject) => (settle = { resolve, reject }))
@@ -200,12 +230,12 @@ function waitForCode(name: string, getState: () => string, signal: AbortSignal, 
     }
     signal.addEventListener('abort', onAbort, { once: true })
     // Port précédent déjà pris : un port libre, avec un nouveau client chez le service.
-    let fallback = preferred !== undefined
+    let fallback = preferred !== undefined && !strict
     server.on('error', (e: NodeJS.ErrnoException) => {
       if (fallback && e.code === 'EADDRINUSE') {
         fallback = false
         server.listen(0, '127.0.0.1')
-      } else failStart(e)
+      } else failStart(strict && e.code === 'EADDRINUSE' ? Object.assign(new Error('port pris'), { code: 'port_in_use', port: preferred }) : e)
     })
     server.on('listening', () => {
       const addr = server.address()
@@ -215,8 +245,16 @@ function waitForCode(name: string, getState: () => string, signal: AbortSignal, 
   })
 }
 
-function connectMessage(name: string, e: Error & { code?: string }): string {
+function connectMessage(name: string, e: Error & { code?: string; port?: number }): string {
   switch (e.code) {
+    case 'port_in_use':
+      return `Le port ${e.port} de l’adresse de retour est pris par une autre application. Choisis-en un autre, puis déclare la nouvelle adresse chez ${name}.`
+    case 'invalid_client':
+    case 'unauthorized_client':
+      return `${name} refuse l’identifiant ou le secret de ton application. Vérifie-les, ainsi que l’adresse de retour déclarée chez lui.`
+    case 'redirect_uri_mismatch':
+      return `${name} refuse l’adresse de retour : déclare exactement celle affichée ici dans ton application chez lui.`
+
     case 'cancelled':
       return 'Connexion annulée.'
     case 'timeout':
@@ -224,8 +262,12 @@ function connectMessage(name: string, e: Error & { code?: string }): string {
     case 'access_denied':
       return `Tu as refusé l’accès sur la page de ${name}. Rien n’a été partagé.`
   }
-  const m = e.message ?? ''
-  if (/registration|register/i.test(m)) return `${name} n’accepte pas que Compi s’enregistre tout seul : ce service n’est pas encore pris en charge en un clic.`
+  // Erreurs OAuth du kit MCP : le code est porté par `errorCode`, le message peut être vide.
+  const m = `${(e as { errorCode?: string }).errorCode ?? ''} ${e.message ?? ''}`.trim()
+  if (/invalid_client|unauthorized_client/i.test(m)) return connectMessage(name, Object.assign(e, { code: 'invalid_client' }))
+  if (/redirect_uri/i.test(m)) return connectMessage(name, Object.assign(e, { code: 'redirect_uri_mismatch' }))
+  if (/registration|register/i.test(m))
+    return `${name} ne laisse pas Compi s’enregistrer tout seul. Crée une application chez lui, puis renseigne son identifiant dans « Identifiants de ton application ».`
   if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT/i.test(m)) return `${name} ne répond pas. Vérifie ta connexion à Internet.`
   return `Connexion à ${name} impossible : ${m}`
 }
@@ -236,21 +278,32 @@ let pending: AbortController | null = null
  * Connecte un serveur MCP distant par compte : ouvre la page du service dans le
  * navigateur et attend l'accord de l'utilisateur (5 minutes au plus).
  */
-export async function connectOAuth(id: string, name: string, serverUrl: string): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function connectOAuth(id: string, name: string, serverUrl: string, preset?: OAuthPreset): Promise<{ ok: true } | { ok: false; message: string }> {
   pending?.abort()
   const controller = new AbortController()
   pending = controller
   let provider: CompiOAuthProvider | null = null
   try {
-    const { port, code } = await waitForCode(name, () => provider?.stateValue ?? '', controller.signal, previousPort(loadOAuth(id).redirectUri))
+    const { port, code } = await waitForCode(
+      name,
+      () => provider?.stateValue ?? '',
+      controller.signal,
+      preset ? preset.port : previousPort(loadOAuth(id).redirectUri),
+      Boolean(preset)
+    )
     const redirect = `http://127.0.0.1:${port}/callback`
-    provider = new CompiOAuthProvider(id, redirect, (url) => {
-      // Tests de bout en bout (faux service sur ce PC) : il redirige tout de suite, sans navigateur.
-      if (process.env.COMPI_OAUTH_TEST === '1' && ['127.0.0.1', 'localhost'].includes(url.hostname)) void net.fetch(url.toString()).catch(() => undefined)
-      else void shell.openExternal(url.toString())
-    })
-    // Nouvelle connexion : les anciens jetons ne servent plus.
-    saveOAuth(id, { tokens: undefined, expired: false })
+    provider = new CompiOAuthProvider(
+      id,
+      redirect,
+      (url) => {
+        // Tests de bout en bout (faux service sur ce PC) : il redirige tout de suite, sans navigateur.
+        if (process.env.COMPI_OAUTH_TEST === '1' && ['127.0.0.1', 'localhost'].includes(url.hostname)) void net.fetch(url.toString()).catch(() => undefined)
+        else void shell.openExternal(url.toString())
+      },
+      preset
+    )
+    // Nouvelle connexion : les anciens jetons ne servent plus (ni un client enregistré tout seul, avec une application).
+    saveOAuth(id, { tokens: undefined, expired: false, ...(preset ? { client: undefined, redirectUri: redirect } : {}) })
     const first = await auth(provider, { serverUrl, fetchFn: netFetch })
     if (first === 'REDIRECT') {
       const authorizationCode = await code
@@ -278,7 +331,7 @@ const refreshing = new Map<string, Promise<string | null>>()
  * Jeton d'accès valable pour une réponse, renouvelé si besoin (sans jamais ouvrir
  * de page). `null` : pas connecté, ou l'utilisateur doit se reconnecter.
  */
-export function accessTokenFor(id: string, serverUrl: string): Promise<string | null> {
+export function accessTokenFor(id: string, serverUrl: string, preset?: OAuthPreset): Promise<string | null> {
   const s = loadOAuth(id)
   if (!s.tokens?.access_token || s.expired) return Promise.resolve(null)
   if (tokenUsable(s.tokens)) return Promise.resolve(s.tokens.access_token)
@@ -287,11 +340,14 @@ export function accessTokenFor(id: string, serverUrl: string): Promise<string | 
   if (!p) {
     p = (async () => {
       try {
-        const provider = new CompiOAuthProvider(id, s.redirectUri!, null)
+        const provider = new CompiOAuthProvider(id, s.redirectUri!, null, preset)
         const r = await auth(provider, { serverUrl, fetchFn: netFetch })
         return r === 'AUTHORIZED' ? (loadOAuth(id).tokens?.access_token ?? null) : null
       } catch (e) {
-        if (e instanceof NeedsLogin || /invalid_grant|unauthorized|invalid_client/i.test((e as Error).message)) {
+        if (
+          e instanceof NeedsLogin ||
+          /invalid_grant|unauthorized|invalid_client/i.test(`${(e as { errorCode?: string }).errorCode ?? ''} ${(e as Error).message}`)
+        ) {
           saveOAuth(id, { expired: true })
           log('warn', `connecteur ${id} : accès retiré, reconnexion nécessaire`)
         } else {

@@ -52,7 +52,7 @@ import { sessions } from './bridge/sessions'
 import { emit, setBusTarget } from './bus'
 import { stepZoom } from '../shared/zoom'
 import { searchRegistry } from './connectors/mcpRegistry'
-import { cancelOAuth, connectOAuth, forgetOAuth } from './connectors/oauth'
+import { cancelOAuth, connectOAuth, forgetOAuth, validClientPort, type OAuthPreset } from './connectors/oauth'
 import { connectorAuthStates, testConnector } from './connectors/registry'
 import { clearClips, copyClip, deleteClip, flushClipboardHistory, listClips, pinClip, startClipboardHistory, stopClipboardHistory } from './clipboard/history'
 import { log } from './log'
@@ -524,6 +524,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.deleteConnector, (_e, id: string) => {
     secrets.deleteConnectorSecrets(id)
+    secrets.setOAuthClientSecret(id, null)
     forgetOAuth(id)
     settings.update({ connectors: settings.get().connectors.filter((c) => c.id !== id) })
     return publicSettings()
@@ -531,7 +532,9 @@ function registerIpc(): void {
   ipcMain.handle(IPC.testConnector, (_e, id: string) => testConnector(id))
   // Connexion par compte (OAuth) : la page du service s'ouvre dans le navigateur ; le
   // connecteur n'est enregistré qu'une fois l'accès accordé.
-  ipcMain.handle(IPC.connectorOAuth, async (_e, config: ConnectorConfig) => {
+  // Avec l'application créée par l'utilisateur chez le service : son identifiant (et son secret,
+  // vide = garder celui enregistré), et le port de l'adresse de retour qu'il y a déclarée.
+  ipcMain.handle(IPC.connectorOAuth, async (_e, config: ConnectorConfig, clientSecret?: string) => {
     let url: URL
     try {
       url = new URL(String(config?.url ?? ''))
@@ -545,11 +548,18 @@ function registerIpc(): void {
     const name = String(config.name || url.hostname).slice(0, 80)
     const existing = config.id ? settings.get().connectors.find((c) => c.id === config.id) : undefined
     const id = existing?.id ?? randomUUID()
-    const result = await connectOAuth(id, name, url.toString())
+    const clientId = typeof config.oauthClient?.id === 'string' ? config.oauthClient.id.trim().slice(0, 300) : ''
+    if (clientId && !validClientPort(config.oauthClient?.port))
+      return { ok: false, message: 'Port de l’adresse de retour invalide (de 1024 à 65535).', settings: publicSettings() }
+    const secret = typeof clientSecret === 'string' && clientSecret.trim() ? clientSecret.trim().slice(0, 1000) : secrets.getOAuthClientSecret(id)
+    const preset: OAuthPreset | undefined = clientId ? { clientId, port: config.oauthClient!.port, ...(secret ? { clientSecret: secret } : {}) } : undefined
+    const result = await connectOAuth(id, name, url.toString(), preset)
     if (!result.ok) {
       if (!existing) forgetOAuth(id)
       return { ...result, settings: publicSettings() }
     }
+    // Le secret n'est gardé qu'une fois l'accès accordé ; sans application, il n'a plus lieu d'être.
+    secrets.setOAuthClientSecret(id, preset?.clientSecret ?? null)
     const cfg: ConnectorConfig = {
       ...(existing ?? {}),
       ...config,
@@ -558,6 +568,7 @@ function registerIpc(): void {
       transport: 'http',
       url: url.toString(),
       auth: 'oauth',
+      oauthClient: preset ? { id: preset.clientId, port: preset.port, ...(preset.clientSecret ? { secret: true } : {}) } : undefined,
       enabled: existing?.enabled ?? true
     }
     const list = settings.get().connectors

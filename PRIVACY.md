@@ -12,7 +12,7 @@ Tout est dans le dossier `%APPDATA%\Compi`.
 | Discussions                                              | `conversations.json`                                              | avec le détail court de chaque étape (fichier changé, rangement, rendez-vous, sources trouvées)  |
 | Ce que Compi sait de toi                                 | `memory.json`                                                     | visible et modifiable dans « Ce que je sais de toi »                                             |
 | Rappels, routines, minuteur, journée                     | `reminders.json`, `routines.json`, `timer.json`, `day-state.json` |                                                                                                  |
-| Clés API, jetons Google et des connecteurs, liens `.ics` | `secrets.json`                                                    | **chiffré par Windows** (DPAPI)                                                                  |
+| Clés API, jetons Google et des connecteurs, secrets d'application, liens `.ics` | `secrets.json`                                                    | **chiffré par Windows** (DPAPI)                                                                  |
 | Historique du presse-papier                              | `clipboard-history.bin`                                           | désactivé par défaut ; **chiffré par Windows** ; texte seulement, 200 éléments et 30 jours       |
 | Journal technique                                        | `logs\compi.log`                                                  | erreurs et sortie du moteur ; les clés Anthropic y sont masquées ; 1 Mo, plus l'ancien fichier   |
 | Journal des autorisations                                | `approvals-log.json`                                              | sans contenu ; 500 entrées et 90 jours au plus                                                   |
@@ -60,7 +60,7 @@ Désactivée par défaut (Réglages › Cerveau › Recherche web). Avec Claude,
 **Les services que tu branches**
 
 - **Google** (agenda, e-mails, tâches), avec ton propre client Google.
-- **Connecteurs** : chaque outil demande ton accord avant de servir. Les connecteurs « Local » lancent la commande que tu as choisie, souvent `npx`, qui télécharge le connecteur depuis npm. Une fois le connecteur téléchargé, Compi lance directement la copie gardée par npx, sans repasser par npm.
+- **Connecteurs** : chaque outil demande ton accord avant de servir. Les connecteurs « Local » lancent la commande que tu as choisie, souvent `npx`, qui télécharge le connecteur depuis npm. Une fois le connecteur téléchargé, Compi lance directement la copie gardée par npx, sans repasser par npm. Pour la connexion par compte à un service qui ne laisse pas Compi s'enregistrer tout seul, tu peux donner l'identifiant de l'application que tu y as créée : son secret est chiffré par Windows, ne revient jamais à l'interface et s'efface avec le connecteur. L'adresse de retour (http://127.0.0.1, un port fixe) ne sert que sur ton PC.
 - **Liens d'agenda** `.ics` que tu ajoutes.
 
 **À ta demande**

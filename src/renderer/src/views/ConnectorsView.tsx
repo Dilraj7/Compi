@@ -4,6 +4,9 @@ import {
   ArrowLeft,
   BookOpen,
   Box,
+  Check,
+  ChevronDown,
+  Copy,
   Brain,
   Bug,
   CalendarRange,
@@ -75,11 +78,25 @@ const TEMPLATES: Template[] = [
   account('notion-account', 'Notion', 'Pages, bases de données et notes de ton espace Notion', 'Productivité', NotebookPen, 'https://mcp.notion.com/mcp'),
   account('todoist-account', 'Todoist', 'Tes tâches et projets : lire, ajouter, cocher', 'Productivité', CheckSquare, 'https://ai.todoist.net/mcp'),
   account('linear-account', 'Linear', 'Tickets, projets et cycles de ton équipe', 'Productivité', SquareKanban, 'https://mcp.linear.app/mcp'),
-  account('atlassian-account', 'Jira et Confluence', 'Tickets Jira et pages Confluence (Atlassian)', 'Productivité', Kanban, 'https://mcp.atlassian.com/v1/mcp'),
+  account(
+    'atlassian-account',
+    'Jira et Confluence',
+    'Tickets Jira et pages Confluence (Atlassian)',
+    'Productivité',
+    Kanban,
+    'https://mcp.atlassian.com/v1/mcp'
+  ),
   account('monday-account', 'monday.com', 'Tableaux, éléments et mises à jour', 'Productivité', CalendarRange, 'https://mcp.monday.com/mcp'),
   account('clickup-account', 'ClickUp', 'Tâches, listes et documents', 'Productivité', ListChecks, 'https://mcp.clickup.com/mcp'),
   account('airtable-account', 'Airtable', 'Lire et mettre à jour tes bases Airtable', 'Productivité', LayoutGrid, 'https://mcp.airtable.com/mcp'),
-  account('zapier-account', 'Zapier', 'Slack, Outlook, Teams… plus de 8 000 apps, selon ce que tu autorises dans Zapier', 'Productivité', Workflow, 'https://mcp.zapier.com/api/mcp/mcp'),
+  account(
+    'zapier-account',
+    'Zapier',
+    'Slack, Outlook, Teams… plus de 8 000 apps, selon ce que tu autorises dans Zapier',
+    'Productivité',
+    Workflow,
+    'https://mcp.zapier.com/api/mcp/mcp'
+  ),
   account('dropbox-account', 'Dropbox', 'Chercher et lire tes fichiers Dropbox', 'Fichiers et création', Box, 'https://mcp.dropbox.com/mcp'),
   account('canva-account', 'Canva', 'Tes designs : chercher, créer, exporter', 'Fichiers et création', Palette, 'https://mcp.canva.com/mcp'),
   account('figma-account', 'Figma', 'Lire tes fichiers et maquettes Figma', 'Fichiers et création', PenTool, 'https://mcp.figma.com/mcp'),
@@ -304,16 +321,32 @@ const cleanError = (e: unknown): string => (e as Error).message.replace(/^Error 
  * Connexion par compte : la page du service s'ouvre dans le navigateur, l'utilisateur
  * accepte, Compi reçoit un accès (chiffré sur le PC) qu'il peut retirer à tout moment.
  */
+/** Port de retour pour une application déclarée à la main : choisi une fois, parmi les ports libres d'usage. */
+const randomPort = (): number => 49152 + Math.floor(Math.random() * 16000)
+
 function OAuthConnect({ config, template, onDone }: { config: ConnectorConfig; template?: Template; onDone: () => void }) {
   const [state, setState] = useState<'idle' | 'waiting' | { error: string }>('idle')
+  // Application créée par l'utilisateur chez le service (services sans enregistrement automatique).
+  const [app, setApp] = useState({
+    open: Boolean(config.oauthClient),
+    id: config.oauthClient?.id ?? '',
+    secret: '',
+    port: config.oauthClient?.port ?? randomPort()
+  })
+  const [copied, setCopied] = useState(false)
   const Icon = template?.Icon ?? Globe
   const name = config.name || template?.name || 'ce service'
   const reconnect = Boolean(config.id)
+  const redirect = `http://127.0.0.1:${app.port}/callback`
+  const useApp = app.open && app.id.trim() !== ''
 
   const connect = async (): Promise<void> => {
     setState('waiting')
     try {
-      const r = await window.compi.connectorOAuth(config)
+      const r = await window.compi.connectorOAuth(
+        { ...config, oauthClient: useApp ? { id: app.id.trim(), port: app.port } : undefined },
+        useApp && app.secret.trim() ? app.secret.trim() : undefined
+      )
       useCompi.getState().setSettings(r.settings)
       if (r.ok) onDone()
       else setState({ error: r.message ?? 'Connexion impossible.' })
@@ -345,6 +378,68 @@ function OAuthConnect({ config, template, onDone }: { config: ConnectorConfig; t
             <span>{t}</span>
           </div>
         ))}
+      </div>
+
+      <div className="rounded-xl bg-white/[0.03] ring-1 ring-inset ring-white/[0.06]">
+        <button
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-fog-300 hover:text-fog-100"
+          aria-expanded={app.open}
+          onClick={() => setApp((a) => ({ ...a, open: !a.open }))}
+        >
+          <KeyRound size={12} className="shrink-0 text-fog-500" />
+          <span className="min-w-0 flex-1">
+            Identifiants de ton application <span className="text-fog-700">· facultatif</span>
+          </span>
+          <ChevronDown size={13} className={cx('shrink-0 text-fog-500 transition-transform', app.open && 'rotate-180')} />
+        </button>
+        {app.open && (
+          <div className="space-y-2 px-3 pb-3">
+            <div className="text-[11px] leading-snug text-fog-500">
+              Seulement si {name} ne laisse pas Compi s’enregistrer tout seul (Salesforce, Slack, GitHub…) : crée une application dans sa console de
+              développeur, déclare cette adresse de retour, puis colle son identifiant et son secret.
+            </div>
+            <div>
+              <span className="mb-1 block text-[11px] text-fog-500">Adresse de retour à déclarer</span>
+              <div className="flex items-center gap-1.5">
+                <code className="min-w-0 flex-1 truncate rounded-lg bg-black/30 px-2 py-1.5 font-mono text-[11.5px] text-fog-100">{redirect}</code>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(redirect)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 1500)
+                  }}
+                >
+                  {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copiée' : 'Copier'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="Si ce port est pris par une autre application"
+                  onClick={() => setApp((a) => ({ ...a, port: randomPort() }))}
+                >
+                  Changer
+                </Button>
+              </div>
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-[11px] text-fog-500">Client ID (ou Consumer Key)</span>
+              <TextInput className="font-mono" value={app.id} onChange={(e) => setApp((a) => ({ ...a, id: e.target.value }))} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] text-fog-500">
+                Client Secret (ou Consumer Secret) <span className="text-fog-700">· facultatif, chiffré par Windows</span>
+              </span>
+              <TextInput
+                type="password"
+                placeholder={config.oauthClient?.secret ? '•••••••• (inchangé)' : 'si le service en donne un'}
+                value={app.secret}
+                onChange={(e) => setApp((a) => ({ ...a, secret: e.target.value }))}
+              />
+            </label>
+          </div>
+        )}
       </div>
 
       {state === 'waiting' ? (
@@ -434,7 +529,12 @@ function ConnectorForm({
           </label>
           <label className="block">
             <span className="mb-1 block text-[11.5px] text-fog-500">Arguments</span>
-            <TextInput className="font-mono" value={d.argsLine} placeholder="-y @scope/serveur-mcp" onChange={(e) => setD((x) => ({ ...x, argsLine: e.target.value }))} />
+            <TextInput
+              className="font-mono"
+              value={d.argsLine}
+              placeholder="-y @scope/serveur-mcp"
+              onChange={(e) => setD((x) => ({ ...x, argsLine: e.target.value }))}
+            />
           </label>
         </div>
       ) : (
@@ -517,7 +617,12 @@ function ConnectorCard({ c, onEdit, onLogin }: { c: ConnectorConfig; onEdit: () 
   const needsLogin = (oauth && (!authState?.connected || authState.expired)) || (test !== 'running' && test?.needsLogin)
 
   return (
-    <motion.div layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl bg-ink-850/90 p-3.5 ring-1 ring-inset ring-white/[0.06]">
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl bg-ink-850/90 p-3.5 ring-1 ring-inset ring-white/[0.06]"
+    >
       <div className="flex items-center gap-3">
         <span className={cx('grid size-9 place-items-center rounded-xl', c.enabled ? 'bg-[var(--led)]/12 text-[var(--led)]' : 'bg-white/[0.05] text-fog-700')}>
           <Icon size={16} />
@@ -535,9 +640,7 @@ function ConnectorCard({ c, onEdit, onLogin }: { c: ConnectorConfig; onEdit: () 
               <Badge>{c.transport === 'http' ? 'Distant' : 'Local'}</Badge>
             )}
           </div>
-          <div className="mt-0.5 truncate font-mono text-[10.5px] text-fog-700">
-            {c.transport === 'http' ? c.url : `${c.command} ${joinArgs(c.args)}`}
-          </div>
+          <div className="mt-0.5 truncate font-mono text-[10.5px] text-fog-700">{c.transport === 'http' ? c.url : `${c.command} ${joinArgs(c.args)}`}</div>
         </div>
         <Toggle
           checked={c.enabled}
@@ -671,7 +774,9 @@ export function ConnectorsPanel() {
       {mode === 'list' && (
         <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
           <div className="flex items-end justify-between gap-3 px-0.5">
-            <p className="text-[11.5px] leading-snug text-fog-500">Branche des services pour que je puisse agir dessus : Notion, Todoist, Linear, Zapier… La plupart se connectent en un clic avec ton compte.</p>
+            <p className="text-[11.5px] leading-snug text-fog-500">
+              Branche des services pour que je puisse agir dessus : Notion, Todoist, Linear, Zapier… La plupart se connectent en un clic avec ton compte.
+            </p>
             <Button size="sm" variant="primary" onClick={() => setMode('pick')}>
               <Plus size={13} /> Ajouter
             </Button>

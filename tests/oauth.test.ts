@@ -20,7 +20,7 @@ vi.mock('../src/main/store/secrets', () => ({
 }))
 
 process.env.COMPI_OAUTH_TEST = '1'
-const { accessTokenFor, connectOAuth, forgetOAuth, loadOAuth, previousPort, tokenUsable } = await import('../src/main/connectors/oauth')
+const { accessTokenFor, connectOAuth, forgetOAuth, loadOAuth, previousPort, tokenUsable, validClientPort } = await import('../src/main/connectors/oauth')
 
 describe('port de retour d’une connexion précédente', () => {
   it('repris s’il est sur ce PC (même client chez le service)', () => {
@@ -120,5 +120,79 @@ describe('connexion par compte (faux service OAuth sur 127.0.0.1)', () => {
   it('oublier un connecteur efface ses jetons', () => {
     forgetOAuth('c1')
     expect(vault.has('c1')).toBe(false)
+  })
+})
+
+/** Un port libre sur ce PC (pour l'adresse de retour déclarée chez le faux service). */
+async function freePort(): Promise<number> {
+  const { createServer } = await import('node:net')
+  return new Promise((resolve) => {
+    const s = createServer().listen(0, '127.0.0.1', () => {
+      const port = (s.address() as { port: number }).port
+      s.close(() => resolve(port))
+    })
+  })
+}
+
+describe('application créée à la main chez le service (sans enregistrement automatique)', () => {
+  let fake: FakeOAuth
+  let port: number
+  const redirect = (): string => `http://127.0.0.1:${port}/callback`
+  beforeAll(async () => {
+    port = await freePort()
+    fake = await startFakeOAuth({ registration: false, client: { id: 'cid-123', secret: 's3cret', redirect: redirect() } })
+  })
+  afterAll(async () => {
+    await fake.close()
+  })
+
+  it('port de retour : de 1024 à 65535', () => {
+    expect(validClientPort(51234)).toBe(true)
+    expect(validClientPort(80)).toBe(false)
+    expect(validClientPort(70000)).toBe(false)
+    expect(validClientPort('51234')).toBe(false)
+  })
+
+  it('sans identifiant : message qui dit quoi faire', async () => {
+    const r = await connectOAuth('d0', 'Faux Salesforce', fake.mcpUrl)
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.message).toMatch(/Identifiants de ton application/)
+  })
+
+  it('avec l’identifiant et le secret : jeton obtenu, sans enregistrement, sur l’adresse déclarée', async () => {
+    const r = await connectOAuth('d1', 'Faux Salesforce', fake.mcpUrl, { clientId: 'cid-123', clientSecret: 's3cret', port })
+    expect(r).toEqual({ ok: true })
+    const s = loadOAuth('d1')
+    expect(s.tokens?.access_token).toMatch(/^at-/)
+    expect(s.redirectUri).toBe(redirect())
+    expect(s.client).toBeUndefined()
+    expect(fake.log.some((l) => l.path === '/register')).toBe(false)
+    const token = fake.log.filter((l) => l.path === '/token').at(-1)!
+    const sent = new URLSearchParams(token.body ?? '')
+    expect(sent.get('client_secret') === 's3cret' || /^Basic /.test(token.auth ?? '')).toBe(true)
+  })
+
+  it('renouvelle le jeton avec la même application', async () => {
+    const s = loadOAuth('d1')
+    vault.set('d1', JSON.stringify({ ...s, tokens: { ...s.tokens, expires_at: Date.now() - 1000 } }))
+    const token = await accessTokenFor('d1', fake.mcpUrl, { clientId: 'cid-123', clientSecret: 's3cret', port })
+    expect(token).toMatch(/^at-/)
+    expect(token).not.toBe(s.tokens?.access_token)
+  })
+
+  it('mauvais secret : message clair', async () => {
+    const r = await connectOAuth('d2', 'Faux Salesforce', fake.mcpUrl, { clientId: 'cid-123', clientSecret: 'faux', port })
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.message).toMatch(/refuse l’identifiant ou le secret/)
+  })
+
+  it('port déclaré déjà pris : pas d’autre port en douce, message clair', async () => {
+    const { createServer } = await import('node:net')
+    const busy = createServer().listen(port, '127.0.0.1')
+    await new Promise((r) => busy.once('listening', r))
+    const r = await connectOAuth('d3', 'Faux Salesforce', fake.mcpUrl, { clientId: 'cid-123', clientSecret: 's3cret', port })
+    await new Promise((r) => busy.close(r))
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.message).toMatch(new RegExp(`port ${port} .*pris`))
   })
 })

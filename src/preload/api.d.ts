@@ -124,7 +124,7 @@ export interface CompiApi {
   testConnector(id: string): Promise<ConnectorTestResult>
   searchRegistry(query: string): Promise<RegistryEntry[]>
   /** Connexion par compte : ouvre la page du service et attend l'accord (5 minutes au plus). */
-  connectorOAuth(config: ConnectorConfig): Promise<ConnectorOAuthResult>
+  connectorOAuth(config: ConnectorConfig, clientSecret?: string): Promise<ConnectorOAuthResult>
   connectorOAuthCancel(): Promise<void>
   // dossiers et compétences
   /** Ouvre le sélecteur de dossiers de Windows et ajoute les dossiers choisis. */

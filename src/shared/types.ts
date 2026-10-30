@@ -81,6 +81,19 @@ export interface ConnectorConfig {
   templateId?: string
   /** Connexion par compte (OAuth) : les jetons sont chiffrés à part. */
   auth?: 'oauth'
+  /**
+   * Application créée par l'utilisateur chez le service (« Client ID », « Consumer Key »),
+   * pour les services où Compi ne peut pas s'enregistrer tout seul. Adresse de retour fixe :
+   * http://127.0.0.1:{port}/callback. Le secret, s'il y en a un, est chiffré à part.
+   */
+  oauthClient?: OAuthClientConfig
+}
+
+export interface OAuthClientConfig {
+  id: string
+  port: number
+  /** Un secret est enregistré (sa valeur n'est jamais renvoyée à l'interface). */
+  secret?: boolean
 }
 
 /** État de la connexion par compte d'un connecteur. */

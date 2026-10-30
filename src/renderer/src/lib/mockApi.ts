@@ -1861,9 +1861,11 @@ export function createMockApi(): CompiApi {
       settings.connectorAuth[id]?.expired
         ? { ok: false, needsLogin: true, message: 'Accès retiré par le service : reconnecte-toi.' }
         : { ok: true, message: 'Connecté : 11 outils disponibles.', tools: ['read_file', 'list_directory'] },
-    connectorOAuth: async (config) => {
+    connectorOAuth: async (input, clientSecret) => {
       await new Promise((r) => setTimeout(r, 2500))
-      const id = config.id || uid()
+      const id = input.id || uid()
+      const previous = settings.connectors.find((c) => c.id === id)?.oauthClient
+      const config = { ...input, oauthClient: input.oauthClient && { ...input.oauthClient, secret: Boolean(clientSecret || previous?.secret) || undefined } }
       const next = settings.connectors.some((c) => c.id === id)
         ? settings.connectors.map((c) => (c.id === id ? { ...config, id } : c))
         : [...settings.connectors, { ...config, id }]
