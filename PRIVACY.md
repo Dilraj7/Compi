@@ -137,6 +137,11 @@ Désactivées tant que tu ne les ajoutes pas (Réglages › Journée › Comptes
 
 Elles tournent sans toi, donc avec moins de droits que toi. Avec un cerveau en ligne, elles n'utilisent que les données réglées sur « Toujours ». Elles n'agissent jamais : pas de brouillon, de rendez-vous, de lien ouvert ni d'action sur Windows.
 
+- **Droits par routine** (désactivés par défaut), donnés en créant ou en modifiant la routine, ou par ton OK sur la carte quand Compi la crée :
+  - **Chercher sur le web et lire des pages** : recherches et pages permises même après la lecture de ton agenda, de tes e-mails ou de tes tâches, et même si les recherches web sont sur « Me demander » (jamais si elles sont sur « Jamais »). Les mots cherchés peuvent alors reprendre ce que la routine a lu : ils partent chez le service de recherche.
+  - **Créer des notes dans tes dossiers confiés** : seulement de nouveaux fichiers .md ou .txt. Jamais modifier, compléter ni remplacer un fichier existant.
+- Chaque refus est noté dans Activité › Journal, avec sa raison.
+
 ## Tout effacer
 
 1. Si tu as connecté Claude Code : Réglages › Claude Code › **Déconnecter**. Compi retire ses hooks de `~/.claude/settings.json`.

@@ -64,6 +64,7 @@ function ApprovalRow({ e }: { e: ApprovalLogEntry }) {
           {e.session ? ` · ${e.session}` : ''}
           {e.destination ? ` · vers ${e.destination}` : ''}
         </div>
+        {e.reason && <div className="mt-1 text-[10.5px] leading-snug text-fog-500">Pourquoi : {e.reason}</div>}
         {e.rule && <div className="mt-1 text-[10.5px] leading-snug text-led-violet/80">Règle enregistrée : {e.rule}</div>}
       </div>
       <span className="shrink-0 text-[10.5px] text-fog-700">{timeAgo(e.at)}</span>

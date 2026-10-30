@@ -48,14 +48,15 @@ export function recordApproval(request: ApprovalRequest, outcome: ApprovalLogOut
 }
 
 /** Refus sans carte : une routine a voulu utiliser un outil qu'elle n'a pas le droit d'utiliser. */
-export function recordRoutineDenial(title: string, tool: string, routine?: string, target?: string): void {
+export function recordRoutineDenial(title: string, tool: string, routine?: string, target?: string, reason?: string): void {
   add({
     source: 'routine',
     title: title.slice(0, 160),
     tool,
     target: target?.slice(0, 120),
     session: routine?.slice(0, 80),
-    outcome: 'auto-deny'
+    outcome: 'auto-deny',
+    ...(reason ? { reason: reason.slice(0, 200) } : {})
   })
 }
 

@@ -1,6 +1,6 @@
 // Routines : fonctions pures partagées (testées dans tests/routines.test.ts).
 
-import type { ReminderRepeat, RoutineDraft } from './types'
+import type { ReminderRepeat, RoutineDraft, RoutineGrant } from './types'
 
 export const ROUTINE_TITLE_MAX = 60
 export const ROUTINE_PROMPT_MAX = 2000
@@ -9,6 +9,29 @@ export const ROUTINES_MAX = 30
 export const ROUTINE_CATCH_UP_MS = 12 * 3600_000
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
+
+export const ROUTINE_GRANTS: readonly RoutineGrant[] = ['web', 'notes']
+
+/** Libellés des droits (formulaire, carte de création). */
+export const ROUTINE_GRANT_LABELS: Record<RoutineGrant, string> = {
+  web: 'Chercher sur le web et lire des pages',
+  notes: 'Créer des notes dans tes dossiers confiés'
+}
+
+/** Droits connus, sans doublon, dans l'ordre de ROUTINE_GRANTS. */
+export function cleanGrants(v: unknown): RoutineGrant[] {
+  return Array.isArray(v) ? ROUTINE_GRANTS.filter((g) => v.includes(g)) : []
+}
+
+/**
+ * Outils couverts par le droit « web » d'une routine : chercher sur le web et lire des pages
+ * (recherche de Compi, outils web du moteur, connecteurs de recherche branchés). Jamais
+ * ouvrir un lien ni lancer une commande.
+ */
+export function webGrantCovers(toolName: string, searchServerKeys: readonly string[]): boolean {
+  if (['WebSearch', 'WebFetch', 'mcp__compi__fetch_page', 'mcp__compi__web_search'].includes(toolName)) return true
+  return searchServerKeys.some((k) => toolName.startsWith(`mcp__${k}__`))
+}
 
 /** Règle de répétition valide (heure « HH:MM », jours de 0 à 6, jour du mois de 1 à 31). */
 export function validRepeat(r: unknown): r is ReminderRepeat {
@@ -30,8 +53,13 @@ export function validRepeat(r: unknown): r is ReminderRepeat {
 
 /** Brouillon nettoyé et vérifié ; lève une erreur lisible sinon. */
 export function cleanDraft(d: RoutineDraft): RoutineDraft {
-  const title = String(d.title ?? '').replace(/\s+/g, ' ').trim().slice(0, ROUTINE_TITLE_MAX)
-  const prompt = String(d.prompt ?? '').trim().slice(0, ROUTINE_PROMPT_MAX)
+  const title = String(d.title ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, ROUTINE_TITLE_MAX)
+  const prompt = String(d.prompt ?? '')
+    .trim()
+    .slice(0, ROUTINE_PROMPT_MAX)
   if (!prompt) throw new Error('Dis-moi ce que la routine doit faire.')
   if (!validRepeat(d.repeat)) throw new Error('Moment de la routine invalide.')
   const repeat: ReminderRepeat =
@@ -40,7 +68,14 @@ export function cleanDraft(d: RoutineDraft): RoutineDraft {
       : d.repeat.every === 'month'
         ? { every: 'month', day: d.repeat.day, time: d.repeat.time }
         : { every: d.repeat.every, time: d.repeat.time }
-  return { ...(d.id ? { id: d.id } : {}), title: title || prompt.slice(0, 40), prompt, repeat, enabled: d.enabled ?? true }
+  return {
+    ...(d.id ? { id: d.id } : {}),
+    title: title || prompt.slice(0, 40),
+    prompt,
+    repeat,
+    enabled: d.enabled ?? true,
+    ...(d.allow !== undefined ? { allow: cleanGrants(d.allow) } : {})
+  }
 }
 
 /** Aperçu d'une réponse, sans Markdown, pour une notification. */

@@ -4,7 +4,7 @@
 import { basename } from 'node:path'
 import { repeatLabel } from '../../shared/day'
 import { isLauncher, movesSummary } from '../../shared/folderPlan'
-import { REPEAT_KINDS, routineRepeat, type RepeatKind } from '../../shared/routines'
+import { cleanGrants, REPEAT_KINDS, ROUTINE_GRANT_LABELS, routineRepeat, type RepeatKind } from '../../shared/routines'
 import { isSettingsPage, SETTINGS_PAGES } from '../../shared/windows'
 import { eventByReference, type EventRef } from '../google/eventRefs'
 import { taskByReference } from '../google/taskRefs'
@@ -241,6 +241,12 @@ function soundPhrase(input: Input, verb: boolean): string {
   return verb ? p[0] : p[1]
 }
 
+/** Droits demandés pour une routine : ton OK sur la carte les donne. */
+function grantLines(v: unknown): string[] {
+  const grants = cleanGrants(v)
+  return grants.length ? [`Tu lui permets aussi : ${grants.map((g) => ROUTINE_GRANT_LABELS[g].toLowerCase()).join(' ; ')}.`] : []
+}
+
 function routineDetail(input: Input): string {
   const kind = str(input.repeat)
   let when = ''
@@ -253,7 +259,8 @@ function routineDetail(input: Input): string {
   return [
     when && when.charAt(0).toUpperCase() + when.slice(1),
     prompt.slice(0, 400) + (prompt.length > 400 ? '…' : ''),
-    'Elle tournera sans toi : seulement les données réglées sur « Toujours », aucune action.'
+    'Elle tournera sans toi : seulement les données réglées sur « Toujours », aucune action.',
+    ...grantLines(input.allow)
   ]
     .filter(Boolean)
     .join('\n\n')

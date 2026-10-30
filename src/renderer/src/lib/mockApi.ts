@@ -1696,7 +1696,16 @@ export function createMockApi(): CompiApi {
       else
         routines = [
           ...routines,
-          { id: uid(), title: clean.title, prompt: clean.prompt, repeat: clean.repeat, enabled: true, nextAt: Date.now() + day, createdAt: Date.now() }
+          {
+            id: uid(),
+            title: clean.title,
+            prompt: clean.prompt,
+            repeat: clean.repeat,
+            enabled: true,
+            nextAt: Date.now() + day,
+            createdAt: Date.now(),
+            allow: clean.allow
+          }
         ]
       return pushRoutines()
     },

@@ -21,7 +21,19 @@ import {
   type PrivacyCategory
 } from '../../shared/privacy'
 import { WEB_SEARCH_TOOL, webSearchLabel, webSearchReady } from '../../shared/webSearch'
-import type { AgentEvent, Brain, ChatMessage, Routine, RunStats, SendRequest, SendResult, SentTo, ToolActivity } from '../../shared/types'
+import type {
+  AgentEvent,
+  Brain,
+  ChatMessage,
+  ConnectorConfig,
+  Routine,
+  RoutineGrant,
+  RunStats,
+  SendRequest,
+  SendResult,
+  SentTo,
+  ToolActivity
+} from '../../shared/types'
 import { stageDetail } from '../../shared/stage'
 import { withColdStart } from '../../shared/reread'
 import { approvals } from '../approvals'
@@ -54,6 +66,7 @@ import { desktopDir, launchesProgram } from './folderTools'
 import { describeTextEdit, planTextEdit } from './textEdits'
 import { editIdIn } from './textTools'
 import { autoFollowUp, unverifiedClaim, type MessageNotice } from '../../shared/claims'
+import { cleanGrants, webGrantCovers } from '../../shared/routines'
 
 type SdkModule = typeof import('@anthropic-ai/claude-agent-sdk')
 
@@ -97,9 +110,13 @@ function dataDir(name: string): string {
   return dir
 }
 
-/** Un connecteur de recherche web (Brave Search…) est branché. */
+/** Connecteurs de recherche web branchés (Brave Search…). */
+const searchConnectors = (): ConnectorConfig[] =>
+  settings.get().connectors.filter((c) => c.enabled && (c.templateId === 'brave-search' || /search|recherche/i.test(c.name)))
+
+/** Un connecteur de recherche web est branché. */
 function hasSearchConnector(): boolean {
-  return settings.get().connectors.some((c) => c.enabled && (c.templateId === 'brave-search' || /search|recherche/i.test(c.name)))
+  return searchConnectors().length > 0
 }
 
 function webAbilities(brain: Brain): string {
@@ -134,14 +151,23 @@ function promptMemory(brain: Brain): string {
  * celles des discussions, que le modèle local garde en cache (une routine ne le
  * vide plus).
  */
-function routineRules(): string {
+function routineRules(grants: RoutineGrant[]): string {
   const s = settings.get()
-  const blocked = s.connectors.filter((c) => c.enabled && !usableInRoutine(serverKey(c), s.alwaysAllow)).map((c) => c.name)
+  const searchKeys = grants.includes('web') ? searchConnectors().map(serverKey) : []
+  const blocked = s.connectors
+    .filter((c) => c.enabled && !usableInRoutine(serverKey(c), s.alwaysAllow) && !searchKeys.includes(serverKey(c)))
+    .map((c) => c.name)
   return `
 
 <routine>
 - Tu exécutes une routine programmée par l'utilisateur, en son absence : personne ne peut valider d'action ni répondre à une question.
 - Fais le travail demandé avec les outils de lecture disponibles. Si un outil est refusé, continue sans lui et dis en une phrase ce qui manquait.${
+    grants.includes('web') ? "\n- L'utilisateur a permis à cette routine de chercher sur le web et de lire des pages." : ''
+  }${
+    grants.includes('notes')
+      ? "\n- L'utilisateur a permis à cette routine de créer de nouvelles notes (.md, .txt) dans ses dossiers confiés, avec mcp__compi__write_text_file. Jamais modifier ni compléter un fichier existant : choisis un nouveau nom de fichier (avec la date, par exemple)."
+      : ''
+  }${
     blocked.length
       ? `\n- Extensions inutilisables dans une routine (aucun de leurs outils n'est réglé sur « Toujours ») : ${blocked.join(', ')}. Si la demande en a besoin, dis-le en une phrase.`
       : ''
@@ -321,6 +347,8 @@ interface PermissionContext {
   headless?: boolean
   /** Titre de la routine (journal des autorisations). */
   routine?: string
+  /** Droits donnés à la routine par l'utilisateur. */
+  grants?: RoutineGrant[]
   /** Ce que les connecteurs déclarent de leurs outils (« destructeur »…), par nom complet d'outil. */
   toolHints?: () => Promise<Map<string, ToolHints>>
   /** Carte acceptée (écriture d'un fichier) : son détail, repris par la scène du plein écran. */
@@ -363,28 +391,67 @@ const MEMORY_SAVE = `mcp__${COMPI_SERVER}__memory_save`
 const WEB_SEARCH = `mcp__${COMPI_SERVER}__${WEB_SEARCH_TOOL}`
 
 /**
+ * Routine avec le droit « notes » : créer un nouveau fichier texte dans un dossier confié,
+ * jamais modifier, compléter ni remplacer un fichier existant.
+ */
+async function newNoteDecision(input: Record<string, unknown>, deny: (why: string, reason: string) => ReturnType<CanUseTool>): ReturnType<CanUseTool> {
+  const plan = await planTextEdit(String(input.path ?? ''), String(input.content ?? ''), 'replace', allowedFolders())
+  if ('error' in plan) return deny(plan.error, plan.error)
+  if (plan.existed)
+    return deny(
+      "cette routine peut seulement créer de nouvelles notes, pas modifier un fichier existant. Choisis un nouveau nom de fichier, ou dis dans ta réponse ce qu'il faudrait changer.",
+      'fichier existant : cette routine peut seulement créer de nouvelles notes.'
+    )
+  return allow({ ...input, mode: 'replace' })
+}
+
+/**
  * Routine (sans l'utilisateur) : aucune carte ne peut s'afficher. Seules passent les
  * lectures déjà autorisées ; pour un cerveau en ligne, seulement les données réglées
  * sur « Toujours ». Ni action, ni écriture durable, rien de sortant après un e-mail.
+ * Les droits donnés à la routine (« web », « notes ») ouvrent seulement ce qu'ils disent.
  */
 function headlessDecision(ctx: PermissionContext, toolName: string, input: Record<string, unknown>, destructive: boolean): ReturnType<CanUseTool> {
-  const deny = (why: string): ReturnType<CanUseTool> => {
+  /** `why` est lu par le modèle ; `reason`, plus court, par l'utilisateur dans le journal. */
+  const deny = (why: string, reason: string): ReturnType<CanUseTool> => {
     try {
-      recordRoutineDenial(approvalTitle(toolName, input).title, toolName, ctx.routine, auditTarget(toolName, input))
+      recordRoutineDenial(approvalTitle(toolName, input).title, toolName, ctx.routine, auditTarget(toolName, input), reason)
     } catch (e) {
       log('warn', 'journal des autorisations non écrit', (e as Error).message)
     }
     return Promise.resolve({ behavior: 'deny', message: `Routine exécutée sans l'utilisateur : ${why}` })
   }
-  if (destructive) return deny("cette action supprime ou met à la corbeille. Dis dans ta réponse ce qu'il faudrait faire, il le fera lui-même.")
+  const grants = ctx.grants ?? []
+  if (destructive)
+    return deny(
+      "cette action supprime ou met à la corbeille. Dis dans ta réponse ce qu'il faudrait faire, il le fera lui-même.",
+      'action qui supprime ou met à la corbeille.'
+    )
+  if (toolName === WRITE_TEXT_FILE && grants.includes('notes')) return newNoteDecision(input, deny)
   if (CONFIRM_EACH_TIME.includes(toolName) || HEADLESS_BLOCKED.includes(toolName)) {
-    return deny("cette action demande son accord. Dis dans ta réponse ce qu'il faudrait faire, il le fera lui-même.")
+    return deny(
+      "cette action demande son accord. Dis dans ta réponse ce qu'il faudrait faire, il le fera lui-même.",
+      toolName === WRITE_TEXT_FILE
+        ? 'écrire un fichier demande ton accord. Tu peux permettre à cette routine de créer des notes (Routines › Modifier).'
+        : 'action qui demande ton accord à chaque fois.'
+    )
   }
-  if (ctx.external() && isOutbound(toolName)) return deny('après la lecture d’un e-mail, rien ne doit sortir du PC.')
+  const webGranted = grants.includes('web') && webGrantCovers(toolName, searchConnectors().map(serverKey))
+  if (ctx.external() && isOutbound(toolName) && !webGranted)
+    return deny(
+      'après la lecture d’un e-mail, d’un rendez-vous ou d’une tâche (un contenu écrit par d’autres), rien ne doit sortir du PC.',
+      'rien ne sort du PC après la lecture d’un e-mail, d’un rendez-vous ou d’une tâche. Le droit « web » de la routine le permet pour les recherches.'
+    )
   const s = settings.get()
   if (toolName === WEB_SEARCH) {
-    if (webSearchDecision(s.privacy) !== 'allow')
-      return deny("les recherches web ne sont possibles dans une routine que si l'utilisateur a choisi « Toujours » pour elles (Réglages › Confidentialité).")
+    const choice = webSearchDecision(s.privacy)
+    if (choice === 'deny')
+      return deny("l'utilisateur a choisi « Jamais » pour les recherches web (Réglages › Confidentialité).", 'recherches web réglées sur « Jamais ».')
+    if (choice === 'ask' && !webGranted)
+      return deny(
+        "les recherches web ne sont possibles dans une routine que si l'utilisateur a choisi « Toujours » pour elles (Réglages › Confidentialité), ou les a permises à cette routine.",
+        'recherches web sur « Me demander ». Tu peux les permettre à cette routine (Routines › Modifier).'
+      )
     ctx.onSearched(webSearchLabel(s.webSearch))
     return Promise.resolve(allow(input))
   }
@@ -393,13 +460,18 @@ function headlessDecision(ctx: PermissionContext, toolName: string, input: Recor
     const category = TOOL_CATEGORY[toolName]
     const label = PRIVACY_CATEGORIES.find((c) => c.id === category)?.label.toLowerCase() ?? 'ce type de donnée'
     return deny(
-      `les données « ${label} » ne sont utilisables dans une routine que si l'utilisateur a choisi « Toujours » pour elles (Réglages › Confidentialité).`
+      `les données « ${label} » ne sont utilisables dans une routine que si l'utilisateur a choisi « Toujours » pour elles (Réglages › Confidentialité).`,
+      `cerveau en ligne (${brainLabel(ctx.brain, s)}) : les données « ${label} » ne sont pas sur « Toujours » (Réglages › Confidentialité).`
     )
   }
   const target = FOLDER_READ_TOOLS[toolName]?.(input)
   const preApproved =
-    AUTO_ALLOWED.includes(toolName) || s.alwaysAllow.includes(toolName) || target === ALWAYS_INSIDE || (target !== undefined && insideAny(target, ctx.roots))
-  if (!preApproved) return deny('cet outil demande son accord.')
+    webGranted ||
+    AUTO_ALLOWED.includes(toolName) ||
+    s.alwaysAllow.includes(toolName) ||
+    target === ALWAYS_INSIDE ||
+    (target !== undefined && insideAny(target, ctx.roots))
+  if (!preApproved) return deny('cet outil demande son accord.', 'outil pas réglé sur « Toujours ».')
   const category = TOOL_CATEGORY[toolName]
   if (category && ctx.destination) ctx.onShared(category)
   return Promise.resolve(allow(input))
@@ -603,6 +675,8 @@ interface RunOptions {
   headless?: boolean
   /** Titre de la routine. */
   routine?: string
+  /** Droits donnés à la routine. */
+  grants?: RoutineGrant[]
   /** Empreinte des réglages de ce message (bloc <reglages>), notée une fois la session ouverte. */
   settingsKey?: string
   /** La même demande avec le bloc <reglages> : pour repartir d'une session neuve si l'ancienne est perdue. */
@@ -710,6 +784,10 @@ async function runQuery(
   // Routine : ni action ni écriture durable, même pour les outils autorisés d'office.
   const blocked = [...CONFIRM_EACH_TIME, ...outboundGuarded, ...(headless ? HEADLESS_BLOCKED : [])]
 
+  // Routine : connecteurs dont un outil est sur « Toujours », et ceux de recherche web si la routine a le droit « web ».
+  const routineSearchKeys = opts.grants?.includes('web') ? searchConnectors().map(serverKey) : []
+  const routineServer = (key: string): boolean => usableInRoutine(key, s.alwaysAllow) || routineSearchKeys.includes(key)
+
   const permCtx: PermissionContext = {
     roots,
     attachments,
@@ -720,6 +798,7 @@ async function runQuery(
     external: () => Boolean(conversations.get(conversationId)?.external),
     headless,
     routine: opts.routine,
+    grants: opts.grants,
     toolHints: () => hintsWithin(toolHints),
     onCard: (id, detail) => cards.set(id, detail)
   }
@@ -966,7 +1045,8 @@ async function runQuery(
       onCloudShared: () => (cloudHelped = true),
       onExternalContent: () => conversations.markExternal(conversationId),
       conversationTitle: conv?.title,
-      headless
+      headless,
+      routineServer
     }
     // Connecteurs (jetons renouvelés si besoin) : aussi dans l'empreinte d'un moteur gardé ouvert.
     const userServers = await buildUserMcpServers()
@@ -975,8 +1055,8 @@ async function runQuery(
       const user = prebuilt ?? (await buildUserMcpServers())
       return {
         compi: createCompiServer(sdk, compiCtx),
-        // Routine : seulement les connecteurs dont un outil au moins est réglé sur « Toujours » (les autres seraient refusés).
-        ...(headless ? Object.fromEntries(Object.entries(user).filter(([key]) => usableInRoutine(key, s.alwaysAllow))) : user)
+        // Routine : seulement les connecteurs utilisables sans l’utilisateur (les autres seraient refusés).
+        ...(headless ? Object.fromEntries(Object.entries(user).filter(([key]) => routineServer(key))) : user)
       }
     }
     // Une fois les serveurs connectés, le moteur dit ce que chaque connecteur déclare de ses outils.
@@ -1147,6 +1227,7 @@ export async function runRoutineAgent(
   const s = settings.get()
   const conversationId = randomUUID()
   const brain = defaultBrain(s)
+  const grants = cleanGrants(r.allow)
   conversations.create(conversationId, `Routine · ${r.title}`, brain)
   onStart?.(conversationId)
   const userMessage: ChatMessage = { id: randomUUID(), role: 'user', text: r.prompt, createdAt: Date.now() }
@@ -1158,9 +1239,10 @@ export async function runRoutineAgent(
     conversations.patchMessage(conversationId, assistantMessage.id, (m) => (m.error = missing))
     return { conversationId, text: '', error: missing }
   }
-  const result = await runQuery(conversationId, assistantMessage.id, buildPrompt(r.prompt, [], settingsContext(brain)) + routineRules(), [], {
+  const result = await runQuery(conversationId, assistantMessage.id, buildPrompt(r.prompt, [], settingsContext(brain)) + routineRules(grants), [], {
     headless: true,
-    routine: r.title
+    routine: r.title,
+    grants
   })
   return { conversationId, ...result }
 }

@@ -151,6 +151,8 @@ export interface CompiToolContext {
   conversationTitle?: string
   /** Routine exécutée sans l'utilisateur : rien ne s'affiche dans l'îlot. */
   headless?: boolean
+  /** Routine : connecteurs utilisables (un outil sur « Toujours », ou recherche web permise à la routine). */
+  routineServer?: (key: string) => boolean
 }
 
 const text = (t: string): CallToolResult => ({ content: [{ type: 'text', text: t }] })
@@ -765,9 +767,9 @@ export function createCompiServer(sdk: SdkModule, ctx: CompiToolContext): Return
                 return fail(
                   `Aucun groupe ni extension « ${name} ». Groupes de Compi : ${groups.map((g) => g.name).join(', ')}.${servers.length ? ` Extensions branchées : ${servers.map((x) => x.name).join(', ')}.` : ''}`
                 )
-              if (ctx.headless && !usableInRoutine(s.key, settings.get().alwaysAllow))
+              if (ctx.headless && !(ctx.routineServer?.(s.key) ?? usableInRoutine(s.key, settings.get().alwaysAllow)))
                 return fail(
-                  `Dans une routine, l’extension ${s.name} n’est pas utilisable : aucun de ses outils n’est autorisé sans validation (réglage « Toujours »). Dis-le en une phrase dans ta réponse.`
+                  `Dans une routine, l’extension ${s.name} n’est pas utilisable : aucun de ses outils n’est autorisé sans validation (réglage « Toujours »), et ce n’est pas une recherche web permise à cette routine. Dis-le en une phrase dans ta réponse.`
                 )
               if (wanted?.length)
                 return text(

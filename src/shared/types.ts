@@ -474,6 +474,8 @@ export interface ApprovalLogEntry {
   outcome: ApprovalLogOutcome
   /** Règle enregistrée par « Toujours ». */
   rule?: string
+  /** Pourquoi une routine a été refusée (texte court). */
+  reason?: string
 }
 
 export interface QuestionOption {
@@ -1093,7 +1095,16 @@ export interface Routine {
   lastRun?: RoutineRun
   /** En cours d'exécution. */
   running?: boolean
+  /** Droits donnés à cette routine par l'utilisateur, en plus des règles habituelles. */
+  allow?: RoutineGrant[]
 }
+
+/**
+ * Droit d'une routine : « web » = chercher sur le web et lire des pages, même après
+ * l'agenda ou les e-mails ; « notes » = créer de nouveaux fichiers texte dans les dossiers
+ * confiés (jamais modifier un fichier existant).
+ */
+export type RoutineGrant = 'web' | 'notes'
 
 export interface RoutineDraft {
   id?: string
@@ -1101,6 +1112,8 @@ export interface RoutineDraft {
   prompt: string
   repeat: ReminderRepeat
   enabled?: boolean
+  /** Absent = garder les droits déjà donnés. */
+  allow?: RoutineGrant[]
 }
 
 /** Une entrée de l'historique du presse-papier. */

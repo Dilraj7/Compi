@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { cleanDraft, missedAction, ROUTINE_CATCH_UP_MS, routinePreview, routineRepeat, validRepeat } from '../src/shared/routines'
+import { cleanDraft, cleanGrants, missedAction, ROUTINE_CATCH_UP_MS, routinePreview, routineRepeat, validRepeat, webGrantCovers } from '../src/shared/routines'
 
 vi.mock('electron', () => ({ app: { getPath: () => '.' } }))
 
@@ -32,12 +32,35 @@ describe('routines : règles de répétition', () => {
 describe('routines : brouillon', () => {
   it('nettoie, trie les jours, donne un titre par défaut', () => {
     const d = cleanDraft({ title: '  ', prompt: '  Résume mes e-mails non lus importants ', repeat: { every: 'week', days: [5, 1, 5], time: '09:00' } })
-    expect(d).toEqual({ title: 'Résume mes e-mails non lus importants', prompt: 'Résume mes e-mails non lus importants', repeat: { every: 'week', days: [1, 5], time: '09:00' }, enabled: true })
+    expect(d).toEqual({
+      title: 'Résume mes e-mails non lus importants',
+      prompt: 'Résume mes e-mails non lus importants',
+      repeat: { every: 'week', days: [1, 5], time: '09:00' },
+      enabled: true
+    })
   })
 
   it('refuse une demande vide ou un moment invalide', () => {
     expect(() => cleanDraft({ title: 'x', prompt: ' ', repeat: { every: 'day', time: '09:00' } })).toThrow(/Dis-moi/)
     expect(() => cleanDraft({ title: 'x', prompt: 'ok', repeat: { every: 'day', time: '9h' } })).toThrow(/invalide/)
+  })
+
+  it('droits : gardés seulement s’ils sont donnés, nettoyés, sans doublon', () => {
+    const base = { title: 'x', prompt: 'ok', repeat: { every: 'day', time: '09:00' } } as const
+    expect(cleanDraft(base)).not.toHaveProperty('allow')
+    expect(cleanDraft({ ...base, allow: [] }).allow).toEqual([])
+    expect(cleanDraft({ ...base, allow: ['notes', 'web', 'notes', 'admin'] as never }).allow).toEqual(['web', 'notes'])
+    expect(cleanGrants('web')).toEqual([])
+    expect(cleanGrants(undefined)).toEqual([])
+  })
+
+  it('droit « web » : recherche et lecture de pages, connecteurs de recherche, rien d’autre', () => {
+    for (const t of ['WebSearch', 'WebFetch', 'mcp__compi__fetch_page', 'mcp__compi__web_search']) expect(webGrantCovers(t, [])).toBe(true)
+    expect(webGrantCovers('mcp__brave__brave_web_search', ['brave'])).toBe(true)
+    expect(webGrantCovers('mcp__brave__brave_web_search', [])).toBe(false)
+    expect(webGrantCovers('mcp__bravex__search', ['brave'])).toBe(false)
+    for (const t of ['mcp__compi__open_url', 'Bash', 'PowerShell', 'mcp__notion__notion-search', 'mcp__compi__write_text_file'])
+      expect(webGrantCovers(t, ['brave'])).toBe(false)
   })
 
   it('aperçu sans Markdown pour la notification', () => {

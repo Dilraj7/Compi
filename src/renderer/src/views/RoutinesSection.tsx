@@ -3,12 +3,12 @@
 
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { CircleAlert, CircleCheck, Pencil, Play, Plus, Repeat, Square, X } from 'lucide-react'
+import { CircleAlert, CircleCheck, FilePen, Globe, Pencil, Play, Plus, Repeat, Square, X } from 'lucide-react'
 import { brainLabel, defaultBrain } from '@shared/brains'
 import { repeatLabel } from '@shared/day'
 import { PRIVACY_CATEGORIES, type PrivacyCategory } from '@shared/privacy'
-import { ROUTINE_PROMPT_MAX, ROUTINE_TITLE_MAX } from '@shared/routines'
-import type { ReminderRepeat, Routine, RoutineDraft } from '@shared/types'
+import { cleanGrants, ROUTINE_GRANT_LABELS, ROUTINE_GRANTS, ROUTINE_PROMPT_MAX, ROUTINE_TITLE_MAX } from '@shared/routines'
+import type { ReminderRepeat, Routine, RoutineDraft, RoutineGrant } from '@shared/types'
 import { useCompi } from '../store'
 import { Button, cx, IconButton, LedDots, Segmented, TextArea, TextInput, timeAgo, Toggle } from '../components/ui'
 
@@ -33,8 +33,16 @@ const DAY_NAMES = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi'
 const ROUTINE_DATA: PrivacyCategory[] = ['mail', 'calendar', 'files', 'memory']
 
 const EXAMPLES: Array<{ title: string; prompt: string; repeat: ReminderRepeat }> = [
-  { title: 'Résumé des e-mails', prompt: 'Résume mes e-mails non lus importants en quelques lignes, et dis-moi lesquels attendent une réponse.', repeat: { every: 'weekdays', time: '08:30' } },
-  { title: 'Ma semaine', prompt: 'Prépare ma semaine : mes rendez-vous jour par jour, mes rappels, et ce qui demande de l’attention.', repeat: { every: 'week', days: [1], time: '08:00' } },
+  {
+    title: 'Résumé des e-mails',
+    prompt: 'Résume mes e-mails non lus importants en quelques lignes, et dis-moi lesquels attendent une réponse.',
+    repeat: { every: 'weekdays', time: '08:30' }
+  },
+  {
+    title: 'Ma semaine',
+    prompt: 'Prépare ma semaine : mes rendez-vous jour par jour, mes rappels, et ce qui demande de l’attention.',
+    repeat: { every: 'week', days: [1], time: '08:00' }
+  },
   { title: 'Demain', prompt: 'Qu’est-ce qui m’attend demain ? Agenda, météo et rappels, en bref.', repeat: { every: 'day', time: '19:00' } }
 ]
 
@@ -47,11 +55,12 @@ interface Draft {
   days: number[]
   day: number
   enabled?: boolean
+  allow: RoutineGrant[]
 }
 
-const emptyDraft = (): Draft => ({ title: '', prompt: '', kind: 'weekdays', time: '08:30', days: [1], day: 1 })
+const emptyDraft = (): Draft => ({ title: '', prompt: '', kind: 'weekdays', time: '08:30', days: [1], day: 1, allow: [] })
 
-function toDraft(r: { id?: string; title: string; prompt: string; repeat: ReminderRepeat; enabled?: boolean }): Draft {
+function toDraft(r: { id?: string; title: string; prompt: string; repeat: ReminderRepeat; enabled?: boolean; allow?: RoutineGrant[] }): Draft {
   const rep = r.repeat
   return {
     id: r.id,
@@ -61,7 +70,8 @@ function toDraft(r: { id?: string; title: string; prompt: string; repeat: Remind
     time: rep.time,
     days: rep.every === 'week' ? rep.days : [1],
     day: rep.every === 'month' ? rep.day : 1,
-    enabled: r.enabled
+    enabled: r.enabled,
+    allow: cleanGrants(r.allow)
   }
 }
 
@@ -78,6 +88,12 @@ function repeatOf(d: Draft): ReminderRepeat {
 
 const cleanError = (e: unknown): string => (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 
+/** Ce que chaque droit permet, dit honnêtement. */
+const GRANT_HINTS: Record<RoutineGrant, string> = {
+  web: 'Même après avoir lu ton agenda, tes e-mails ou tes tâches : les mots cherchés peuvent alors reprendre ce qu’elle a lu.',
+  notes: 'Nouveaux fichiers .md ou .txt seulement : jamais modifier ni remplacer un fichier existant.'
+}
+
 function RoutineForm({ initial, onDone }: { initial: Draft; onDone: () => void }) {
   const [d, setD] = useState<Draft>(initial)
   const [error, setError] = useState<string | null>(null)
@@ -87,7 +103,14 @@ function RoutineForm({ initial, onDone }: { initial: Draft; onDone: () => void }
   }
 
   const save = async (): Promise<void> => {
-    const draft: RoutineDraft = { ...(d.id ? { id: d.id } : {}), title: d.title, prompt: d.prompt, repeat: repeatOf(d), enabled: d.enabled ?? true }
+    const draft: RoutineDraft = {
+      ...(d.id ? { id: d.id } : {}),
+      title: d.title,
+      prompt: d.prompt,
+      repeat: repeatOf(d),
+      enabled: d.enabled ?? true,
+      allow: d.allow
+    }
     try {
       await window.compi.saveRoutine(draft)
       onDone()
@@ -163,6 +186,22 @@ function RoutineForm({ initial, onDone }: { initial: Draft; onDone: () => void }
             <TextInput type="time" className="w-28 [color-scheme:dark]" value={d.time} onChange={(e) => e.target.value && set({ time: e.target.value })} />
           </label>
         </div>
+        <div className="space-y-1.5 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-inset ring-white/[0.05]">
+          <div className="text-[11px] text-fog-500">Elle tournera sans toi. En plus des données réglées sur « Toujours », tu lui permets :</div>
+          {ROUTINE_GRANTS.map((g) => (
+            <div key={g} className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-fog-100">{ROUTINE_GRANT_LABELS[g]}</div>
+                <div className="text-[10.5px] leading-snug text-fog-500">{GRANT_HINTS[g]}</div>
+              </div>
+              <Toggle
+                checked={d.allow.includes(g)}
+                label={ROUTINE_GRANT_LABELS[g]}
+                onChange={(on) => set({ allow: on ? [...d.allow, g] : d.allow.filter((x) => x !== g) })}
+              />
+            </div>
+          ))}
+        </div>
         {error && <div className="text-[11.5px] text-led-amber">{error}</div>}
         <div className="flex items-center gap-1.5">
           <Button size="sm" variant="primary" accent={COLOR} disabled={!d.prompt.trim() || (d.kind === 'week' && !d.days.length)} onClick={() => void save()}>
@@ -197,9 +236,22 @@ function RoutineRow({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   return (
     <div className={cx('group flex items-center gap-3 px-3.5 py-2.5 [&+&]:border-t [&+&]:border-white/[0.05]', !r.enabled && 'opacity-55')}>
       <div className="w-[52px] shrink-0 text-right text-[12px] text-fog-100 tabular-nums">
-        {r.running ? <LedDots color={COLOR} /> : r.enabled ? (today ? TIME.format(next) : SHORT_DAY.format(next)) : <span className="text-[11px] text-fog-500">pause</span>}
+        {r.running ? (
+          <LedDots color={COLOR} />
+        ) : r.enabled ? (
+          today ? (
+            TIME.format(next)
+          ) : (
+            SHORT_DAY.format(next)
+          )
+        ) : (
+          <span className="text-[11px] text-fog-500">pause</span>
+        )}
       </div>
-      <span className="h-8 w-[3px] shrink-0 rounded-full" style={{ background: r.running ? COLOR : 'rgb(255 255 255 / 0.12)', boxShadow: r.running ? `0 0 8px ${COLOR}` : undefined }} />
+      <span
+        className="h-8 w-[3px] shrink-0 rounded-full"
+        style={{ background: r.running ? COLOR : 'rgb(255 255 255 / 0.12)', boxShadow: r.running ? `0 0 8px ${COLOR}` : undefined }}
+      />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[12.5px] text-fog-100" title={r.prompt}>
           {r.title}
@@ -207,14 +259,23 @@ function RoutineRow({ r, onEdit }: { r: Routine; onEdit: () => void }) {
         <div className="flex min-w-0 items-center gap-1 text-[11px] text-fog-500">
           <Repeat size={10} className="shrink-0" />
           <span className="truncate">{r.running ? 'En cours…' : repeatLabel(r.repeat)}</span>
+          {!r.running && r.allow?.includes('web') && (
+            <span title={ROUTINE_GRANT_LABELS.web}>
+              <Globe size={10} className="shrink-0" />
+            </span>
+          )}
+          {!r.running && r.allow?.includes('notes') && (
+            <span title={ROUTINE_GRANT_LABELS.notes}>
+              <FilePen size={10} className="shrink-0" />
+            </span>
+          )}
           {r.lastRun && !r.running && (
             <button
               className={cx('flex shrink-0 items-center gap-1 truncate', r.lastRun.conversationId && 'hover:text-fog-100')}
               title={r.lastRun.ok ? r.lastRun.preview : r.lastRun.error}
               onClick={openRun}
             >
-              ·{' '}
-              {r.lastRun.ok ? <CircleCheck size={10} className="text-led-green" /> : <CircleAlert size={10} className="text-led-amber" />}
+              · {r.lastRun.ok ? <CircleCheck size={10} className="text-led-green" /> : <CircleAlert size={10} className="text-led-amber" />}
               {timeAgo(r.lastRun.at)}
             </button>
           )}
@@ -293,7 +354,8 @@ export function RoutinesSection() {
         {(form || routines.length > 0) && (
           <div className="space-y-1 border-t border-white/[0.05] bg-white/[0.015] px-3.5 py-2 text-[11px] leading-snug text-fog-500">
             <div>
-              Je les fais seul avec {label} : je lis ce qui est autorisé, je n’agis jamais (pas de brouillon, pas de rendez-vous) et je te dis ce qu’il faudrait faire.
+              Je les fais seul avec {label} : je lis ce qui est autorisé, je n’agis jamais (pas de brouillon, pas de rendez-vous) et je te dis ce qu’il faudrait
+              faire.
             </div>
             {brain.provider !== 'local' && missing.length > 0 && (
               <div className="text-led-amber/90">

@@ -29,7 +29,7 @@ Compi vit dans un « îlot » noir collé en haut de l'écran, à la manière du
 - **Parle-lui** : ta voix est transcrite sur ton PC, jamais envoyée. Il peut aussi te répondre à voix haute, avec la voix de Windows ou une voix naturelle calculée sur ton PC, puis t'écouter pour la suite, sans toucher au clavier (conversation vocale, en option).
 - **Tes documents** : PDF (même scannés), Word, Excel, et une recherche qui comprend le sens.
 - **Connecteurs en un clic** : Notion, Todoist, Linear, Jira… Et tes sessions Claude Code, pilotées depuis l'îlot.
-- **Routines et mémoire** : « chaque lundi à 9 h, résume mes e-mails », et ce qu'il sait de toi, que tu lis et corriges.
+- **Routines et mémoire** : « chaque lundi à 9 h, résume mes e-mails », avec des droits choisis pour chaque routine (chercher sur le web, créer des notes), et ce qu'il sait de toi, que tu lis et corriges.
 - **Un îlot vivant** : musique en cours, minuteur, alerte avant chaque réunion, et en option sa préparation : qui sera là, vos derniers e-mails, les tâches de la fois d'avant.
 - **Plein écran** (`Alt + Maj + Entrée`) : ta journée, la discussion et ce qui t'attend sur tout l'écran. La taille du texte se règle à part pour l'encoche et pour le plein écran (`Ctrl +`, `Ctrl −`, ou Ctrl + molette).
 

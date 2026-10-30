@@ -3,11 +3,12 @@
 
 import { z } from 'zod'
 import { repeatLabel } from '../../shared/day'
-import { DAY_NAMES, REPEAT_KINDS, routineRepeat } from '../../shared/routines'
+import { DAY_NAMES, REPEAT_KINDS, ROUTINE_GRANTS, routineRepeat } from '../../shared/routines'
 import { deleteRoutine, formatRoutines, listRoutines, saveRoutine } from '../routines/store'
+import type { RoutineGrant } from '../../shared/types'
 import type { ToolHelpers } from './dayTools'
 
-type ToolFn = typeof import('@anthropic-ai/claude-agent-sdk')['tool']
+type ToolFn = (typeof import('@anthropic-ai/claude-agent-sdk'))['tool']
 
 const compi = (t: string): string => `mcp__compi__${t}`
 
@@ -19,19 +20,28 @@ export function routineTools(tool: ToolFn, h: Pick<ToolHelpers, 'text' | 'fail'>
   return [
     tool(
       'routine_create',
-      "Crée une routine : une demande que tu exécuteras seul, à heure fixe et de façon répétée (« chaque lundi à 9 h, résume mes e-mails »). Pendant une routine, personne ne peut valider d'action : seules les lectures autorisées marchent. Une carte demande l'accord de l'utilisateur. Pour une simple notification, utilise plutôt reminder_create.",
+      "Crée une routine : une demande que tu exécuteras seul, à heure fixe et de façon répétée (« chaque lundi à 9 h, résume mes e-mails »). Pendant une routine, personne ne peut valider d'action : seules les lectures autorisées marchent, plus ce que l'utilisateur lui permet avec allow (web : chercher sur le web et lire des pages ; notes : créer de nouvelles notes dans ses dossiers confiés). Ne mets allow que si la demande en a besoin. Une carte demande l'accord de l'utilisateur. Pour une simple notification, utilise plutôt reminder_create.",
       {
         title: z.string().describe('Nom court, ex. « Résumé des e-mails »'),
         prompt: z.string().describe('Ce que tu devras faire, formulé comme une demande autonome'),
         repeat: z.enum(REPEAT_KINDS),
-        time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).describe('Heure locale HH:MM'),
+        time: z
+          .string()
+          .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+          .describe('Heure locale HH:MM'),
         days: z.array(z.enum(DAY_NAMES)).optional().describe('Jours pour chaque_semaine, ex. ["lundi"]'),
-        day_of_month: z.number().int().min(1).max(31).optional().describe('Jour pour chaque_mois')
+        day_of_month: z.number().int().min(1).max(31).optional().describe('Jour pour chaque_mois'),
+        allow: z
+          .array(z.enum(ROUTINE_GRANTS as [RoutineGrant, ...RoutineGrant[]]))
+          .optional()
+          .describe('Droits en plus, seulement si la demande en a besoin : web, notes')
       },
-      async ({ title, prompt, repeat, time, days, day_of_month }) => {
+      async ({ title, prompt, repeat, time, days, day_of_month, allow }) => {
         try {
-          const r = saveRoutine({ title, prompt, repeat: routineRepeat(repeat, time, days, day_of_month) })
-          return h.text(`Routine créée : « ${r.title} », ${repeatLabel(r.repeat)}. Prochaine exécution : ${fmt.format(new Date(r.nextAt))}. L'utilisateur la retrouve dans Aujourd'hui.`)
+          const r = saveRoutine({ title, prompt, repeat: routineRepeat(repeat, time, days, day_of_month), allow: allow ?? [] })
+          return h.text(
+            `Routine créée : « ${r.title} », ${repeatLabel(r.repeat)}. Prochaine exécution : ${fmt.format(new Date(r.nextAt))}. L'utilisateur la retrouve dans Aujourd'hui.`
+          )
         } catch (e) {
           return h.fail((e as Error).message)
         }

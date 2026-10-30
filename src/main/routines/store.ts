@@ -60,6 +60,10 @@ export function saveRoutine(d: RoutineDraft): Routine {
     if (!r) throw new Error('Routine introuvable.')
     const timing = JSON.stringify(r.repeat) !== JSON.stringify(clean.repeat) || r.enabled !== clean.enabled
     Object.assign(r, { title: clean.title, prompt: clean.prompt, repeat: clean.repeat, enabled: clean.enabled ?? true })
+    if (clean.allow) {
+      if (clean.allow.length) r.allow = clean.allow
+      else delete r.allow
+    }
     if (timing) r.nextAt = nextOccurrence(r.repeat, now)
     persist(list)
     schedule(r)
@@ -73,7 +77,8 @@ export function saveRoutine(d: RoutineDraft): Routine {
     repeat: clean.repeat,
     enabled: true,
     nextAt: nextOccurrence(clean.repeat, now),
-    createdAt: now
+    createdAt: now,
+    ...(clean.allow?.length ? { allow: clean.allow } : {})
   }
   persist([...list, r])
   schedule(r)
