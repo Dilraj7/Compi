@@ -41,6 +41,14 @@ export function nextOccurrence(repeat: ReminderRepeat, after: number): number {
 
 const file = (): string => join(app.getPath('userData'), 'reminders.json')
 const timers = new Map<string, NodeJS.Timeout>()
+/** Rappels qui ont sonné dans les dernières 24 h (« Ce que tu as manqué »), en mémoire seulement. */
+let fired: Array<{ message: string; at: number }> = []
+
+export function firedReminders(): Array<{ message: string; at: number }> {
+  const since = Date.now() - 24 * 3600_000
+  fired = fired.filter((f) => f.at >= since)
+  return fired
+}
 
 const load = (): Reminder[] => readJson<Reminder[]>(file(), [])
 
@@ -58,6 +66,7 @@ function fire(id: string, late = false): void {
   if (!r) return
   const text = late ? `${r.message} (prévu à ${new Date(r.dueAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})` : r.message
   new Notification({ title: 'Rappel de Compi', body: text, silent: toastSilent() }).show()
+  fired = [...firedReminders(), { message: r.message, at: Date.now() }]
   emit(IPC.islandNotify, { pill: 'reminder', text, duration: 12_000, view: 'today' })
   if (r.repeat) {
     r.dueAt = nextOccurrence(r.repeat, Date.now())

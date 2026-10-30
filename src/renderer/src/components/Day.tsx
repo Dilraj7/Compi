@@ -3,10 +3,11 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { ClipboardList, ExternalLink, MessageSquareText, Pause, Play, Repeat, Timer, Video, X } from 'lucide-react'
+import { BellRing, ClipboardList, ExternalLink, Mail, MessageSquareText, Pause, Play, Repeat, Timer, Undo2, Video, X } from 'lucide-react'
 import { gmailWebUrl, repeatLabel, senderName } from '@shared/day'
 import { attendeeLabel, eventLink, isPreparable, prepKey, PREP_MAIL_DAYS } from '@shared/meetingPrep'
 import { groupLabel, groupPending, waitingFor } from '@shared/messages'
+import { causeLabel, missedCounts, type MissedInfo } from '@shared/missed'
 import { formatClock } from '@shared/media'
 import { remainingMs, timerTitle } from '@shared/timer'
 import type { DayEvent, MeetingPrep, MessagesStatus, Reminder, TodayInfo } from '@shared/types'
@@ -387,6 +388,96 @@ export function UnreadRows({ today, email }: { today: TodayInfo | null; email: s
         </button>
       ))}
     </>
+  )
+}
+
+/** Petit titre d'une partie de la carte « Ce que tu as manqué ». */
+function MissedPart({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 border-t border-white/[0.05] px-3.5 pt-2.5 pb-1 text-[11px] text-fog-500 first:border-t-0">
+      {icon} {label}
+    </div>
+  )
+}
+
+/**
+ * « Ce que tu as manqué » : après une concentration, une réunion ou une absence, ce qui
+ * est arrivé pendant ce temps (messages, e-mails, rappels). Rien si aucune carte.
+ */
+export function MissedBlock() {
+  const email = useCompi((s) => s.settings?.google.email ?? '')
+  const [info, setInfo] = useState<MissedInfo | null>(null)
+  useEffect(() => {
+    void window.compi.missed().then(setInfo)
+    return window.compi.onMissed(setInfo)
+  }, [])
+  if (!info) return null
+  const c = missedCounts(info)
+  const span = `${TIME.format(new Date(info.from))}–${TIME.format(new Date(info.to))}`
+  return (
+    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} data-missed>
+      <Block
+        icon={<Undo2 size={12} />}
+        title="Ce que tu as manqué"
+        extra={
+          <IconButton label="Fermer" onClick={() => void window.compi.dismissMissed()}>
+            <X size={13} />
+          </IconButton>
+        }
+      >
+        <div className="px-3.5 pt-2.5 pb-1 text-[12px] text-fog-300">
+          {causeLabel(info.cause)}
+          {info.title ? ` « ${info.title} »` : ''} <span className="text-fog-500">· {span}</span>
+        </div>
+        {c.messages > 0 && (
+          <>
+            <MissedPart icon={<MessageSquareText size={11} />} label={c.messages > 1 ? `${c.messages} messages` : '1 message'} />
+            {groupPending(info.messages).map((g) => (
+              <div key={g.keys[0]} className="flex items-center gap-3 px-3.5 py-1.5">
+                <span className="min-w-0 flex-1 truncate text-[12px] text-fog-100">
+                  {groupLabel(g)} <span className="text-fog-500">· {g.app}</span>
+                </span>
+                <Button size="sm" variant="ghost" onClick={() => void window.compi.openMessage(g.keys[0])}>
+                  <ExternalLink size={12} /> Ouvrir
+                </Button>
+              </div>
+            ))}
+          </>
+        )}
+        {info.mails && c.mails > 0 && (
+          <>
+            <MissedPart
+              icon={<Mail size={11} />}
+              label={`${c.mails > 1 ? `${c.mails} e-mails non lus` : '1 e-mail non lu'}${c.mails > info.mails.length ? ` · les ${info.mails.length} premiers` : ''}`}
+            />
+            {info.mails.map((m) => (
+              <button
+                key={m.id}
+                className="flex w-full items-center gap-3 px-3.5 py-1.5 text-left transition-colors hover:bg-white/[0.03]"
+                onClick={() => void window.compi.openExternal(gmailWebUrl(email, { messageId: m.id }))}
+              >
+                <span className={cx('size-1.5 shrink-0 rounded-full', m.important ? 'bg-led-amber' : 'bg-[#4C8DF6]')} />
+                <span className="w-28 shrink-0 truncate text-[12px] text-fog-100">{senderName(m.from)}</span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-fog-500">{m.subject}</span>
+              </button>
+            ))}
+          </>
+        )}
+        {c.reminders > 0 && (
+          <>
+            <MissedPart icon={<BellRing size={11} />} label={c.reminders > 1 ? `${c.reminders} rappels ont sonné` : '1 rappel a sonné'} />
+            {info.reminders.map((r, i) => (
+              <div key={i} className="flex items-center gap-3 px-3.5 py-1.5 text-[12px]">
+                <span className="min-w-0 flex-1 truncate text-fog-100">{r.message}</span>
+                <span className="shrink-0 text-[11px] text-fog-500">{TIME.format(new Date(r.at))}</span>
+              </div>
+            ))}
+          </>
+        )}
+        {info.mailError && <div className="px-3.5 py-1.5 text-[11.5px] text-led-amber">Gmail : {info.mailError}</div>}
+        <div className="h-1.5" />
+      </Block>
+    </motion.div>
   )
 }
 

@@ -5,7 +5,7 @@ import { motion } from 'motion/react'
 import { BellRing, CalendarDays, CloudSun, Mail, MessageCircle, RefreshCw } from 'lucide-react'
 import { useCompi } from '../store'
 import { Button, IconButton, LedDots } from '../components/ui'
-import { Block, dayTitle, Empty, EventRow, MessagesBlock, ReminderRow, TimerBlock, UnreadRows, useToday } from '../components/Day'
+import { Block, dayTitle, Empty, EventRow, MessagesBlock, MissedBlock, ReminderRow, TimerBlock, UnreadRows, useToday } from '../components/Day'
 import { TasksBlock } from '../components/Tasks'
 import { RoutinesSection } from './RoutinesSection'
 
@@ -64,6 +64,8 @@ export function TodayView() {
           </IconButton>
         </div>
       </div>
+
+      <MissedBlock />
 
       {!agenda && !google.mail && !loading && (
         <motion.div

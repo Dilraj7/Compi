@@ -13,7 +13,7 @@ import { useMood } from '../mascot/useMood'
 import { CompiTitle, PanelBody, PanelNav } from './Panel'
 import { CallBanner } from './CallLive'
 import { PendingRequests } from './Cards'
-import { Block, dayTitle, Empty, MessagesBlock, ReminderRow, Timeline, TIME, TimerBlock, UnreadRows, useToday } from './Day'
+import { Block, dayTitle, Empty, MessagesBlock, MissedBlock, ReminderRow, Timeline, TIME, TimerBlock, UnreadRows, useToday } from './Day'
 import { GAUGE_COLOR, perfLevels } from './Gauges'
 import { MediaPeek, useNow } from './Live'
 import { TasksBlock } from './Tasks'
@@ -140,6 +140,8 @@ function DayColumn() {
           </IconButton>
         </div>
       </div>
+
+      <MissedBlock />
 
       <Block icon={<CalendarDays size={12} />} title="Agenda">
         {!agenda ? (

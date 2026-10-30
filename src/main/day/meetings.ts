@@ -88,10 +88,13 @@ function meetingEnded(e: DayEvent): void {
   pcEvents.emit('meeting-end', { key, title: e.title, start: e.start, end: e.end })
 }
 
-/** Le suivi de l'agenda sert à quelque chose : alertes, préparation ou routine « fin de rendez-vous ». */
+/** Fins de réunion suivies : routine « fin de rendez-vous » ou « Ce que tu as manqué ». */
+const followEnds = (): boolean => settings.get().day.missed || wantsTrigger('meeting-end')
+
+/** Le suivi de l'agenda sert à quelque chose : alertes, préparation, fins de réunion. */
 const watching = (): boolean => {
   const s = settings.get()
-  return agendaActive() && (s.day.meetingAlerts || s.day.meetingPrep || wantsTrigger('meeting-end'))
+  return agendaActive() && (s.day.meetingAlerts || s.day.meetingPrep || followEnds())
 }
 
 /** Prochaines réunions → minuteurs (pur dans son calcul : testé via `alertDelay`). */
@@ -106,7 +109,7 @@ export function alertDelay(e: DayEvent, minutesBefore: number, now = Date.now())
 async function refresh(): Promise<void> {
   const s = settings.get()
   if (!watching()) return
-  const endings = wantsTrigger('meeting-end')
+  const endings = followEnds()
   const now = Date.now()
   const r = await agendaEvents({ from: new Date(now - 60_000), to: new Date(now + 3 * 3600_000) })
   // Connexion Google perdue et aucune autre source : on arrête (l'interface propose de se reconnecter).

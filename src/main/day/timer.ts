@@ -9,6 +9,7 @@ import { IPC } from '../../shared/ipc'
 import type { TimerState } from '../../shared/types'
 import { newPomodoro, newTimer, paused, pomodoroNext, remainingMs, resumed, timerEndText } from '../../shared/timer'
 import { emit } from '../bus'
+import { events } from '../events'
 import { readJson, writeJson } from '../store/jsonFile'
 import { toastSilent } from '../store/settings'
 
@@ -41,6 +42,9 @@ function finish(): void {
     return
   }
   const next = pomodoroNext(t, Date.now())
+  // Avant le changement de phase : les messages arrivés pendant la concentration sont
+  // résumés une fois, au lieu d'être rappelés un par un dès la fin.
+  if (t.pomodoro?.phase === 'focus') events.emit('focus-end', { from: t.endsAt - t.durationMs, to: t.endsAt })
   announce(timerEndText(t, next))
   set(next)
 }

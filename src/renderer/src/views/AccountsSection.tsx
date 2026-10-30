@@ -287,6 +287,12 @@ export function DaySection({ s, apply, update }: Props) {
           <Toggle checked={d.meetingPrep} onChange={(meetingPrep) => update({ day: { ...d, meetingPrep } })} label="Préparer mes réunions" />
         </div>
       </Row>
+      <Row
+        label="Ce que tu as manqué"
+        hint="Après un pomodoro, une réunion ou une absence : les messages, e-mails et rappels arrivés pendant ce temps. Tout reste sur ton PC ; l’îlot ne montre que des nombres."
+      >
+        <Toggle checked={d.missed} onChange={(missed) => update({ day: { ...d, missed } })} label="Ce que tu as manqué" />
+      </Row>
     </Section>
   )
 }

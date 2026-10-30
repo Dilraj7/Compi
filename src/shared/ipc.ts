@@ -118,6 +118,9 @@ export const IPC = {
   agendaRemove: 'agenda:remove',
   // ta journée
   todayGet: 'day:today',
+  missedGet: 'day:missed',
+  missedDismiss: 'day:missed-dismiss',
+  missedChanged: 'day:missed-changed',
   setCity: 'day:set-city',
   remindersList: 'day:reminders',
   remindersChanged: 'day:reminders-changed',

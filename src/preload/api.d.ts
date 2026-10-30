@@ -73,6 +73,7 @@ import type { ClaudeCodeUsage, CompiUsageRow } from '../shared/usage'
 import type { PerfSnapshot } from '../shared/perf'
 import type { OllamaFolder } from '../shared/ollamaFolder'
 import type { PillId } from '../shared/pills'
+import type { MissedInfo } from '../shared/missed'
 import type { SoundKind } from '../shared/sounds'
 
 export type Unsubscribe = () => void
@@ -212,6 +213,10 @@ export interface CompiApi {
 
   today(): Promise<TodayInfo>
   /** Tâches Google à faire, toutes listes (dans l'ordre d'affichage). */
+  /** « Ce que tu as manqué » : la dernière carte, tant qu'elle n'est pas fermée. */
+  missed(): Promise<MissedInfo | null>
+  dismissMissed(): Promise<void>
+  onMissed(cb: (info: MissedInfo | null) => void): Unsubscribe
   tasks(): Promise<TasksInfo>
   /** Clic de l'utilisateur : cocher ou décocher une tâche. */
   setTaskDone(listId: string, id: string, done: boolean): Promise<TaskItem | null>

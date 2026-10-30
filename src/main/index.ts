@@ -33,6 +33,7 @@ import { undoEdit } from './agent/textTools'
 import { normalizeWorkspaceId } from './agent/errors'
 import { cancelReminder, listReminders, restoreReminders, snoozeReminder } from './day/reminders'
 import { inMeeting, startMeetings, stopMeetings } from './day/meetings'
+import { dismissMissed, getMissed, startMissed } from './day/missed'
 import { getTimer, pauseTimer, restoreTimer, resumeTimer, startPomodoro, startTimer, stopTimer, stopTimers } from './day/timer'
 import { buildToday, startMorning } from './day/today'
 import { addSource, agendaTools, calendarChoices, previewSource, removeSource, setGoogleCalendars, updateSource } from './day/agenda'
@@ -210,6 +211,7 @@ function cleanDay(d: Partial<DaySettings>): Partial<DaySettings> {
   if (typeof d.meetingMinutes === 'number' && d.meetingMinutes >= 0 && d.meetingMinutes <= 60) out.meetingMinutes = Math.round(d.meetingMinutes)
   if (typeof d.meetingPrep === 'boolean') out.meetingPrep = d.meetingPrep
   if (typeof d.prepMinutes === 'number' && d.prepMinutes >= 5 && d.prepMinutes <= 60) out.prepMinutes = Math.round(d.prepMinutes)
+  if (typeof d.missed === 'boolean') out.missed = d.missed
   return out
 }
 
@@ -446,9 +448,11 @@ function registerIpc(): void {
       (dayBefore.meetingAlerts !== dayAfter.meetingAlerts ||
         dayBefore.meetingMinutes !== dayAfter.meetingMinutes ||
         dayBefore.meetingPrep !== dayAfter.meetingPrep ||
-        dayBefore.prepMinutes !== dayAfter.prepMinutes)
+        dayBefore.prepMinutes !== dayAfter.prepMinutes ||
+        dayBefore.missed !== dayAfter.missed)
     )
       startMeetings()
+    if (patch.day && !dayAfter.missed && getMissed()) dismissMissed()
     if (patch.showMusic !== undefined) syncMedia()
     if (patch.clipboardHistory !== undefined) syncClipboardHistory()
     if (patch.messages) syncMessages()
@@ -788,6 +792,8 @@ function registerIpc(): void {
 
   // Ta journée
   ipcMain.handle(IPC.todayGet, () => buildToday())
+  ipcMain.handle(IPC.missedGet, () => getMissed())
+  ipcMain.handle(IPC.missedDismiss, () => dismissMissed())
   ipcMain.handle(IPC.setCity, async (_e, name: string) => {
     if (!name?.trim()) {
       settings.update({ day: { ...settings.get().day, city: '', cityLat: undefined, cityLon: undefined } })
@@ -1073,6 +1079,8 @@ app.whenReady().then(async () => {
   // Routines sur événement : retour devant le PC, fin d'un rendez-vous, nouveau message.
   startRoutineTriggers()
   startPresenceEvents()
+  // Ce que tu as manqué : fin d'une concentration, d'une réunion, retour d'absence.
+  startMissed()
   let followMeetingEnds = wantsTrigger('meeting-end')
   events.on('routines-changed', () => {
     const wanted = wantsTrigger('meeting-end')

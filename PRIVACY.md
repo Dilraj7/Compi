@@ -119,6 +119,16 @@ Désactivé par défaut (Réglages › Journée › Ta journée). Tout se calcul
 - **La fois d'avant** : la réunion enregistrée la plus récente avec eux, et ses tâches, prises dans tes appels déjà enregistrés.
 - **« Enregistrer »** depuis la préparation relie l'appel au rendez-vous : `meetings\` garde alors aussi son titre, son horaire, sa série et les adresses des participants (pas leurs noms), pour retrouver la fois d'avant.
 
+## Ce que tu as manqué
+
+Activé par défaut, et tu peux le couper (Réglages › Journée › Ta journée). À la fin d'un pomodoro (concentration de 15 min ou plus), d'une réunion de ton agenda ou d'une absence de 30 min ou plus, une carte résume ce qui est arrivé pendant ce temps. Une absence qui passe 5 h du matin est laissée au résumé du matin. Tout se calcule sur ton PC, sans cerveau.
+
+- **Messages en attente** : ceux que Compi suit déjà (application, expéditeur, heure), seulement si Messages est activé. Ils comptent ensuite comme rappelés, pour ne pas te les signaler une deuxième fois.
+- **E-mails non lus** : une seule recherche dans Gmail à la fin de la période, seulement si tu as autorisé Gmail, avec l'heure de début comme seul critère ajouté. La carte n'affiche que l'expéditeur et le sujet (5 au plus).
+- **Rappels qui ont sonné** : gardés en mémoire 24 h, jamais écrits sur le disque.
+- **L'îlot**, visible de tous, ne montre que des nombres (« Pendant ta réunion : 3 messages · 2 e-mails »). Les noms et les sujets ne sont que dans la carte, dans Aujourd'hui et le plein écran.
+- La carte reste en mémoire jusqu'à ce que tu la fermes ou que Compi s'arrête. Rien n'est enregistré.
+
 ## Tâches Google
 
 Désactivées tant que tu ne les ajoutes pas (Réglages › Journée › Comptes › « Ajouter les tâches »). Google demande alors ton accord pour l'accès à tes tâches.

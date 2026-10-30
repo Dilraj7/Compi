@@ -49,6 +49,7 @@ import type {
   VoiceModelStatus,
   VoiceVariant
 } from '@shared/types'
+import type { MissedInfo } from '@shared/missed'
 import { VOICE_MODELS } from '@shared/voice'
 import { addDictation, DEFAULT_DICTATION } from '@shared/dictation'
 import { DEFAULT_MEETINGS, defaultMeetingTitle, nameVoice } from '@shared/meetings'
@@ -176,6 +177,30 @@ function demoCompiUsage(): CompiUsageRow[] {
     if (d % 2 === 0) out.push({ day: key, brain: 'Sur ce PC · gemma4:12b', provider: 'local', replies: 2 + (d % 3), costUsd: 0, input: 20_000, output: 2_000 })
   }
   return out
+}
+
+/** Carte « Ce que tu as manqué » de démonstration : la réunion d'Alex vient de finir. */
+function demoMissed(): MissedInfo {
+  const now = Date.now()
+  const min = 60_000
+  return {
+    cause: 'meeting',
+    title: 'Point équipe',
+    from: now - 61 * min,
+    to: now - min,
+    at: now,
+    messages: [
+      { key: 'phone:41', appKey: 'phone', app: 'Mobile connecté', sender: 'Maman', at: now - 48 * min },
+      { key: 'whatsapp:7', appKey: 'whatsapp', app: 'WhatsApp', sender: 'Paul', at: now - 30 * min },
+      { key: 'whatsapp:8', appKey: 'whatsapp', app: 'WhatsApp', sender: 'Paul', at: now - 29 * min }
+    ],
+    mails: [
+      { id: 'm9a8b7c6', from: 'Claire Martin <claire@exemple.fr>', subject: 'Compte rendu à relire avant 17 h', important: true },
+      { id: 'm8b7c6d5', from: 'Banque <info@banque.fr>', subject: 'Votre relevé est disponible', important: false }
+    ],
+    mailTotal: 2,
+    reminders: [{ message: 'Appeler le garage', at: now - 20 * min }]
+  }
 }
 
 function channel<T>() {
@@ -378,7 +403,8 @@ export function createMockApi(): CompiApi {
       meetingMinutes: 5,
       // ?prep=on : « Préparer mes réunions » activé (participants, e-mails, fois d'avant).
       meetingPrep: params.get('prep') === 'on',
-      prepMinutes: 10
+      prepMinutes: 10,
+      missed: true
     },
     showMusic: true,
     // ?tts=natural : la voix naturelle choisie et téléchargée (l'aperçu lit en silence).
@@ -556,6 +582,9 @@ export function createMockApi(): CompiApi {
     { id: 'r2', message: 'Sortir les poubelles', dueAt: Date.now() + 26 * 3600_000, repeat: { every: 'week', days: [1, 4], time: '19:30' } }
   ]
   const remindersCh = channel<Reminder[]>()
+  // « Ce que tu as manqué » de démonstration (?missed=on) : une réunion qui vient de finir.
+  let missed: MissedInfo | null = new URLSearchParams(location.search).get('missed') === 'on' ? demoMissed() : null
+  const missedCh = channel<MissedInfo | null>()
   // Tâches Google de démonstration (?tasks=on) : deux listes, retards, aujourd'hui, plus tard, sans date.
   const tasksCh = channel<void>()
   const dayIn = (n: number): string => addDays(localDay(new Date()), n)
@@ -1326,6 +1355,12 @@ export function createMockApi(): CompiApi {
       await new Promise((r) => setTimeout(r, 400))
       return demoToday()
     },
+    missed: async () => missed,
+    dismissMissed: async () => {
+      missed = null
+      missedCh.emit(null)
+    },
+    onMissed: missedCh.on,
     agendaGoogleCalendars: async () => {
       await new Promise((r) => setTimeout(r, 300))
       const chosen = settings.agenda.googleCalendars

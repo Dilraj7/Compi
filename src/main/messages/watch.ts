@@ -124,9 +124,13 @@ async function checkHealth(): Promise<boolean> {
   return JSON.stringify(health) !== before
 }
 
+/** Une réunion vient de finir : « Ce que tu as manqué » la résume (1 min après la fin) avant tout rappel. */
+const JUST_ENDED_MS = 90_000
+
 const busy = (): boolean => {
   const t = getTimer()
-  return Boolean(t?.pomodoro?.phase === 'focus' && t.endsAt) || inMeeting()
+  if (t?.pomodoro?.phase === 'focus' && t.endsAt) return true
+  return inMeeting() || (settings.get().day.missed && inMeeting(Date.now() - JUST_ENDED_MS))
 }
 
 function saveMarks(): void {
@@ -324,6 +328,24 @@ export function recentMessages(q: { app?: string; sender?: string; sinceMin?: nu
   if (!settings.get().messages.readByCompi) return []
   return findMessages(recent, q, Date.now())
 }
+
+/**
+ * Messages montrés par « Ce que tu as manqué » : comptés comme rappelés, pour ne pas
+ * les signaler une deuxième fois juste après (un report ou un rappel existant est gardé).
+ */
+export function markMessagesShown(keys: string[]): void {
+  const now = Date.now()
+  let dirty = false
+  for (const k of keys) {
+    if (!pending.has(k) || marks[k]) continue
+    marks[k] = { remindedAt: now }
+    dirty = true
+  }
+  if (dirty) saveMarks()
+}
+
+/** Messages en attente (« Ce que tu as manqué ») : vide si le suivi est coupé. */
+export const pendingMessages = (): PendingMessage[] => (settings.get().messages.enabled ? messagesStatus().pending : [])
 
 /** Nombre de messages en attente (résumé du matin). */
 export const pendingCount = (): number => messagesStatus().pending.length

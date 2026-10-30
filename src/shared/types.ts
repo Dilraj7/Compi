@@ -139,6 +139,8 @@ export interface DaySettings {
   meetingPrep: boolean
   /** Minutes avant la réunion pour la préparer. */
   prepMinutes: number
+  /** « Ce que tu as manqué » après une concentration, une réunion ou une absence (activé par défaut). */
+  missed: boolean
 }
 
 export interface ClaudeCodeBridgeSettings {
