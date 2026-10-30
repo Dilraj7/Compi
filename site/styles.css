@@ -648,7 +648,7 @@ h1 {
 }
 
 /* ─── Fonctions ───────────────────────────────────────────────────────────── */
-.grid-8 {
+.grid-12 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 14px;
@@ -656,7 +656,7 @@ h1 {
   padding: 0;
   list-style: none;
 }
-.grid-8 li,
+.grid-12 li,
 .cards-3 article,
 .points li {
   position: relative;
@@ -668,11 +668,11 @@ h1 {
     transform 0.3s var(--ease),
     border-color 0.3s;
 }
-.grid-8 li:hover {
+.grid-12 li:hover {
   transform: translateY(-3px);
   border-color: color-mix(in oklab, var(--c, var(--cyan)) 40%, transparent);
 }
-.grid-8 li::before {
+.grid-12 li::before {
   content: '';
   display: block;
   width: 10px;
@@ -682,12 +682,12 @@ h1 {
   background: var(--c);
   box-shadow: 0 0 10px var(--c);
 }
-.grid-8 h3,
+.grid-12 h3,
 .points h3 {
   font-size: 18px;
   font-weight: 650;
 }
-.grid-8 p,
+.grid-12 p,
 .points p {
   margin-top: 8px;
   color: var(--text-2);
@@ -1091,7 +1091,7 @@ h1 {
   .stage {
     order: -1;
   }
-  .grid-8 {
+  .grid-12 {
     grid-template-columns: repeat(2, 1fr);
   }
   .shots,
@@ -1140,7 +1140,7 @@ h1 {
   .island.open .island-links {
     display: flex;
   }
-  .grid-8,
+  .grid-12,
   .shots,
   .points {
     grid-template-columns: 1fr;

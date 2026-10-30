@@ -185,7 +185,7 @@ function demoMissed(): MissedInfo {
   const min = 60_000
   return {
     cause: 'meeting',
-    title: 'Point équipe',
+    title: 'Revue de projet',
     from: now - 61 * min,
     to: now - min,
     at: now,
@@ -199,7 +199,7 @@ function demoMissed(): MissedInfo {
       { id: 'm8b7c6d5', from: 'Banque <info@exemple.fr>', subject: 'Votre relevé est disponible', important: false }
     ],
     mailTotal: 2,
-    reminders: [{ message: 'Appeler le garage', at: now - 20 * min }]
+    reminders: [{ message: 'Prendre les billets de train', at: now - 20 * min }]
   }
 }
 
@@ -597,6 +597,8 @@ export function createMockApi(): CompiApi {
   const remindersCh = channel<Reminder[]>()
   // « Ce que tu as manqué » de démonstration (?missed=on) : une réunion qui vient de finir.
   let missed: MissedInfo | null = new URLSearchParams(location.search).get('missed') === 'on' ? demoMissed() : null
+  // La réunion résumée reste dans l'agenda, même une fois la carte fermée.
+  const missedMeeting = missed
   const missedCh = channel<MissedInfo | null>()
   // Tâches Google de démonstration (?tasks=on) : deux listes, retards, aujourd'hui, plus tard, sans date.
   const tasksCh = channel<void>()
@@ -780,6 +782,19 @@ export function createMockApi(): CompiApi {
               calendar: 'Anniversaires'
             },
             { id: 'e1', title: 'Café avec Thomas', start: at(8, 30), end: at(9), allDay: false, location: 'Café des Arts' },
+            // La réunion qui vient de finir, celle de « Ce que tu as manqué » (?missed=on).
+            ...(missedMeeting
+              ? [
+                  {
+                    id: 'e1b',
+                    title: missedMeeting.title ?? 'Réunion',
+                    start: new Date(missedMeeting.from).toISOString(),
+                    end: new Date(missedMeeting.to).toISOString(),
+                    allDay: false,
+                    calendar: 'Travail'
+                  }
+                ]
+              : []),
             {
               id: 'e2',
               title: 'Point équipe',
@@ -907,6 +922,47 @@ export function createMockApi(): CompiApi {
       for (const chunk of plan.match(/.{1,6}/gs) ?? []) {
         agent.emit({ type: 'text', conversationId, messageId, delta: chunk })
         await wait(20)
+      }
+      agent.emit({ type: 'done', conversationId, messageId, sentTo: { destination: null, categories: [] } })
+      return
+    }
+    // Démo du film (plein écran) : les e-mails de Claire, puis un fichier créé après la carte d'accord.
+    if (/claire/i.test(text)) {
+      const step = async (id: string, name: string, label: string): Promise<void> => {
+        agent.emit({ type: 'tool', conversationId, messageId, tool: { id, name, label, status: 'running' } })
+        await wait(900)
+        agent.emit({ type: 'tool', conversationId, messageId, tool: { id, name, label, status: 'done' } })
+      }
+      await step('c0', 'mcp__compi__mail_search', 'Recherche dans tes e-mails : from:claire@exemple.fr')
+      await step('c1', 'mcp__compi__mail_read', 'Lecture d’un e-mail')
+      await step('c2', 'mcp__compi__mail_read', 'Lecture d’un e-mail')
+      const path = 'D:\\Documents\\Travail\\demandes-claire.md'
+      const card = `${path}\nNouveau fichier · 4 ligne(s)\n\n+ # Demandes de Claire\n+ - Relire le compte rendu avant 17 h\n+ - Ajouter le budget à l’ordre du jour de jeudi\n+ - Confirmer la salle pour jeudi 14 h`
+      const write = { id: 'c3', name: 'mcp__compi__write_text_file', label: 'Écriture de demandes-claire.md', status: 'running' as const }
+      agent.emit({ type: 'tool', conversationId, messageId, tool: write })
+      const ask = uid()
+      approvals = [
+        ...approvals,
+        {
+          id: ask,
+          source: 'compi',
+          title: 'Compi veut créer « demandes-claire.md »',
+          detail: card,
+          toolName: write.name,
+          canAlwaysAllow: false,
+          createdAt: Date.now()
+        }
+      ]
+      pushApprovals()
+      commands.emit('attention')
+      while (approvals.some((a) => a.id === ask)) await wait(100)
+      const detail = stageDetail(write.name, { path }, `Fichier créé : ${path} (4 ligne(s), modification e12).`, { card })
+      agent.emit({ type: 'tool', conversationId, messageId, tool: { ...write, status: 'done', ...(detail ? { detail } : {}), undo: 'e12' } })
+      for (const chunk of 'C’est noté dans **demandes-claire.md**. Claire te demande de relire le compte rendu **avant 17 h**, d’ajouter le budget à l’ordre du jour de jeudi et de confirmer la salle pour 14 h.'.match(
+        /.{1,6}/gs
+      ) ?? []) {
+        agent.emit({ type: 'text', conversationId, messageId, delta: chunk })
+        await wait(24)
       }
       agent.emit({ type: 'done', conversationId, messageId, sentTo: { destination: null, categories: [] } })
       return

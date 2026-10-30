@@ -107,12 +107,12 @@
       <section class="film" id="film" aria-labelledby="film-titre">
         <div class="head">
           <p class="kicker dot">Le film</p>
-          <h2 id="film-titre">55 secondes pour faire connaissance</h2>
+          <h2 id="film-titre">90 secondes pour faire connaissance</h2>
         </div>
         <figure class="screen">
-          <video controls preload="none" playsinline width="1280" height="720" poster="media/poster.jpg">
-            <source src="media/compi.mp4" type="video/mp4" />
-            Ton navigateur ne lit pas cette vidéo : <a href="media/compi.mp4">télécharge-la</a>.
+          <video controls preload="none" playsinline width="1280" height="720" poster="media/poster-0.5.jpg">
+            <source src="media/compi-0.5.mp4" type="video/mp4" />
+            Ton navigateur ne lit pas cette vidéo : <a href="media/compi-0.5.mp4">télécharge-la</a>.
           </video>
           <figcaption>Avec le son. Toutes les données sont fictives (Alex, alex@example.com).</figcaption>
         </figure>
@@ -125,10 +125,10 @@
           <p class="sub">Au repos, c’est une pastille avec le visage d’un petit robot. Ouvert, c’est un assistant qui connaît ta journée et ton PC.</p>
         </div>
 
-        <ul class="grid-8">
+        <ul class="grid-12">
           <li class="c-cyan">
             <h3>Ta journée en une question</h3>
-            <p>Agenda (Google, lien .ics ou connecteur), e-mails Gmail, météo, rappels.</p>
+            <p>Agenda (Google, lien .ics ou connecteur), e-mails Gmail, tâches Google, météo, rappels.</p>
           </li>
           <li class="c-violet">
             <h3>Actions rapides</h3>
@@ -140,7 +140,7 @@
           </li>
           <li class="c-green">
             <h3>Parle-lui</h3>
-            <p>Ta voix est transcrite sur ton PC, jamais envoyée. Il peut aussi te répondre à voix haute, avec une voix naturelle calculée sur ton PC.</p>
+            <p>Ta voix est transcrite sur ton PC, jamais envoyée. Il te répond à voix haute, avec une voix naturelle calculée sur ton PC, puis t’écoute à nouveau.</p>
           </li>
           <li class="c-pink">
             <h3>Tes documents</h3>
@@ -152,11 +152,37 @@
           </li>
           <li class="c-violet">
             <h3>Routines et mémoire</h3>
-            <p>« Chaque lundi à 9 h, résume mes e-mails », et ce qu’il sait de toi, que tu lis et corriges.</p>
+            <p>
+              « Chaque lundi à 9 h, résume mes e-mails », ou à l’allumage du PC, à la fin d’un rendez-vous, avec les droits que tu choisis. Et une mémoire que tu lis et
+              corriges.
+            </p>
           </li>
           <li class="c-amber">
             <h3>Un îlot vivant</h3>
-            <p>Musique en cours, minuteur, alerte avant chaque réunion.</p>
+            <p>Musique en cours, minuteur, alerte avant chaque réunion, avec qui sera là et vos derniers e-mails.</p>
+          </li>
+          <li class="c-green">
+            <h3>Zone d’écran</h3>
+            <p>
+              <kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>Z</kbd> : encadre un graphique, un tableau, une erreur. Le texte est lu sur ton PC, puis expliqué, traduit ou copié.
+            </p>
+          </li>
+          <li class="c-pink">
+            <h3>Ce que tu as manqué</h3>
+            <p>Après une réunion, un pomodoro ou une absence : les messages, e-mails et rappels arrivés entre-temps, en une ligne.</p>
+          </li>
+          <li class="c-cyan">
+            <h3>Appels et réunions</h3>
+            <p>
+              Ta réunion est préparée, transcrite sur ton PC voix par voix, puis résumée avec les tâches. « Suite avec Compi » : rappels, brouillon de suivi, compte
+              rendu en Markdown pour Obsidian. Rien sans ton OK.
+            </p>
+          </li>
+          <li class="c-violet">
+            <h3>Plein écran</h3>
+            <p>
+              <kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>Entrée</kbd> : l’îlot devient un poste de pilotage. Ta journée, chaque étape de son travail, ce qui t’attend.
+            </p>
           </li>
         </ul>
 
@@ -245,6 +271,48 @@
               />
             </a>
             <figcaption><b>Connecteurs</b> Tu te connectes avec ton compte, sans clé à copier.</figcaption>
+          </figure>
+          <figure>
+            <a class="shot" href="images/zone-ecran@2x.jpg" data-zoom>
+              <img
+                src="images/zone-ecran.jpg"
+                srcset="images/zone-ecran.jpg 880w, images/zone-ecran@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="Un tableau des ventes encadré à l’écran, et l’explication de Compi dans l’îlot"
+              />
+            </a>
+            <figcaption><b>Zone d’écran</b> <kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>Z</kbd>, encadre un graphique, demande.</figcaption>
+          </figure>
+          <figure>
+            <a class="shot" href="images/ce-que-tu-as-manque@2x.jpg" data-zoom>
+              <img
+                src="images/ce-que-tu-as-manque.jpg"
+                srcset="images/ce-que-tu-as-manque.jpg 880w, images/ce-que-tu-as-manque@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="L’îlot résume ce qui est arrivé pendant une réunion : 3 messages, 2 e-mails, 1 rappel"
+              />
+            </a>
+            <figcaption><b>Ce que tu as manqué</b> Au sortir d’une réunion, tout tient en une ligne.</figcaption>
+          </figure>
+          <figure>
+            <a class="shot" href="images/plein-ecran@2x.jpg" data-zoom>
+              <img
+                src="images/plein-ecran.jpg"
+                srcset="images/plein-ecran.jpg 880w, images/plein-ecran@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="Le poste de pilotage en plein écran : la journée, les étapes de Compi et une carte de validation"
+              />
+            </a>
+            <figcaption><b>Plein écran</b> <kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>Entrée</kbd>, et tu vois tout ce qu’il fait.</figcaption>
           </figure>
         </div>
       </section>
@@ -365,7 +433,7 @@ npm install
 npm run build:win</code></pre>
           </div>
           <ol class="after">
-            <li>Lance <code>dist/Compi-Setup-0.1.0.exe</code>. L’installateur n’est pas signé : SmartScreen affiche un avertissement, clique sur <b>Informations complémentaires</b>, puis <b>Exécuter quand même</b>.</li>
+            <li>Lance <code>dist/Compi-Setup-0.5.0.exe</code>. L’installateur n’est pas signé : SmartScreen affiche un avertissement, clique sur <b>Informations complémentaires</b>, puis <b>Exécuter quand même</b>.</li>
             <li>Clique sur l’îlot et choisis ton cerveau, ou laisse Compi te conseiller en 4 questions. Tu pourras en changer à tout moment.</li>
             <li>Avec Claude, colle ta clé API créée sur <a href="https://console.anthropic.com/settings/keys">console.anthropic.com</a>.</li>
           </ol>
@@ -378,6 +446,8 @@ npm run build:win</code></pre>
           <tbody>
             <tr><td><kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>Espace</kbd></td><td>ouvrir Compi</td></tr>
             <tr><td><kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>C</kbd></td><td>actions rapides sur le texte sélectionné</td></tr>
+            <tr><td><kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>Z</kbd></td><td>encadrer une zone de l’écran</td></tr>
+            <tr><td><kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>Entrée</kbd></td><td>passer en plein écran (et revenir)</td></tr>
             <tr><td><kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>V</kbd></td><td>maintenir pour parler (une fois la dictée installée)</td></tr>
             <tr><td><kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>O</kbd> / <kbd>N</kbd></td><td>autoriser / refuser une demande</td></tr>
           </tbody>
@@ -420,6 +490,14 @@ npm run build:win</code></pre>
             <p>
               Non. Une carte s’affiche avant chaque action sensible : déplacer un rendez-vous, ranger un dossier, ouvrir une appli… Un rangement ne supprime jamais rien, et
               Compi n’envoie jamais d’e-mail : il prépare un brouillon que tu relis.
+            </p>
+          </details>
+          <details>
+            <summary>Que voit Compi avec la zone d’écran ?</summary>
+            <p>
+              Seulement la zone que tu encadres. Son texte est lu sur ton PC, et rien ne part avant que tu choisisses une action. Si l’écran est sur <em>Jamais</em>
+              (Réglages › Confidentialité), rien de la zone ne part vers un cerveau en ligne. Seul « Expliquer » montre aussi l’image de la zone, au cerveau que tu as
+              choisi.
             </p>
           </details>
           <details>

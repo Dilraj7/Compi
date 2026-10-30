@@ -1,7 +1,8 @@
 // Site de Compi (GitHub Pages) : assemble site/ avec l'icône de l'app, vérifie que chaque
 // lien local et chaque ancre existent, puis (option) le sert en local.
 // Les captures du site (site/images, au double pour les écrans nets) sont tirées du film :
-// npx electron marketing/promo/render.cjs stills --hd <instants>, puis recadrées.
+// npx electron marketing/promo/render.cjs stills --hd <instants> (promo-0.5 pour les dernières), puis recadrées.
+// plein-ecran.jpg est une vraie capture du plein écran (marketing/promo-0.5/plein-ecran), posée sur le bureau du film.
 // Usage : node scripts/site.mjs            → out/site (utilisé par .github/workflows/pages.yml)
 //         node scripts/site.mjs --serve 4173 → aperçu sur http://127.0.0.1:4173
 
