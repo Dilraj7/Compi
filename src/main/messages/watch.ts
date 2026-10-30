@@ -34,6 +34,7 @@ import type { MessagesStatus } from '../../shared/types'
 import { emit } from '../bus'
 import { getTimer } from '../day/timer'
 import { inMeeting } from '../day/meetings'
+import { events, type MessageArrived } from '../events'
 import { log } from '../log'
 import { redact } from '../privacy/redact'
 import { readJson, writeJson } from '../store/jsonFile'
@@ -64,6 +65,11 @@ let marks: Record<string, ReminderMark> = {}
 /** Réglages de notification de Windows (interrupteur général, applications coupées). */
 let health: { toastEnabled?: number; apps: AppNotificationSetting[] } | null = null
 let healthAt = 0
+/**
+ * Début du suivi (démarrage, déverrouillage) : seuls les messages arrivés ensuite sont
+ * « nouveaux » pour les routines, pas ceux qui attendaient déjà.
+ */
+let since = 0
 
 const testFile = (): string | undefined => process.env.COMPI_NOTIF_TEST_FILE
 
@@ -149,8 +155,10 @@ async function tick(): Promise<void> {
     const items = await list([...followed], s.readByCompi)
     failures = 0
     const now = Date.now()
+    if (!since) since = now
     const present = new Set<string>()
     const added: MessageItem[] = []
+    const arrived: MessageArrived[] = []
     let dirty = now - healthAt > HEALTH_MS ? await checkHealth() : false
     for (const n of items) {
       if (!n.aumid) continue
@@ -168,7 +176,9 @@ async function tick(): Promise<void> {
       const id = `${n.aumid}:${n.id}`
       present.add(id)
       if (!pending.has(id) && n.title !== undefined) {
-        pending.set(id, { key: id, appKey: key, app: appLabelOf(key, n.app), sender: n.title.trim(), at: Math.min(n.at || now, now) })
+        const p = { key: id, appKey: key, app: appLabelOf(key, n.app), sender: n.title.trim(), at: Math.min(n.at || now, now) }
+        pending.set(id, p)
+        if (n.at && n.at >= since) arrived.push({ appKey: p.appKey, app: p.app, sender: p.sender, at: p.at })
         dirty = true
       }
       if (s.readByCompi && n.body)
@@ -197,6 +207,7 @@ async function tick(): Promise<void> {
       saveMarks()
       changed()
     }
+    for (const m of arrived) events.emit('message', m)
   } catch (e) {
     failures++
     if (failures === 3) log('warn', 'messages en attente : relevé impossible', (e as Error).message)
@@ -235,6 +246,7 @@ export function syncMessages(): void {
 export function stopMessages(forget = false): void {
   if (timer) clearTimeout(timer)
   timer = null
+  since = 0
   hostSince = 0
   if (forget) {
     pending.clear()
@@ -327,6 +339,7 @@ export function hookMessagesPower(): void {
   }
   const resume = (): void => {
     locked = false
+    since = 0
     schedule(2000)
   }
   powerMonitor.on('lock-screen', pause)

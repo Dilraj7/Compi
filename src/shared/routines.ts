@@ -1,6 +1,6 @@
 // Routines : fonctions pures partagées (testées dans tests/routines.test.ts).
 
-import type { ReminderRepeat, RoutineDraft, RoutineGrant } from './types'
+import type { ReminderRepeat, RoutineDraft, RoutineGrant, RoutineTrigger } from './types'
 
 export const ROUTINE_TITLE_MAX = 60
 export const ROUTINE_PROMPT_MAX = 2000
@@ -61,21 +61,93 @@ export function cleanDraft(d: RoutineDraft): RoutineDraft {
     .trim()
     .slice(0, ROUTINE_PROMPT_MAX)
   if (!prompt) throw new Error('Dis-moi ce que la routine doit faire.')
-  if (!validRepeat(d.repeat)) throw new Error('Moment de la routine invalide.')
-  const repeat: ReminderRepeat =
-    d.repeat.every === 'week'
-      ? { every: 'week', days: [...new Set(d.repeat.days)].sort(), time: d.repeat.time }
-      : d.repeat.every === 'month'
-        ? { every: 'month', day: d.repeat.day, time: d.repeat.time }
-        : { every: d.repeat.every, time: d.repeat.time }
+  const when = d.trigger !== undefined ? { trigger: cleanTrigger(d.trigger) } : { repeat: cleanRepeat(d.repeat) }
   return {
     ...(d.id ? { id: d.id } : {}),
     title: title || prompt.slice(0, 40),
     prompt,
-    repeat,
+    ...when,
     enabled: d.enabled ?? true,
     ...(d.allow !== undefined ? { allow: cleanGrants(d.allow) } : {})
   }
+}
+
+function cleanRepeat(r: unknown): ReminderRepeat {
+  if (!validRepeat(r)) throw new Error('Moment de la routine invalide.')
+  return r.every === 'week'
+    ? { every: 'week', days: [...new Set(r.days)].sort(), time: r.time }
+    : r.every === 'month'
+      ? { every: 'month', day: r.day, time: r.time }
+      : { every: r.every, time: r.time }
+}
+
+// ─── Routines sur événement ──────────────────────────────────────────────────
+
+export const TRIGGER_SENDER_MAX = 60
+
+/** Déclencheur valide (application et expéditeur facultatifs pour un message). */
+export function validTrigger(t: unknown): t is RoutineTrigger {
+  if (!t || typeof t !== 'object') return false
+  const o = t as Record<string, unknown>
+  if (o.on === 'morning' || o.on === 'meeting-end') return true
+  return o.on === 'message' && (o.app === undefined || typeof o.app === 'string') && (o.sender === undefined || typeof o.sender === 'string')
+}
+
+function cleanTrigger(t: unknown): RoutineTrigger {
+  if (!validTrigger(t)) throw new Error('Événement de la routine invalide.')
+  if (t.on !== 'message') return { on: t.on }
+  const app = t.app?.trim().slice(0, 200)
+  const sender = t.sender?.replace(/\s+/g, ' ').trim().slice(0, TRIGGER_SENDER_MAX)
+  return { on: 'message', ...(app ? { app } : {}), ...(sender ? { sender } : {}) }
+}
+
+/** Libellé du déclencheur (« à la fin de chaque rendez-vous »). `appLabel` : nom lisible d'une application suivie. */
+export function triggerLabel(t: RoutineTrigger, appLabel?: (key: string) => string): string {
+  switch (t.on) {
+    case 'morning':
+      return 'au premier allumage du jour'
+    case 'meeting-end':
+      return 'à la fin de chaque rendez-vous'
+    case 'message': {
+      const app = t.app ? ` sur ${appLabel?.(t.app) ?? t.app}` : ''
+      return t.sender ? `à chaque message de « ${t.sender} »${app}` : `à chaque nouveau message${app}`
+    }
+  }
+}
+
+/**
+ * Limites de fréquence : une fois par jour (après 5 h) au premier allumage ; au plus
+ * 8 par jour à la fin des rendez-vous ; pour les messages, 30 min d'attente et 5 par jour.
+ */
+export const TRIGGER_LIMITS = {
+  morningHour: 5,
+  'meeting-end': { gapMs: 5 * 60_000, perDay: 8 },
+  message: { gapMs: 30 * 60_000, perDay: 5 }
+} as const
+
+const DAY_MS = 24 * 3600_000
+
+/** Lancements des dernières 24 h, du plus ancien au plus récent. */
+export const recentFires = (fired: unknown, now: number): number[] =>
+  Array.isArray(fired) ? fired.filter((t): t is number => typeof t === 'number' && t > now - DAY_MS && t <= now).sort((a, b) => a - b) : []
+
+/** L'événement peut-il lancer la routine maintenant ? */
+export function canFire(t: RoutineTrigger, fired: unknown, now: number): boolean {
+  const recent = recentFires(fired, now)
+  const d = new Date(now)
+  if (t.on === 'morning') return d.getHours() >= TRIGGER_LIMITS.morningHour && !recent.some((x) => new Date(x).toDateString() === d.toDateString())
+  const limit = TRIGGER_LIMITS[t.on]
+  const last = recent.at(-1)
+  return recent.length < limit.perDay && (last === undefined || now - last >= limit.gapMs)
+}
+
+const fold = (s: string): string => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
+
+/** Le message (application, expéditeur affiché par Windows) correspond-il au déclencheur ? */
+export function messageMatches(t: RoutineTrigger, m: { appKey: string; sender: string }): boolean {
+  if (t.on !== 'message') return false
+  if (t.app && t.app !== m.appKey) return false
+  return !t.sender || fold(m.sender).includes(fold(t.sender))
 }
 
 /** Aperçu d'une réponse, sans Markdown, pour une notification. */
@@ -115,4 +187,36 @@ export function routineRepeat(kind: RepeatKind, time: string, days?: string[], d
 export function missedAction(nextAt: number, now: number): 'wait' | 'catch-up' | 'skip' {
   if (nextAt > now) return 'wait'
   return now - nextAt <= ROUTINE_CATCH_UP_MS ? 'catch-up' : 'skip'
+}
+
+/** Valeurs du paramètre `when` de l'outil routine_create. */
+export const WHEN_KINDS = ['heure', 'premier_allumage', 'fin_rendez_vous', 'message'] as const
+export type WhenKind = (typeof WHEN_KINDS)[number]
+
+/**
+ * Paramètres de l'outil routine_create → déclencheur (`undefined` : à heure fixe).
+ * L'application est cherchée par son nom parmi celles suivies par Messages.
+ */
+export function toolTrigger(
+  when: string | undefined,
+  from: string | undefined,
+  appName: string | undefined,
+  apps: { key: string; label: string }[]
+): RoutineTrigger | undefined {
+  switch (when) {
+    case 'premier_allumage':
+      return { on: 'morning' }
+    case 'fin_rendez_vous':
+      return { on: 'meeting-end' }
+    case 'message': {
+      const name = appName ? fold(appName) : ''
+      const app = name ? apps.find((a) => fold(a.label) === name || fold(a.label).includes(name) || name.includes(fold(a.label))) : undefined
+      if (name && !app)
+        throw new Error(`« ${appName} » n'est pas suivie par Messages. Applications suivies : ${apps.map((a) => a.label).join(', ') || 'aucune'}.`)
+      const sender = from?.trim()
+      return { on: 'message', ...(app ? { app: app.key } : {}), ...(sender ? { sender } : {}) }
+    }
+    default:
+      return undefined
+  }
 }

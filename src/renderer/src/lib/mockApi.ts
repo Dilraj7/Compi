@@ -1692,7 +1692,13 @@ export function createMockApi(): CompiApi {
     routines: async () => [...routines],
     saveRoutine: async (draft) => {
       const clean = cleanDraft(draft)
-      if (clean.id) routines = routines.map((r) => (r.id === clean.id ? { ...r, ...clean, enabled: clean.enabled ?? true } : r))
+      // Heure fixe ou événement : l'un remplace l'autre.
+      if (clean.id)
+        routines = routines.map((r) => {
+          if (r.id !== clean.id) return r
+          const { repeat: _repeat, trigger: _trigger, ...rest } = r
+          return { ...rest, ...clean, enabled: clean.enabled ?? true, nextAt: clean.trigger ? 0 : r.nextAt || Date.now() + day }
+        })
       else
         routines = [
           ...routines,
@@ -1700,9 +1706,9 @@ export function createMockApi(): CompiApi {
             id: uid(),
             title: clean.title,
             prompt: clean.prompt,
-            repeat: clean.repeat,
+            ...(clean.trigger ? { trigger: clean.trigger } : { repeat: clean.repeat }),
             enabled: true,
-            nextAt: Date.now() + day,
+            nextAt: clean.trigger ? 0 : Date.now() + day,
             createdAt: Date.now(),
             allow: clean.allow
           }

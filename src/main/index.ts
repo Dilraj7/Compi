@@ -57,7 +57,19 @@ import { connectorAuthStates, testConnector } from './connectors/registry'
 import { clearClips, copyClip, deleteClip, flushClipboardHistory, listClips, pinClip, startClipboardHistory, stopClipboardHistory } from './clipboard/history'
 import { log } from './log'
 import { addMemory, clearMemory, deleteMemory, listMemory, updateMemory } from './memory/store'
-import { deleteRoutine, listRoutines, restoreRoutines, runRoutineNow, saveRoutine, setRoutineRunner, stopRoutineRun, stopRoutines } from './routines/store'
+import {
+  deleteRoutine,
+  listRoutines,
+  restoreRoutines,
+  runRoutineNow,
+  saveRoutine,
+  setRoutineRunner,
+  startRoutineTriggers,
+  stopRoutineRun,
+  stopRoutines,
+  wantsTrigger
+} from './routines/store'
+import { events, startPresenceEvents } from './events'
 import { checkSemantic, clearSemantic, enableSemantic, semanticSearch, semanticStatus, startSemantic, stopSemantic, syncSemantic } from './semantic'
 import { allowedFolders, insideAny } from './agent/folders'
 import { deleteModel } from './brains/ollama'
@@ -1047,6 +1059,16 @@ app.whenReady().then(async () => {
   restoreTimer()
   setRoutineRunner(runRoutineAgent, stopConversation)
   restoreRoutines()
+  // Routines sur événement : retour devant le PC, fin d'un rendez-vous, nouveau message.
+  startRoutineTriggers()
+  startPresenceEvents()
+  let followMeetingEnds = wantsTrigger('meeting-end')
+  events.on('routines-changed', () => {
+    const wanted = wantsTrigger('meeting-end')
+    if (wanted === followMeetingEnds) return
+    followMeetingEnds = wanted
+    startMeetings()
+  })
   if (settings.get().clipboardHistory) void startClipboardHistory()
   // Recherche par le sens : index mis à jour 3 minutes après le démarrage (Compi d'abord).
   startSemantic(180_000)

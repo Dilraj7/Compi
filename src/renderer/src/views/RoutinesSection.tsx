@@ -1,14 +1,16 @@
 // Routines dans « Aujourd'hui » : une demande que Compi exécute seul, à heure
-// fixe (« chaque lundi à 9 h, résume mes e-mails »), puis te notifie.
+// fixe (« chaque lundi à 9 h, résume mes e-mails ») ou sur un événement (premier
+// allumage du jour, fin d'un rendez-vous, nouveau message), puis te notifie.
 
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { CircleAlert, CircleCheck, FilePen, Globe, Pencil, Play, Plus, Repeat, Square, X } from 'lucide-react'
+import { CircleAlert, CircleCheck, FilePen, Globe, Pencil, Play, Plus, Repeat, Square, X, Zap } from 'lucide-react'
 import { brainLabel, defaultBrain } from '@shared/brains'
 import { repeatLabel } from '@shared/day'
+import { appLabelOf } from '@shared/messages'
 import { PRIVACY_CATEGORIES, type PrivacyCategory } from '@shared/privacy'
-import { cleanGrants, ROUTINE_GRANT_LABELS, ROUTINE_GRANTS, ROUTINE_PROMPT_MAX, ROUTINE_TITLE_MAX } from '@shared/routines'
-import type { ReminderRepeat, Routine, RoutineDraft, RoutineGrant } from '@shared/types'
+import { cleanGrants, ROUTINE_GRANT_LABELS, ROUTINE_GRANTS, ROUTINE_PROMPT_MAX, ROUTINE_TITLE_MAX, TRIGGER_SENDER_MAX, triggerLabel } from '@shared/routines'
+import type { ReminderRepeat, Routine, RoutineDraft, RoutineGrant, RoutineTrigger } from '@shared/types'
 import { useCompi } from '../store'
 import { Button, cx, IconButton, LedDots, Segmented, TextArea, TextInput, timeAgo, Toggle } from '../components/ui'
 
@@ -17,6 +19,8 @@ const TIME = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digi
 const SHORT_DAY = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric' })
 
 type Kind = ReminderRepeat['every']
+/** À heure fixe, ou sur un événement. */
+type Mode = 'time' | RoutineTrigger['on']
 /** Lundi d'abord, comme sur un calendrier français. */
 const WEEK = [
   { d: 1, l: 'L' },
@@ -32,7 +36,12 @@ const DAY_NAMES = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi'
 /** Données dont une routine a souvent besoin. */
 const ROUTINE_DATA: PrivacyCategory[] = ['mail', 'calendar', 'files', 'memory']
 
-const EXAMPLES: Array<{ title: string; prompt: string; repeat: ReminderRepeat }> = [
+const EXAMPLES: Array<{ title: string; prompt: string; repeat?: ReminderRepeat; trigger?: RoutineTrigger }> = [
+  {
+    title: 'Ma journée',
+    prompt: 'Fais le point sur ma journée : mes rendez-vous, mes tâches et mes rappels, en quelques lignes.',
+    trigger: { on: 'morning' }
+  },
   {
     title: 'Résumé des e-mails',
     prompt: 'Résume mes e-mails non lus importants en quelques lignes, et dis-moi lesquels attendent une réponse.',
@@ -56,12 +65,36 @@ interface Draft {
   day: number
   enabled?: boolean
   allow: RoutineGrant[]
+  mode: Mode
+  /** Message : application suivie (vide = toutes) et expéditeur (vide = tous). */
+  msgApp: string
+  msgSender: string
 }
 
-const emptyDraft = (): Draft => ({ title: '', prompt: '', kind: 'weekdays', time: '08:30', days: [1], day: 1, allow: [] })
+const emptyDraft = (): Draft => ({
+  title: '',
+  prompt: '',
+  kind: 'weekdays',
+  time: '08:30',
+  days: [1],
+  day: 1,
+  allow: [],
+  mode: 'time',
+  msgApp: '',
+  msgSender: ''
+})
 
-function toDraft(r: { id?: string; title: string; prompt: string; repeat: ReminderRepeat; enabled?: boolean; allow?: RoutineGrant[] }): Draft {
-  const rep = r.repeat
+function toDraft(r: {
+  id?: string
+  title: string
+  prompt: string
+  repeat?: ReminderRepeat
+  trigger?: RoutineTrigger
+  enabled?: boolean
+  allow?: RoutineGrant[]
+}): Draft {
+  const rep = r.repeat ?? { every: 'weekdays', time: '08:30' }
+  const t = r.trigger
   return {
     id: r.id,
     title: r.title,
@@ -71,9 +104,21 @@ function toDraft(r: { id?: string; title: string; prompt: string; repeat: Remind
     days: rep.every === 'week' ? rep.days : [1],
     day: rep.every === 'month' ? rep.day : 1,
     enabled: r.enabled,
-    allow: cleanGrants(r.allow)
+    allow: cleanGrants(r.allow),
+    mode: t?.on ?? 'time',
+    msgApp: t?.on === 'message' ? (t.app ?? '') : '',
+    msgSender: t?.on === 'message' ? (t.sender ?? '') : ''
   }
 }
+
+function triggerOf(d: Draft): RoutineTrigger | undefined {
+  if (d.mode === 'time') return undefined
+  if (d.mode !== 'message') return { on: d.mode }
+  return { on: 'message', ...(d.msgApp ? { app: d.msgApp } : {}), ...(d.msgSender.trim() ? { sender: d.msgSender.trim() } : {}) }
+}
+
+/** Quand ou sur quoi la routine se lance, en clair. */
+const whenLabel = (r: Routine): string => (r.trigger ? triggerLabel(r.trigger, (k) => appLabelOf(k)) : r.repeat ? repeatLabel(r.repeat) : '')
 
 function repeatOf(d: Draft): ReminderRepeat {
   switch (d.kind) {
@@ -86,6 +131,9 @@ function repeatOf(d: Draft): ReminderRepeat {
   }
 }
 
+const SELECT =
+  'h-8 max-w-56 rounded-lg bg-white/[0.05] px-2 text-[12px] text-fog-100 ring-1 ring-white/[0.08] outline-none ring-inset [color-scheme:dark] focus:ring-[var(--led)]/50'
+
 const cleanError = (e: unknown): string => (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 
 /** Ce que chaque droit permet, dit honnêtement. */
@@ -94,7 +142,19 @@ const GRANT_HINTS: Record<RoutineGrant, string> = {
   notes: 'Nouveaux fichiers .md ou .txt seulement : jamais modifier ni remplacer un fichier existant.'
 }
 
+/** Quand l'événement arrive, et ce que Compi en sait. */
+const MODE_HINTS: Record<RoutineTrigger['on'], string> = {
+  morning: 'Une fois par jour, la première fois que tu es devant ton PC après 5 h : démarrage, déverrouillage, ou retour après 30 min d’absence.',
+  'meeting-end':
+    'Une minute après la fin de chaque rendez-vous de ton agenda, 8 fois par jour au plus. Elle reçoit son titre et ses heures : rien ne sortira du PC ensuite, sauf avec le droit « web ».',
+  message:
+    'À chaque nouveau message en attente dans les applications suivies par Messages : 30 min d’écart et 5 fois par jour au plus. Elle reçoit l’application et l’expéditeur, pas le texte : rien ne sortira du PC ensuite, sauf avec le droit « web ».'
+}
+
 function RoutineForm({ initial, onDone }: { initial: Draft; onDone: () => void }) {
+  const settings = useCompi((s) => s.settings)
+  const focusSettings = useCompi((s) => s.focusSettings)
+  const setView = useCompi((s) => s.setView)
   const [d, setD] = useState<Draft>(initial)
   const [error, setError] = useState<string | null>(null)
   const set = (patch: Partial<Draft>): void => {
@@ -102,12 +162,21 @@ function RoutineForm({ initial, onDone }: { initial: Draft; onDone: () => void }
     setError(null)
   }
 
+  // Ce qu'il faut pour que l'événement arrive.
+  const missing =
+    d.mode === 'message' && !settings?.messages.enabled
+      ? { text: 'Messages est désactivé : la routine ne se lancera pas avant.', focus: 'messages' as const }
+      : d.mode === 'meeting-end' && settings && !settings.google.calendar && !settings.agenda.sources.some((x) => x.enabled)
+        ? { text: 'Aucun agenda n’est branché : la routine ne se lancera pas avant.', focus: 'agenda' as const }
+        : null
+
   const save = async (): Promise<void> => {
+    const trigger = triggerOf(d)
     const draft: RoutineDraft = {
       ...(d.id ? { id: d.id } : {}),
       title: d.title,
       prompt: d.prompt,
-      repeat: repeatOf(d),
+      ...(trigger ? { trigger } : { repeat: repeatOf(d) }),
       enabled: d.enabled ?? true,
       allow: d.allow
     }
@@ -130,7 +199,7 @@ function RoutineForm({ initial, onDone }: { initial: Draft; onDone: () => void }
                 className="rounded-lg bg-white/[0.05] px-2 py-1 text-[11px] text-fog-300 ring-1 ring-inset ring-white/[0.05] transition-colors hover:bg-white/[0.09] hover:text-fog-100"
                 onClick={() => set({ ...toDraft(ex), id: undefined })}
               >
-                {ex.title} · {repeatLabel(ex.repeat)}
+                {ex.title} · {ex.trigger ? triggerLabel(ex.trigger) : ex.repeat ? repeatLabel(ex.repeat) : ''}
               </button>
             ))}
           </div>
@@ -144,48 +213,103 @@ function RoutineForm({ initial, onDone }: { initial: Draft; onDone: () => void }
           onChange={(e) => set({ prompt: e.target.value })}
         />
         <TextInput value={d.title} maxLength={ROUTINE_TITLE_MAX} placeholder="Nom (facultatif)" onChange={(e) => set({ title: e.target.value })} />
-        <Segmented<Kind>
-          id="routine-kind"
-          value={d.kind}
-          onChange={(kind) => set({ kind })}
+        <Segmented<Mode>
+          id="routine-mode"
+          value={d.mode}
+          onChange={(mode) => set({ mode })}
           options={[
-            { value: 'day', label: 'Chaque jour' },
-            { value: 'weekdays', label: 'Jours ouvrés' },
-            { value: 'week', label: 'Semaine' },
-            { value: 'month', label: 'Mois' }
+            { value: 'time', label: 'À heure fixe' },
+            { value: 'morning', label: 'Allumage' },
+            { value: 'meeting-end', label: 'Fin de rendez-vous' },
+            { value: 'message', label: 'Message' }
           ]}
         />
-        <div className="flex flex-wrap items-center gap-2">
-          {d.kind === 'week' &&
-            WEEK.map(({ d: day, l }) => {
-              const on = d.days.includes(day)
-              return (
-                <button
-                  key={day}
-                  title={DAY_NAMES[day]}
-                  aria-pressed={on}
-                  onClick={() => set({ days: on ? d.days.filter((x) => x !== day) : [...d.days, day] })}
-                  className={cx(
-                    'grid size-7 place-items-center rounded-lg text-[11.5px] font-semibold ring-1 ring-inset transition-colors',
-                    on ? 'text-black ring-transparent' : 'bg-white/[0.05] text-fog-500 ring-white/[0.06] hover:text-fog-100'
-                  )}
-                  style={on ? { background: COLOR } : undefined}
+        {d.mode !== 'time' && (
+          <div className="space-y-2 text-[11px] leading-snug text-fog-500">
+            <div>{MODE_HINTS[d.mode]}</div>
+            {d.mode === 'message' && (
+              <div className="flex flex-wrap items-center gap-2">
+                <select aria-label="Application" value={d.msgApp} onChange={(e) => set({ msgApp: e.target.value })} className={SELECT}>
+                  <option value="">Toutes les applications suivies</option>
+                  {(settings?.messages.apps ?? []).map((k) => (
+                    <option key={k} value={k}>
+                      {appLabelOf(k)}
+                    </option>
+                  ))}
+                </select>
+                <TextInput
+                  className="min-w-0 flex-1"
+                  value={d.msgSender}
+                  maxLength={TRIGGER_SENDER_MAX}
+                  placeholder="Expéditeur (facultatif), tel qu’il s’affiche"
+                  onChange={(e) => set({ msgSender: e.target.value })}
+                />
+              </div>
+            )}
+            {missing && (
+              <div className="flex items-center gap-2 text-led-amber">
+                <CircleAlert size={12} className="shrink-0" />
+                <span className="min-w-0 flex-1">{missing.text}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    focusSettings(missing.focus)
+                    setView('settings')
+                  }}
                 >
-                  {l}
-                </button>
-              )
-            })}
-          {d.kind === 'month' && (
-            <label className="flex items-center gap-1.5 text-[12px] text-fog-500">
-              le
-              <TextInput type="number" min={1} max={31} className="w-16" value={d.day} onChange={(e) => set({ day: Number(e.target.value) })} />
-            </label>
-          )}
-          <label className="flex items-center gap-1.5 text-[12px] text-fog-500">
-            à
-            <TextInput type="time" className="w-28 [color-scheme:dark]" value={d.time} onChange={(e) => e.target.value && set({ time: e.target.value })} />
-          </label>
-        </div>
+                  Ouvrir
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+        {d.mode === 'time' && (
+          <>
+            <Segmented<Kind>
+              id="routine-kind"
+              value={d.kind}
+              onChange={(kind) => set({ kind })}
+              options={[
+                { value: 'day', label: 'Chaque jour' },
+                { value: 'weekdays', label: 'Jours ouvrés' },
+                { value: 'week', label: 'Semaine' },
+                { value: 'month', label: 'Mois' }
+              ]}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              {d.kind === 'week' &&
+                WEEK.map(({ d: day, l }) => {
+                  const on = d.days.includes(day)
+                  return (
+                    <button
+                      key={day}
+                      title={DAY_NAMES[day]}
+                      aria-pressed={on}
+                      onClick={() => set({ days: on ? d.days.filter((x) => x !== day) : [...d.days, day] })}
+                      className={cx(
+                        'grid size-7 place-items-center rounded-lg text-[11.5px] font-semibold ring-1 ring-inset transition-colors',
+                        on ? 'text-black ring-transparent' : 'bg-white/[0.05] text-fog-500 ring-white/[0.06] hover:text-fog-100'
+                      )}
+                      style={on ? { background: COLOR } : undefined}
+                    >
+                      {l}
+                    </button>
+                  )
+                })}
+              {d.kind === 'month' && (
+                <label className="flex items-center gap-1.5 text-[12px] text-fog-500">
+                  le
+                  <TextInput type="number" min={1} max={31} className="w-16" value={d.day} onChange={(e) => set({ day: Number(e.target.value) })} />
+                </label>
+              )}
+              <label className="flex items-center gap-1.5 text-[12px] text-fog-500">
+                à
+                <TextInput type="time" className="w-28 [color-scheme:dark]" value={d.time} onChange={(e) => e.target.value && set({ time: e.target.value })} />
+              </label>
+            </div>
+          </>
+        )}
         <div className="space-y-1.5 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-inset ring-white/[0.05]">
           <div className="text-[11px] text-fog-500">Elle tournera sans toi. En plus des données réglées sur « Toujours », tu lui permets :</div>
           {ROUTINE_GRANTS.map((g) => (
@@ -204,7 +328,13 @@ function RoutineForm({ initial, onDone }: { initial: Draft; onDone: () => void }
         </div>
         {error && <div className="text-[11.5px] text-led-amber">{error}</div>}
         <div className="flex items-center gap-1.5">
-          <Button size="sm" variant="primary" accent={COLOR} disabled={!d.prompt.trim() || (d.kind === 'week' && !d.days.length)} onClick={() => void save()}>
+          <Button
+            size="sm"
+            variant="primary"
+            accent={COLOR}
+            disabled={!d.prompt.trim() || (d.mode === 'time' && d.kind === 'week' && !d.days.length)}
+            onClick={() => void save()}
+          >
             {d.id ? 'Enregistrer' : 'Créer la routine'}
           </Button>
           <Button size="sm" variant="ghost" onClick={onDone}>
@@ -238,6 +368,10 @@ function RoutineRow({ r, onEdit }: { r: Routine; onEdit: () => void }) {
       <div className="w-[52px] shrink-0 text-right text-[12px] text-fog-100 tabular-nums">
         {r.running ? (
           <LedDots color={COLOR} />
+        ) : r.enabled && r.trigger ? (
+          <span className="inline-flex justify-end" title="Sur événement">
+            <Zap size={13} style={{ color: COLOR }} />
+          </span>
         ) : r.enabled ? (
           today ? (
             TIME.format(next)
@@ -257,8 +391,8 @@ function RoutineRow({ r, onEdit }: { r: Routine; onEdit: () => void }) {
           {r.title}
         </div>
         <div className="flex min-w-0 items-center gap-1 text-[11px] text-fog-500">
-          <Repeat size={10} className="shrink-0" />
-          <span className="truncate">{r.running ? 'En cours…' : repeatLabel(r.repeat)}</span>
+          {r.trigger ? <Zap size={10} className="shrink-0" /> : <Repeat size={10} className="shrink-0" />}
+          <span className="truncate">{r.running ? 'En cours…' : whenLabel(r)}</span>
           {!r.running && r.allow?.includes('web') && (
             <span title={ROUTINE_GRANT_LABELS.web}>
               <Globe size={10} className="shrink-0" />
@@ -306,7 +440,7 @@ function RoutineRow({ r, onEdit }: { r: Routine; onEdit: () => void }) {
         <Toggle
           checked={r.enabled}
           label={r.enabled ? 'Mettre en pause' : 'Réactiver'}
-          onChange={(enabled) => void window.compi.saveRoutine({ id: r.id, title: r.title, prompt: r.prompt, repeat: r.repeat, enabled })}
+          onChange={(enabled) => void window.compi.saveRoutine({ id: r.id, title: r.title, prompt: r.prompt, repeat: r.repeat, trigger: r.trigger, enabled })}
         />
       </div>
     </div>

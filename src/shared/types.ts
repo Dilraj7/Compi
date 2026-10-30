@@ -1083,13 +1083,24 @@ export interface RoutineRun {
 }
 
 /** Une routine : une demande à Compi, exécutée sans l'utilisateur à heure fixe. */
+/**
+ * Événement qui lance une routine, à la place d'une heure : premier allumage du jour
+ * (après 5 h), fin d'un rendez-vous de l'agenda, nouveau message en attente (Messages).
+ */
+export type RoutineTrigger = { on: 'morning' } | { on: 'meeting-end' } | { on: 'message'; app?: string; sender?: string }
+
 export interface Routine {
   id: string
   title: string
   prompt: string
-  repeat: ReminderRepeat
+  /** À heure fixe (absent pour une routine sur événement). */
+  repeat?: ReminderRepeat
+  /** Sur événement (absent pour une routine à heure fixe). */
+  trigger?: RoutineTrigger
+  /** Lancements par l'événement des dernières 24 h (ms) : limites de fréquence. */
+  fired?: number[]
   enabled: boolean
-  /** Prochaine exécution (ms). */
+  /** Prochaine exécution (ms) ; 0 pour une routine sur événement. */
   nextAt: number
   createdAt: number
   lastRun?: RoutineRun
@@ -1110,7 +1121,9 @@ export interface RoutineDraft {
   id?: string
   title: string
   prompt: string
-  repeat: ReminderRepeat
+  /** L'un ou l'autre. */
+  repeat?: ReminderRepeat
+  trigger?: RoutineTrigger
   enabled?: boolean
   /** Absent = garder les droits déjà donnés. */
   allow?: RoutineGrant[]

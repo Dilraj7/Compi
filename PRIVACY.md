@@ -141,6 +141,11 @@ Elles tournent sans toi, donc avec moins de droits que toi. Avec un cerveau en l
   - **Chercher sur le web et lire des pages** : recherches et pages permises même après la lecture de ton agenda, de tes e-mails ou de tes tâches, et même si les recherches web sont sur « Me demander » (jamais si elles sont sur « Jamais »). Les mots cherchés peuvent alors reprendre ce que la routine a lu : ils partent chez le service de recherche.
   - **Créer des notes dans tes dossiers confiés** : seulement de nouveaux fichiers .md ou .txt. Jamais modifier, compléter ni remplacer un fichier existant.
 - Chaque refus est noté dans Activité › Journal, avec sa raison.
+- **Sur un événement** plutôt qu'à une heure (désactivé tant que tu n'en crées pas) :
+  - **premier allumage du jour** : une fois par jour, après 5 h, au démarrage, au déverrouillage ou au retour après 30 min d'absence (Compi regarde seulement depuis combien de temps le PC n'a pas servi) ;
+  - **fin d'un rendez-vous** : l'agenda est relu toutes les 5 minutes, même sans alertes ; la routine reçoit le titre et les heures du rendez-vous, 8 fois par jour au plus ;
+  - **nouveau message** : seulement si Messages est activé, pour les applications que tu suis ; la routine reçoit l'application et l'expéditeur, jamais le texte ; 30 min d'écart et 5 fois par jour au plus.
+- Un titre de rendez-vous ou un nom d'expéditeur est écrit par d'autres : après lui, rien ne sort du PC (pages, recherches, connecteurs), sauf avec le droit « web » de la routine.
 
 ## Tout effacer
 

@@ -1,5 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
-import { cleanDraft, cleanGrants, missedAction, ROUTINE_CATCH_UP_MS, routinePreview, routineRepeat, validRepeat, webGrantCovers } from '../src/shared/routines'
+import {
+  canFire,
+  cleanDraft,
+  cleanGrants,
+  messageMatches,
+  missedAction,
+  recentFires,
+  ROUTINE_CATCH_UP_MS,
+  routinePreview,
+  routineRepeat,
+  toolTrigger,
+  triggerLabel,
+  validRepeat,
+  validTrigger,
+  webGrantCovers
+} from '../src/shared/routines'
 
 vi.mock('electron', () => ({ app: { getPath: () => '.' } }))
 
@@ -96,5 +111,87 @@ describe('routines : cartes et activité', () => {
     expect(activityLabel('mcp__compi__memory_forget')).toBe('Oubli d’un souvenir')
     expect(activityLabel('mcp__compi__routine_create', { title: 'Ma semaine' })).toBe('Routine : Ma semaine')
     expect(activityLabel('mcp__compi__clipboard_history', { query: 'adresse' })).toContain('adresse')
+  })
+})
+
+describe('routines : sur événement', () => {
+  const base = { title: 'x', prompt: 'ok' }
+
+  it('brouillon : un déclencheur remplace l’heure, nettoyé', () => {
+    const d = cleanDraft({ ...base, trigger: { on: 'message', app: ' WhatsApp ', sender: '  Maman   chérie ' } })
+    expect(d.trigger).toEqual({ on: 'message', app: 'WhatsApp', sender: 'Maman chérie' })
+    expect(d).not.toHaveProperty('repeat')
+    expect(cleanDraft({ ...base, trigger: { on: 'message', app: '', sender: ' ' } }).trigger).toEqual({ on: 'message' })
+    expect(cleanDraft({ ...base, trigger: { on: 'morning', extra: 1 } as never }).trigger).toEqual({ on: 'morning' })
+    expect(() => cleanDraft({ ...base, trigger: { on: 'boot' } as never })).toThrow(/invalide/)
+    expect(() => cleanDraft({ ...base })).toThrow(/invalide/)
+    expect(validTrigger({ on: 'meeting-end' })).toBe(true)
+    expect(validTrigger({ on: 'message', sender: 3 })).toBe(false)
+  })
+
+  it('libellés', () => {
+    expect(triggerLabel({ on: 'morning' })).toBe('au premier allumage du jour')
+    expect(triggerLabel({ on: 'meeting-end' })).toBe('à la fin de chaque rendez-vous')
+    expect(triggerLabel({ on: 'message' })).toBe('à chaque nouveau message')
+    expect(triggerLabel({ on: 'message', app: 'whatsapp', sender: 'Sam' }, () => 'WhatsApp')).toBe('à chaque message de « Sam » sur WhatsApp')
+  })
+
+  it('premier allumage : une fois par jour, après 5 h', () => {
+    const at = (h: number, day = 30) => new Date(2026, 9, day, h, 0).getTime()
+    const t = { on: 'morning' } as const
+    expect(canFire(t, [], at(4))).toBe(false)
+    expect(canFire(t, [], at(5))).toBe(true)
+    expect(canFire(t, [at(7)], at(9))).toBe(false)
+    expect(canFire(t, [at(7, 29)], at(6))).toBe(true)
+    expect(canFire(t, 'nimporte', at(6))).toBe(true)
+  })
+
+  it('messages : 30 min d’écart, 5 par jour ; fins de rendez-vous : 8 par jour', () => {
+    const now = new Date(2026, 9, 30, 18, 0).getTime()
+    const m = { on: 'message' } as const
+    expect(canFire(m, [now - 29 * 60_000], now)).toBe(false)
+    expect(canFire(m, [now - 31 * 60_000], now)).toBe(true)
+    const five = [1, 2, 3, 4, 5].map((h) => now - h * 3600_000)
+    expect(canFire(m, five, now)).toBe(false)
+    expect(
+      canFire(
+        m,
+        five.map((x) => x - 24 * 3600_000),
+        now
+      )
+    ).toBe(true)
+    expect(canFire({ on: 'meeting-end' }, five, now)).toBe(true)
+    expect(canFire({ on: 'meeting-end' }, [...five, ...[6, 7, 8].map((h) => now - h * 3600_000)], now)).toBe(false)
+    expect(recentFires([now - 25 * 3600_000, now - 60_000, 'x', now + 1], now)).toEqual([now - 60_000])
+  })
+
+  it('message : application exacte, expéditeur sans accents ni casse', () => {
+    const t = { on: 'message', app: 'whatsapp', sender: 'Élodie' } as const
+    expect(messageMatches(t, { appKey: 'whatsapp', sender: 'elodie Martin' })).toBe(true)
+    expect(messageMatches(t, { appKey: 'telegram', sender: 'Élodie' })).toBe(false)
+    expect(messageMatches(t, { appKey: 'whatsapp', sender: 'Sam' })).toBe(false)
+    expect(messageMatches({ on: 'message' }, { appKey: 'x', sender: 'y' })).toBe(true)
+    expect(messageMatches({ on: 'morning' }, { appKey: 'x', sender: 'y' })).toBe(false)
+  })
+
+  it('outil : when → déclencheur, application cherchée parmi celles suivies', () => {
+    const apps = [{ key: 'whatsapp', label: 'WhatsApp' }]
+    expect(toolTrigger(undefined, undefined, undefined, apps)).toBeUndefined()
+    expect(toolTrigger('heure', undefined, undefined, apps)).toBeUndefined()
+    expect(toolTrigger('premier_allumage', undefined, undefined, apps)).toEqual({ on: 'morning' })
+    expect(toolTrigger('fin_rendez_vous', undefined, undefined, apps)).toEqual({ on: 'meeting-end' })
+    expect(toolTrigger('message', ' Sam ', 'whatsapp', apps)).toEqual({ on: 'message', app: 'whatsapp', sender: 'Sam' })
+    expect(() => toolTrigger('message', 'Sam', 'Signal', apps)).toThrow(/WhatsApp/)
+  })
+
+  it('la carte dit l’événement', () => {
+    const card = approvalTitle('mcp__compi__routine_create', {
+      title: 'Suivi',
+      prompt: 'Fais le point',
+      when: 'message',
+      message_from: 'Sam',
+      message_app: 'WhatsApp'
+    })
+    expect(card.detail).toMatch(/^À chaque message de « Sam » sur WhatsApp/)
   })
 })

@@ -4,7 +4,7 @@
 import { basename } from 'node:path'
 import { repeatLabel } from '../../shared/day'
 import { isLauncher, movesSummary } from '../../shared/folderPlan'
-import { cleanGrants, REPEAT_KINDS, ROUTINE_GRANT_LABELS, routineRepeat, type RepeatKind } from '../../shared/routines'
+import { cleanGrants, REPEAT_KINDS, ROUTINE_GRANT_LABELS, routineRepeat, triggerLabel, type RepeatKind } from '../../shared/routines'
 import { isSettingsPage, SETTINGS_PAGES } from '../../shared/windows'
 import { eventByReference, type EventRef } from '../google/eventRefs'
 import { taskByReference } from '../google/taskRefs'
@@ -250,7 +250,14 @@ function grantLines(v: unknown): string[] {
 function routineDetail(input: Input): string {
   const kind = str(input.repeat)
   let when = ''
-  if ((REPEAT_KINDS as readonly string[]).includes(kind)) {
+  const on = str(input.when)
+  if (on === 'premier_allumage') when = triggerLabel({ on: 'morning' })
+  else if (on === 'fin_rendez_vous') when = triggerLabel({ on: 'meeting-end' })
+  else if (on === 'message') {
+    const app = str(input.message_app).trim()
+    const sender = str(input.message_from).trim()
+    when = triggerLabel({ on: 'message', ...(app ? { app } : {}), ...(sender ? { sender } : {}) })
+  } else if ((REPEAT_KINDS as readonly string[]).includes(kind)) {
     const days = Array.isArray(input.days) ? input.days.map(String) : undefined
     const dom = typeof input.day_of_month === 'number' ? input.day_of_month : undefined
     when = repeatLabel(routineRepeat(kind as RepeatKind, str(input.time) || '09:00', days, dom))
