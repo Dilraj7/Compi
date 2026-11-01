@@ -95,10 +95,10 @@ export function PanelNav({ children }: { children?: ReactNode }) {
   )
 }
 
-/** La vue ouverte, avec le bandeau des notifications et la palette Ctrl+K. */
+/** La vue ouverte, avec le bandeau des notifications et la palette Ctrl+K (en plein écran : sa propre recherche). */
 export function PanelBody() {
   const view = useCompi((s) => s.view)
-  const palette = useCompi((s) => s.palette)
+  const palette = useCompi((s) => s.palette && !s.full)
   return (
     <div className="relative min-h-0 flex-1">
       <AnimatePresence mode="wait" initial={false}>

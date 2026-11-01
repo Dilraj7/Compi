@@ -210,6 +210,24 @@ export interface Settings {
   webSearch: WebSearchSettings
   /** Taille du texte et de l'interface, en pour cent (100 par défaut). */
   zoom: ZoomSettings
+  /** Plein écran : vue de l'agenda et place des blocs. */
+  full: FullSettings
+}
+
+export type FullBlockId = 'missed' | 'agenda' | 'reminders' | 'timer' | 'mail' | 'call' | 'tasks' | 'recents' | 'messages' | 'routines'
+export type FullColumn = 'left' | 'right'
+
+/** Un bloc du plein écran : sa colonne, et masqué ou non. L'ordre de la liste est l'ordre affiché. */
+export interface FullBlockPlace {
+  id: FullBlockId
+  col: FullColumn
+  hidden?: boolean
+}
+
+export interface FullSettings {
+  /** Agenda du jour, ou des 7 prochains jours (aujourd'hui compris). */
+  agenda: 'day' | 'week'
+  blocks: FullBlockPlace[]
 }
 
 export interface ZoomSettings {
@@ -662,6 +680,8 @@ export interface DayEvent {
   attendees?: EventAttendee[]
   /** Série d'un événement qui se répète (toutes ses occurrences ont la même). */
   seriesId?: string
+  /** Tâche lue chez un connecteur (une échéance, pas un rendez-vous). */
+  kind?: 'task'
 }
 
 export interface EventAttendee {
@@ -682,6 +702,8 @@ export interface DayMail {
 export interface DayWeather {
   city: string
   label: string
+  /** Code météo de l'OMM (icône). */
+  code?: number
   min: number
   max: number
   /** Probabilité de pluie maximale de la journée (%). */
@@ -777,6 +799,26 @@ export interface TodayInfo {
   reminders: Reminder[]
   weather?: DayWeather
   /** Ce qui n'a pas pu être chargé (« Agenda : … »). */
+  errors: string[]
+}
+
+/** Un des 7 jours du plein écran. */
+export interface WeekDay {
+  /** « AAAA-MM-JJ », jour local. */
+  date: string
+  events: DayEvent[]
+  /** Une entrée par échéance : un rappel répété peut revenir plusieurs jours. */
+  reminders: Reminder[]
+  /** Tâches Google à échéance ce jour (en retard : aujourd'hui). */
+  tasks: TaskItem[]
+  weather?: DayWeather
+}
+
+export interface WeekInfo {
+  /** Aujourd'hui, « AAAA-MM-JJ ». */
+  today: string
+  agenda: boolean
+  days: WeekDay[]
   errors: string[]
 }
 
@@ -994,6 +1036,50 @@ export interface MeetingSummary {
 
 /** `interrupted` : Compi fermé ou arrêt brutal pendant l'appel ; le son reste, la transcription peut reprendre. */
 export type MeetingStatus = 'recording' | 'processing' | 'done' | 'interrupted'
+
+/** Recherche du plein écran : ce qui est sur le PC et se lit vite. */
+export interface LocalSearch {
+  /** Applis du menu Démarrer ; `icon` : image (data URL) quand un raccourci la donne. */
+  apps: Array<{ id: string; name: string; icon?: string }>
+  meetings: Array<{ id: string; title: string; startedAt: number; snippet?: string }>
+  /** Discussions dont le titre ou un message contient la recherche. */
+  chats: Array<{ id: string; title: string; updatedAt: number; snippet?: string }>
+  reminders: Reminder[]
+  tasks: TaskItem[]
+  memory: Array<{ id: string; fact: string }>
+}
+
+/** Fichiers des dossiers confiés (index de Windows Search). */
+export interface FileSearchHit {
+  path: string
+  name: string
+  modified?: string
+}
+
+/** Réunion du bloc « Récents » : le début du résumé seulement, jamais la transcription. */
+export interface RecentMeeting {
+  id: string
+  title: string
+  startedAt: number
+  durationMs: number
+  summary?: string
+  tasks: number
+}
+
+export interface RecentFile {
+  path: string
+  name: string
+  /** Date ISO (UTC). */
+  modified?: string
+}
+
+export interface RecentsInfo {
+  meetings: RecentMeeting[]
+  /** Modifiés depuis 7 jours, dans les dossiers confiés seulement. */
+  files: RecentFile[]
+  /** Au moins un dossier confié. */
+  folders: boolean
+}
 
 export interface MeetingMeta {
   id: string

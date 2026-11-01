@@ -9,6 +9,7 @@ import { DEFAULT_PRIVACY } from '../../shared/privacy'
 import { isSpeechModel } from '../../shared/speechModels'
 import type { DictationSettings, MeetingSettings, Settings } from '../../shared/types'
 import { cleanWebSearch, DEFAULT_WEB_SEARCH } from '../../shared/webSearch'
+import { cleanFull, DEFAULT_FULL } from '../../shared/fullBlocks'
 import { cleanZoom, DEFAULT_ZOOM } from '../../shared/zoom'
 import { readJson, writeJson } from './jsonFile'
 
@@ -46,8 +47,9 @@ export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
  * v21 : taille du texte et de l'interface, encoche et plein écran (100 %). Champ ajouté seulement.
  * v22 : « Ce que tu as manqué » (activé). Champ ajouté seulement.
  * v23 : raccourci de la zone d'écran (Alt+Maj+Z). Champ ajouté seulement.
+ * v24 : plein écran, vue de l'agenda (jour ou 7 jours) et place des blocs. Champ ajouté seulement.
  */
-export const SETTINGS_VERSION = 23
+export const SETTINGS_VERSION = 24
 
 /** Modèle d'Ollama pour la recherche par le sens : multilingue, bon en français, ~640 Mo. */
 export const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b'
@@ -115,7 +117,8 @@ export const DEFAULT_SETTINGS: Settings = {
   approvalKeys: { enabled: true, allow: DEFAULT_ALLOW_KEY, deny: DEFAULT_DENY_KEY },
   monitor: { island: false, memoryAlert: true },
   webSearch: DEFAULT_WEB_SEARCH,
-  zoom: DEFAULT_ZOOM
+  zoom: DEFAULT_ZOOM,
+  full: DEFAULT_FULL
 }
 
 type Listener = (s: Settings) => void
@@ -200,7 +203,8 @@ class SettingsStore {
       approvalKeys: { ...DEFAULT_SETTINGS.approvalKeys, ...raw.approvalKeys },
       monitor: { ...DEFAULT_SETTINGS.monitor, ...raw.monitor },
       webSearch: cleanWebSearch(raw.webSearch),
-      zoom: cleanZoom(raw.zoom)
+      zoom: cleanZoom(raw.zoom),
+      full: cleanFull(raw.full)
     }
     if ((raw.settingsVersion ?? 1) < SETTINGS_VERSION) {
       backupBeforeMigration(this.path, raw.settingsVersion ?? 1)
@@ -239,7 +243,8 @@ class SettingsStore {
       approvalKeys: { ...this.data.approvalKeys, ...patch.approvalKeys },
       monitor: { ...this.data.monitor, ...patch.monitor },
       webSearch: cleanWebSearch({ ...this.data.webSearch, ...patch.webSearch }),
-      zoom: cleanZoom({ ...this.data.zoom, ...patch.zoom })
+      zoom: cleanZoom({ ...this.data.zoom, ...patch.zoom }),
+      full: cleanFull({ ...this.data.full, ...patch.full })
     }
     this.save()
     for (const l of this.listeners) l(this.data)

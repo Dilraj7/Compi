@@ -15,6 +15,8 @@ import { PendingRequests } from '../components/Cards'
 import { StageCard } from '../components/Stage'
 import { BrainChip, BrainPicker, useBrainReady, WelcomeBrains } from '../components/BrainPicker'
 import { Button, LedDots, cx, prettyShortcut } from '../components/ui'
+import { useFull } from '../components/fullContext'
+import { heroSuggestions, type HeroSuggestion } from '@shared/hero'
 
 const SUGGESTIONS = [
   { label: 'Résume ce que j’ai copié', prompt: 'Résume le contenu de mon presse-papier.' },
@@ -29,6 +31,16 @@ function Hero() {
   const send = useCompi((s) => s.send)
   const ready = useBrainReady()
   const [poked, setPoked] = useState(0)
+  // Plein écran : les propositions du moment passent devant les suggestions habituelles.
+  const full = useFull()
+  const moment: HeroSuggestion[] = full?.hero ? heroSuggestions(full.hero) : []
+  const items: Array<HeroSuggestion & { now?: boolean }> = [...moment.map((m) => ({ ...m, now: true })), ...SUGGESTIONS.map((s) => ({ id: s.label, ...s }))].slice(0, 4)
+  const pick = (s: HeroSuggestion): void => {
+    if (s.action === 'prep' && s.prepKey) useCompi.getState().setPrepFocus(s.prepKey)
+    if (s.action === 'missed') full?.showMissed()
+    if (s.action === 'week') full?.showWeek()
+    if (s.prompt) void send(s.prompt)
+  }
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-8 pb-2">
@@ -63,15 +75,21 @@ function Hero() {
       </motion.p>
       {ready ? <BrainChip /> : <WelcomeBrains />}
       <div className={cx('mt-5 grid w-full max-w-[520px] grid-cols-2 gap-2', !ready && 'hidden')}>
-        {SUGGESTIONS.map((s, i) => (
+        {items.map((s, i) => (
           <motion.button
-            key={s.label}
+            key={s.id}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0, transition: { delay: 0.28 + i * 0.05 } }}
-            onClick={() => void send(s.prompt)}
+            onClick={() => pick(s)}
+            data-hero-now={s.now ? s.id : undefined}
             className="group rounded-2xl bg-white/[0.04] px-3.5 py-2.5 text-left text-[12.5px] text-fog-300 ring-1 ring-inset ring-white/[0.06] transition-all hover:-translate-y-px hover:bg-white/[0.07] hover:text-fog-100"
           >
-            <span className="mr-2 inline-block size-1.5 rounded-[1px] bg-[var(--led)] align-middle opacity-60 shadow-[0_0_6px_var(--led)] transition-opacity group-hover:opacity-100" />
+            <span
+              className={cx(
+                'mr-2 inline-block size-1.5 rounded-[1px] align-middle opacity-60 transition-opacity group-hover:opacity-100',
+                s.now ? 'bg-[#FDBA74] shadow-[0_0_6px_#FDBA74]' : 'bg-[var(--led)] shadow-[0_0_6px_var(--led)]'
+              )}
+            />
             {s.label}
           </motion.button>
         ))}

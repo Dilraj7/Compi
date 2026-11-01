@@ -221,7 +221,7 @@ export interface CallState {
   /** Une seule personne en face (1) ; absent : automatique. */
   people?: number
   phase: 'starting' | 'recording' | 'processing'
-  /** Dernières phrases transcrites (3 au plus). */
+  /** Dernières phrases transcrites (60 au plus : le plein écran les fait défiler). */
   lines: MeetingLine[]
   /** Étape de la mise au propre, après l'arrêt. */
   step?: string
@@ -958,7 +958,7 @@ export const useCompi = create<CompiState>((set, get) => {
     onMeetingEvent: (e) => {
       const c = get().call
       if (e.type === 'line') {
-        if (c?.id === e.id) set({ call: { ...c, lines: [...c.lines, e.line].slice(-3) } })
+        if (c?.id === e.id) set({ call: { ...c, lines: [...c.lines, e.line].slice(-60) } })
         return
       }
       if (e.type === 'processing') {

@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { fullLayout } from '../src/shared/fullLayout'
 
 describe('disposition du plein écran', () => {
+  it('écran large (à partir de 2400 px) : colonnes plus larges', () => {
+    expect(fullLayout(3440)).toEqual({ left: 420, right: 460, center: 980 })
+    expect(fullLayout(2399).left).toBe(340)
+  })
+
   it('trois colonnes à partir de 1600 px', () => {
     expect(fullLayout(1920)).toEqual({ left: 340, right: 400, center: 860 })
     expect(fullLayout(1600).left).toBe(340)
@@ -21,7 +26,7 @@ describe('disposition du plein écran', () => {
   })
 
   it('le centre garde toujours de la place pour la discussion', () => {
-    for (const w of [1024, 1280, 1366, 1440, 1600, 1920, 2560]) {
+    for (const w of [1024, 1280, 1366, 1440, 1600, 1920, 2400, 2560, 3440]) {
       const l = fullLayout(w)
       expect(w - (l.left ?? 0) - l.right).toBeGreaterThanOrEqual(600)
     }

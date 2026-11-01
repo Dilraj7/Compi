@@ -27,24 +27,28 @@ export const dayTitle = (now: number): string => {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-export function Block({ icon, title, extra, children }: { icon: ReactNode; title: string; extra?: ReactNode; children: ReactNode }) {
+/** `bare` : le contenu fait ses propres cartes (les 7 jours du plein écran). */
+export function Block({ icon, title, extra, bare, children }: { icon: ReactNode; title: string; extra?: ReactNode; bare?: boolean; children: ReactNode }) {
   return (
     <section className="space-y-2">
-      <div className="flex items-center justify-between px-0.5">
+      <div className="flex items-center justify-between gap-2 px-0.5">
         <h3 className="led-text flex items-center gap-1.5 text-[11px] text-fog-500">
           {icon} {title}
         </h3>
         {extra}
       </div>
-      <div className="overflow-hidden rounded-2xl bg-ink-850/80 ring-1 ring-inset ring-white/[0.06]">{children}</div>
+      {bare ? children : <div className="overflow-hidden rounded-2xl bg-ink-850/80 ring-1 ring-inset ring-white/[0.06]">{children}</div>}
     </section>
   )
 }
 
 export const Empty = ({ children }: { children: ReactNode }) => <div className="px-3.5 py-3 text-[12px] text-fog-500">{children}</div>
 
-/** Journée, rappels et l'heure qui avance (toutes les 30 s), rechargés à la demande. */
-export function useToday(): { today: TodayInfo | null; reminders: Reminder[]; loading: boolean; now: number; load: () => Promise<void> } {
+/**
+ * Journée, rappels et l'heure qui avance (toutes les 30 s), rechargés à la demande, et
+ * toutes les `refreshMs` si c'est donné (plein écran : la vue peut rester ouverte longtemps).
+ */
+export function useToday(refreshMs?: number): { today: TodayInfo | null; reminders: Reminder[]; loading: boolean; now: number; load: () => Promise<void> } {
   const [today, setToday] = useState<TodayInfo | null>(null)
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,11 +70,13 @@ export function useToday(): { today: TodayInfo | null; reminders: Reminder[]; lo
     void load()
     const off = window.compi.onReminders(setReminders)
     const tick = setInterval(() => setNow(Date.now()), 30_000)
+    const reload = refreshMs ? setInterval(() => void load(), refreshMs) : undefined
     return () => {
       off()
       clearInterval(tick)
+      clearInterval(reload)
     }
-  }, [load])
+  }, [load, refreshMs])
 
   return { today, reminders, loading, now, load }
 }

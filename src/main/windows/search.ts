@@ -13,6 +13,8 @@ export interface FileSearch {
   /** Modifiés il y a moins de N jours. */
   modifiedWithinDays?: number
   limit?: number
+  /** Seulement dans ces dossiers (chemins absolus) ; sinon tout le PC. */
+  scopes?: string[]
 }
 
 export interface FileHit {
@@ -36,6 +38,14 @@ export function searchWords(query: string): string[] {
     .map((w) => w.slice(0, 40))
 }
 
+/** « D:\Documents\Factures » → « file:D:/Documents/Factures » (forme des SCOPE de Windows Search). */
+export function scopeUrl(dir: string): string {
+  const d = dir.normalize('NFC').trim().replace(/\\/g, '/').replace(/\/+$/, '')
+  // eslint-disable-next-line no-control-regex -- pas de caractère de contrôle dans une requête
+  if (!/^[a-z]:\//i.test(`${d}/`) || /[\u0000-\u001f;]/.test(d)) return ''
+  return `file:${d}`
+}
+
 /** Littéral SQL : l'apostrophe est doublée. */
 const sqlString = (s: string): string => s.replace(/'/g, "''")
 /** Jokers de LIKE pris au pied de la lettre. */
@@ -49,7 +59,11 @@ export function buildSearchSql(o: FileSearch, { content = true, now = new Date()
   const words = searchWords(o.query)
   if (!words.length && !o.kind && !o.modifiedWithinDays) return null
   const limit = Math.min(Math.max(Math.round(o.limit ?? 15), 1), 50)
-  const where = ["SCOPE='file:'", "System.ItemUrl NOT LIKE '%/AppData/%'"]
+  const scopes = (o.scopes ?? []).map(scopeUrl).filter(Boolean)
+  // Une liste de dossiers donnée mais vide : rien à chercher (jamais « tout le PC » par défaut).
+  if (o.scopes && !scopes.length) return null
+  const scope = scopes.length ? `(${scopes.map((s) => `SCOPE='${sqlString(s)}'`).join(' OR ')})` : "SCOPE='file:'"
+  const where = [scope, "System.ItemUrl NOT LIKE '%/AppData/%'"]
   if (words.length) {
     const byName = words.map((w) => `System.FileName LIKE '%${sqlString(likeLiteral(w))}%'`).join(' AND ')
     const byContent = `CONTAINS(*, '${words.map((w) => `"${sqlString(w)}*"`).join(' AND ')}')`

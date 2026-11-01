@@ -82,6 +82,7 @@ export async function forecast(place: { label: string; lat: number; lon: number 
     date,
     city: place.label,
     label: weatherLabel(d.weather_code[i]),
+    code: d.weather_code[i],
     min: Math.round(d.temperature_2m_min[i]),
     max: Math.round(d.temperature_2m_max[i]),
     rain: d.precipitation_probability_max?.[i] ?? undefined

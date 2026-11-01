@@ -139,6 +139,16 @@ Activé par défaut, et tu peux le couper (Réglages › Journée › Ta journé
 - **L'îlot**, visible de tous, ne montre que des nombres (« Pendant ta réunion : 3 messages · 2 e-mails »). Les noms et les sujets ne sont que dans la carte, dans Aujourd'hui et le plein écran.
 - La carte reste en mémoire jusqu'à ce que tu la fermes ou que Compi s'arrête. Rien n'est enregistré.
 
+## Plein écran : recherche et récents
+
+Tout est cherché et lu **sur le PC** ; rien n'est envoyé à un cerveau, ni ailleurs.
+
+- **La recherche** (`Ctrl K`) lit la liste des applis du menu Démarrer (et l'icône de leur raccourci), tes réunions (titres et résumés, jamais la transcription), tes discussions, rappels, tâches déjà affichées et souvenirs. Les fichiers viennent de l'index de Windows Search, **limité à tes dossiers confiés** : un fichier ailleurs sur le PC n'apparaît jamais. La recherche par le sens, si tu l'as activée, passe par Ollama sur ton PC.
+- **Ouvrir un résultat** est ton clic : une appli se lance, un fichier s'ouvre. Un programme trouvé dans un dossier confié n'est jamais lancé : Compi le montre dans l'Explorateur.
+- **Récents** montre tes 3 dernières réunions (la première phrase du résumé) et les fichiers modifiés depuis 7 jours dans tes dossiers confiés.
+- **Les 7 jours** relisent ton agenda, tes rappels, tes tâches et la météo seulement quand cette vue est affichée.
+- La place des blocs et la vue de l'agenda sont gardées dans tes réglages ; rien d'autre n'est enregistré.
+
 ## Tâches Google
 
 Désactivées tant que tu ne les ajoutes pas (Réglages › Journée › Comptes › « Ajouter les tâches »). Google demande alors ton accord pour l'accès à tes tâches.

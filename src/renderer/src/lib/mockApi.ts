@@ -7,6 +7,9 @@ import { defaultBrain } from '@shared/brains'
 import { CATALOG } from '@shared/catalog'
 import { recommend } from '@shared/recommend'
 import { stageDetail } from '@shared/stage'
+import { cleanFull, DEFAULT_FULL } from '@shared/fullBlocks'
+import { groupWeek } from '@shared/week'
+import { matchScore, rank, snippet } from '@shared/search'
 import type {
   AgendaDraft,
   AgendaPreview,
@@ -44,6 +47,7 @@ import type {
   MeetingSummary,
   TimerState,
   TodayInfo,
+  WeekInfo,
   VoiceInfo,
   VoiceModelId,
   VoiceModelStatus,
@@ -467,7 +471,9 @@ export function createMockApi(): CompiApi {
       searxngUrl: params.get('web') === 'searxng' ? 'http://localhost:8080' : ''
     },
     hasWebSearchKey: params.get('web') === 'ollama',
-    zoom: { notch: 100, full: 100 }
+    zoom: { notch: 100, full: 100 },
+    // ?week=demo : l'agenda du plein écran s'ouvre sur les 7 prochains jours.
+    full: { ...DEFAULT_FULL, agenda: params.get('week') === 'demo' ? 'week' : 'day' }
   }
   // Taille du texte : la maquette garde le choix (le vrai zoom est celui de la fenêtre d'Electron).
   const zoomCh = channel<{ mode: 'notch' | 'full'; pct: number }>()
@@ -829,6 +835,47 @@ export function createMockApi(): CompiApi {
     errors: []
   })
 
+  // Les 7 jours du plein écran : la journée de démo, puis une semaine de travail ordinaire.
+  const demoWeek = (): WeekInfo => {
+    const t = demoToday()
+    const today = localDay(new Date())
+    const on = (n: number, h: number, m = 0): string => {
+      const d = new Date()
+      d.setDate(d.getDate() + n)
+      d.setHours(h, m, 0, 0)
+      return d.toISOString()
+    }
+    const allDay = (n: number): string => addDays(today, n)
+    const work = settings.google.calendar
+      ? [
+          { id: 'w1', title: 'Atelier CRM avec Nexa', start: on(1, 9, 30), end: on(1, 11), allDay: false, calendar: 'Travail', meetUrl: 'https://meet.google.com/xyz' },
+          { id: 'w2', title: 'Déjeuner avec Paul', start: on(1, 12, 30), end: on(1, 13, 30), allDay: false, location: 'Le Bistrot' },
+          { id: 'w3', title: 'Point équipe', start: on(3, 10), end: on(3, 10, 30), allDay: false, calendar: 'Travail', seriesId: 'serie-point-equipe' },
+          { id: 'w4', title: 'Week-end à Rennes', start: allDay(4), end: allDay(6), allDay: true },
+          { id: 'w5', title: 'Démo client Salesforce', start: on(6, 14), end: on(6, 15), allDay: false, calendar: 'Travail' }
+        ]
+      : []
+    const crm = settings.agenda.sources.some((x) => x.enabled)
+      ? [{ id: 'k1', title: 'Relancer Claire (devis)', start: on(2, 17), end: on(2, 17), allDay: false, calendar: 'Twenty · tâches', kind: 'task' as const }]
+      : []
+    const weather = settings.day.city
+      ? [3, 61, 2, 0, 80, 1, 95].map((code, i) => ({
+          date: addDays(today, i),
+          city: settings.day.city,
+          label: ['Couvert', 'Pluie faible', 'Partiellement nuageux', 'Ciel dégagé', 'Averses', 'Plutôt ensoleillé', 'Orage'][i],
+          code,
+          min: [9, 8, 10, 7, 11, 9, 12][i],
+          max: [15, 13, 16, 17, 14, 18, 19][i]
+        }))
+      : []
+    return {
+      today,
+      agenda: t.agenda,
+      days: groupWeek({ events: [...t.events, ...work, ...crm], reminders, tasks: [], weather }, today),
+      errors: []
+    }
+  }
+
   let approvals: ApprovalRequest[] = []
   let questions: QuestionRequest[] = []
   const conversations: Conversation[] = [
@@ -1090,6 +1137,8 @@ export function createMockApi(): CompiApi {
   let quickTimer: ReturnType<typeof setInterval> | undefined
 
   // Déclencheurs de démo depuis la console : __compiDemo.notice({ pill: 'reminder', text: '…' })
+  // ?full=on : l'aperçu s'ouvre directement en plein écran.
+  if (params.get('full') === 'on') setTimeout(() => commands.emit('full'), 700)
   ;(window as unknown as Record<string, unknown>).__compiDemo = {
     notice: notices.emit,
     command: commands.emit,
@@ -1338,7 +1387,7 @@ export function createMockApi(): CompiApi {
 
     getSettings: async () => settings,
     updateSettings: async (patch) => {
-      settings = { ...settings, ...patch } as PublicSettings
+      settings = { ...settings, ...patch, full: cleanFull({ ...settings.full, ...patch.full }) } as PublicSettings
       settingsCh.emit(settings)
       if (patch.clipboardHistory !== undefined) clipsCh.emit(patch.clipboardHistory ? [...clips] : [])
       return settings
@@ -1425,6 +1474,68 @@ export function createMockApi(): CompiApi {
       await new Promise((r) => setTimeout(r, 400))
       return demoToday()
     },
+    week: async () => {
+      await new Promise((r) => setTimeout(r, 500))
+      return demoWeek()
+    },
+    // ?recents=demo : fichiers modifiés cette semaine dans le dossier confié de démo.
+    recents: async () => {
+      await new Promise((r) => setTimeout(r, 300))
+      const ago = (h: number): string => new Date(Date.now() - h * 3600_000).toISOString()
+      return {
+        meetings: meetingList()
+          .slice(0, 3)
+          .map((m) => {
+            const s = demoMeetings.find((x) => x.id === m.id)?.summary
+            return { id: m.id, title: m.title, startedAt: m.startedAt, durationMs: m.durationMs, ...(s ? { summary: s.summary.split('. ')[0] + '.', tasks: s.tasks.length } : { tasks: 0 }) }
+          }),
+        files:
+          params.get('recents') === 'demo'
+            ? [
+                { path: 'D:\\Documents\\Factures\\Devis Nexa v3.docx', name: 'Devis Nexa v3.docx', modified: ago(2) },
+                { path: 'D:\\Documents\\Factures\\Facture-2026-10.pdf', name: 'Facture-2026-10.pdf', modified: ago(26) },
+                { path: 'D:\\Documents\\Factures\\Suivi clients.xlsx', name: 'Suivi clients.xlsx', modified: ago(50) }
+              ]
+            : [],
+        folders: settings.folders.length > 0
+      }
+    },
+    openConfidedFile: async () => 'opened',
+    // Recherche du plein écran : quelques applis, et les données de la démo.
+    searchLocal: async (query) => {
+      await new Promise((r) => setTimeout(r, 120))
+      const q = query.trim()
+      if (!q) return { apps: [], meetings: [], chats: [], reminders: [], tasks: [], memory: [] }
+      const apps = ['Excel', 'Word', 'Outlook', 'Spotify', 'Visual Studio Code', 'Paint', 'Calculatrice', 'Explorateur de fichiers', 'Microsoft Edge'].map((name) => ({
+        id: `demo!${name}`,
+        name
+      }))
+      return {
+        apps: rank(apps, (a) => matchScore(a.name, q), 6),
+        meetings: rank(meetingList(), (m) => matchScore(m.title, q, demoMeetings.find((x) => x.id === m.id)?.summary?.summary ?? ''), 5).map((m) => ({
+          id: m.id,
+          title: m.title,
+          startedAt: m.startedAt
+        })),
+        chats: rank(conversations, (c) => matchScore(c.title, q, c.messages.map((m) => m.text).join(' ')), 5).map((c) => {
+          const msg = c.messages.find((m) => matchScore('', q, m.text) > 0)
+          return { id: c.id, title: c.title, updatedAt: c.updatedAt, ...(msg && !matchScore(c.title, q) ? { snippet: snippet(msg.text, q) } : {}) }
+        }),
+        reminders: rank(reminders, (r) => matchScore(r.message, q), 4),
+        tasks: [],
+        memory: rank(memory, (m) => matchScore(m.fact, q), 3).map((m) => ({ id: m.id, fact: m.fact }))
+      }
+    },
+    searchFiles: async (query) => {
+      await new Promise((r) => setTimeout(r, 450))
+      const files = ['Devis Nexa v3.docx', 'Facture-2026-10.pdf', 'Suivi clients.xlsx', 'Contrat Nexa signé.pdf'].map((name) => ({
+        path: `D:\\Documents\\Factures\\${name}`,
+        name,
+        modified: new Date(Date.now() - 86_400_000).toISOString()
+      }))
+      return settings.folders.length ? rank(files, (f) => matchScore(f.name, query), 8) : []
+    },
+    launchStartApp: async () => true,
     missed: async () => missed,
     dismissMissed: async () => {
       missed = null

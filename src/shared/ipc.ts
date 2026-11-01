@@ -120,6 +120,12 @@ export const IPC = {
   agendaRemove: 'agenda:remove',
   // ta journée
   todayGet: 'day:today',
+  weekGet: 'day:week',
+  recentsGet: 'full:recents',
+  fullOpenFile: 'full:open-file',
+  searchLocal: 'search:local',
+  searchFiles: 'search:files',
+  searchLaunchApp: 'search:launch-app',
   missedGet: 'day:missed',
   missedDismiss: 'day:missed-dismiss',
   missedChanged: 'day:missed-changed',

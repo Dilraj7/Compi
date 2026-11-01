@@ -63,6 +63,10 @@ import type {
   TaskItem,
   TasksInfo,
   TodayInfo,
+  WeekInfo,
+  RecentsInfo,
+  LocalSearch,
+  FileSearchHit,
   VoiceInfo,
   VoiceModelId,
   VoiceModelStatus,
@@ -212,6 +216,18 @@ export interface CompiApi {
   agendaRemove(id: string): Promise<PublicSettings>
 
   today(): Promise<TodayInfo>
+  /** Les 7 prochains jours (plein écran). */
+  week(): Promise<WeekInfo>
+  /** Dernières réunions et fichiers récents des dossiers confiés (plein écran). */
+  recents(): Promise<RecentsInfo>
+  /** Ouvre un fichier d'un dossier confié ; un programme est seulement montré dans l'Explorateur. */
+  openConfidedFile(file: string): Promise<'opened' | 'shown' | 'refused'>
+  /** Recherche du plein écran : applis, réunions, discussions, rappels, tâches, souvenirs. */
+  searchLocal(query: string): Promise<LocalSearch>
+  /** Fichiers des dossiers confiés (index de Windows). */
+  searchFiles(query: string): Promise<FileSearchHit[]>
+  /** Lance une appli du menu Démarrer choisie dans la recherche. */
+  launchStartApp(id: string): Promise<boolean>
   /** Tâches Google à faire, toutes listes (dans l'ordre d'affichage). */
   /** « Ce que tu as manqué » : la dernière carte, tant qu'elle n'est pas fermée. */
   missed(): Promise<MissedInfo | null>

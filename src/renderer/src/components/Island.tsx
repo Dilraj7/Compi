@@ -2,7 +2,7 @@
 // (caché → pastille → aperçu → panneau) avec une animation à ressort.
 // Les yeux du robot restent le point focal d'un état à l'autre.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useShallow } from 'zustand/react/shallow'
 import { PILLS, type PillId } from '@shared/pills'
@@ -14,10 +14,12 @@ import { LedDots, prettyShortcut, Ticker } from './ui'
 import { GAUGE_COLOR, MiniGauges, perfLevels } from './Gauges'
 import { PILL_ICONS, openFromNotice, runNoticeAction } from './Notice'
 import { Panel } from './Panel'
-import { FullScreen } from './FullScreen'
 import { ZoomToast } from './ZoomToast'
 import { CompactArt, CompactTimer, ConversePeek, LedEq, ListeningPeek, MediaPeek, SpeakingPeek, TimerPeek, useLiveMedia } from './Live'
 import { CallPeek, CompactCall, REC } from './CallLive'
+
+// Chargé à la première ouverture du plein écran : l'encoche seule n'en paie pas le code.
+const FullScreen = lazy(() => import('./FullScreen').then((m) => ({ default: m.FullScreen })))
 
 const SIZE = {
   hidden: { width: 140, height: 6, radius: 6 },
@@ -427,7 +429,9 @@ export function Island() {
               animate={{ opacity: 1, transition: { duration: 0.22, delay: 0.12 } }}
               exit={{ opacity: 0, transition: { duration: 0.08 } }}
             >
-              <FullScreen eyes={<Eyes size="lg" />} width={viewport.width} />
+              <Suspense fallback={null}>
+                <FullScreen eyes={<Eyes size="lg" />} width={viewport.width} />
+              </Suspense>
             </motion.div>
           )}
         </AnimatePresence>

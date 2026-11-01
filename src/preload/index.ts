@@ -115,6 +115,12 @@ const api: CompiApi = {
   agendaRemove: (id) => ipcRenderer.invoke(IPC.agendaRemove, id),
 
   today: () => ipcRenderer.invoke(IPC.todayGet),
+  week: () => ipcRenderer.invoke(IPC.weekGet),
+  recents: () => ipcRenderer.invoke(IPC.recentsGet),
+  openConfidedFile: (file) => ipcRenderer.invoke(IPC.fullOpenFile, file),
+  searchLocal: (query) => ipcRenderer.invoke(IPC.searchLocal, query),
+  searchFiles: (query) => ipcRenderer.invoke(IPC.searchFiles, query),
+  launchStartApp: (id) => ipcRenderer.invoke(IPC.searchLaunchApp, id),
   missed: () => ipcRenderer.invoke(IPC.missedGet),
   dismissMissed: () => ipcRenderer.invoke(IPC.missedDismiss),
   onMissed: (cb) => listen(IPC.missedChanged, cb),

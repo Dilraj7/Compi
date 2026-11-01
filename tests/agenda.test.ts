@@ -554,6 +554,18 @@ describe('connecteur « passerelle » (catalogue → schémas → exécution)', 
     ])
     // Une échéance n'est pas une réunion : pas d'alerte.
     expect(r.events.some(isTimedMeeting)).toBe(false)
+    // Et elle est marquée comme tâche (le plein écran la range avec les tâches).
+    expect(r.events.every((e) => e.kind === 'task')).toBe(true)
+  })
+
+  it('un rendez-vous avec une échéance n’est pas une tâche', () => {
+    const r = extractEvents(
+      { structuredContent: { items: [{ id: 'm', title: 'Revue', startsAt: new Date(2026, 9, 15, 10).toISOString(), dueAt: new Date(2026, 9, 15, 11).toISOString() }] } },
+      FROM,
+      TO
+    )
+    expect(r.events).toHaveLength(1)
+    expect(r.events[0].kind).toBeUndefined()
   })
 
   it('réponse qui annonce un échec : son message, pas un agenda vide', () => {

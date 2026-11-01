@@ -30,6 +30,11 @@ async function taskLists(): Promise<TaskList[]> {
   return lists
 }
 
+let lastTasks: TaskItem[] = []
+
+/** Dernières tâches lues (pour la recherche du plein écran, sans nouvel appel à Google). */
+export const cachedTasks = (): TaskItem[] => lastTasks
+
 /** Tâches à faire de toutes les listes, dans l'ordre d'affichage. */
 export async function listTasks(): Promise<TaskItem[]> {
   const lists = await taskLists()
@@ -44,7 +49,8 @@ export async function listTasks(): Promise<TaskItem[]> {
     )
     all.push(...chunk.flat())
   }
-  return sortTasks(all, localDay(new Date()))
+  lastTasks = sortTasks(all, localDay(new Date()))
+  return lastTasks
 }
 
 /** Liste choisie par son nom, sinon la liste par défaut. */

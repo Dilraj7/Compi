@@ -22,6 +22,11 @@ class ConversationStore {
       .sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
+  /** Toutes les discussions, la plus récente d'abord (recherche du plein écran). */
+  all(): readonly Conversation[] {
+    return [...this.items].sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+
   get(id: string): Conversation | undefined {
     return this.items.find((c) => c.id === id)
   }

@@ -39,11 +39,12 @@ import type { ConversationMeta, PanelView } from '@shared/types'
 import { TAB_ORDER, useCompi, type SettingsFocus } from '../store'
 import { cx, prettyShortcut } from './ui'
 
-interface Item extends PaletteEntry {
+export interface PaletteItem extends PaletteEntry {
   icon: LucideIcon
   hint?: string
   run: () => void
 }
+type Item = PaletteItem
 
 const VIEW_META: Record<PanelView, { label: string; icon: LucideIcon; keywords?: string }> = {
   chat: { label: 'Discussion', icon: MessageCircle },
@@ -78,7 +79,8 @@ const SETTINGS: Array<{ focus: SettingsFocus; label: string; icon: LucideIcon; k
   { focus: 'privacy', label: 'Confidentialité', icon: ShieldCheck, keywords: 'toujours jamais envoyer donnees' }
 ]
 
-function useItems(conversations: ConversationMeta[]): Item[] {
+/** Actions, vues, réglages et discussions (aussi utilisés par la recherche du plein écran). */
+export function usePaletteItems(conversations: ConversationMeta[]): Item[] {
   const settings = useCompi((s) => s.settings)
   return useMemo(() => {
     const s = (): ReturnType<typeof useCompi.getState> => useCompi.getState()
@@ -240,7 +242,7 @@ export function CommandPalette() {
   const [conversations, setConversations] = useState<ConversationMeta[]>([])
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLDivElement>(null)
-  const items = useItems(conversations)
+  const items = usePaletteItems(conversations)
   const results = useMemo(() => searchPalette(items, query), [items, query])
 
   useEffect(() => {

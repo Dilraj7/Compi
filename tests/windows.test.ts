@@ -32,6 +32,15 @@ describe('recherche Windows Search', () => {
     expect(sql.replace(/''/g, '').match(/'/g)!.length % 2).toBe(0)
   })
 
+  it('dossiers confiés seulement : SCOPE par dossier, jamais tout le PC par défaut', () => {
+    const sql = buildSearchSql({ query: '', modifiedWithinDays: 7, scopes: ['D:\\Documents\\Factures\\', "C:\\Users\\Alex\\L'Atelier"] }, { now: NOW })!
+    expect(sql).toContain("WHERE (SCOPE='file:D:/Documents/Factures' OR SCOPE='file:C:/Users/Alex/L''Atelier') AND ")
+    expect(sql).not.toContain("SCOPE='file:'")
+    // Liste donnée mais inutilisable (chemin relatif, réseau, caractère de contrôle) : aucune requête.
+    expect(buildSearchSql({ query: 'x', scopes: [] }, { now: NOW })).toBeNull()
+    expect(buildSearchSql({ query: 'x', scopes: ['Documents', '\\\\nas\\partage', 'D:\\a\u0001b'] }, { now: NOW })).toBeNull()
+  })
+
   it('mots : 6 au plus, 40 caractères chacun', () => {
     expect(searchWords('a b c d e f g h')).toEqual(['a', 'b', 'c', 'd', 'e', 'f'])
     expect(searchWords('x'.repeat(60))[0]).toHaveLength(40)

@@ -469,6 +469,8 @@ const START_FIELDS = [
   'scheduledFor'
 ]
 const END_FIELDS = ['end', 'endTime', 'endDate', 'endsAt', 'endAt', 'end_datetime', 'finish', 'until']
+const DUE_FIELDS = ['dueAt', 'dueDate', 'due']
+const NOT_DUE_FIELDS = START_FIELDS.filter((f) => !DUE_FIELDS.includes(f))
 const CLOCK = /^(\d{1,2})[:h](\d{2})/
 
 /** Première date lisible parmi ces champs (« start_time: 10:00 » seul n'en est pas une). */
@@ -559,6 +561,8 @@ export function toEvent(o: Obj, label?: string): DayEvent | null {
     return text(v) ?? (isObj(v) ? text(field(v, ['url', 'href', 'uri', 'primaryLinkUrl', 'link', 'joinUrl'])) : undefined)
   }).filter((u): u is string => Boolean(u && /^https:\/\//i.test(u)))
   const id = field(o, ['id', 'uid', 'eventId', '_id'])
+  // Une échéance seule, sans début ni fin (tâche d'un CRM…) : pas un rendez-vous.
+  const task = !end && dateField(o, NOT_DUE_FIELDS) === null && dateField(o, DUE_FIELDS) !== null
   return {
     id: `${typeof id === 'string' || typeof id === 'number' ? id : title}`,
     title: title.slice(0, 300),
@@ -568,7 +572,8 @@ export function toEvent(o: Obj, label?: string): DayEvent | null {
     ...(location ? { location: location.slice(0, 200) } : {}),
     ...(label ? { calendar: label } : {}),
     meetUrl: findMeetingUrl(links, [location, text(field(o, ['description', 'notes', 'body', 'details']))]),
-    ...(links[0] ? { htmlLink: links[0] } : {})
+    ...(links[0] ? { htmlLink: links[0] } : {}),
+    ...(task ? { kind: 'task' as const } : {})
   }
 }
 

@@ -31,7 +31,7 @@ Compi vit dans un « îlot » noir collé en haut de l'écran, à la manière du
 - **Connecteurs en un clic** : Notion, Todoist, Linear, Jira… Et tes sessions Claude Code, pilotées depuis l'îlot.
 - **Routines et mémoire** : « chaque lundi à 9 h, résume mes e-mails », ou sur un événement (premier allumage du jour, fin d'un rendez-vous, nouveau message), avec des droits choisis pour chaque routine (chercher sur le web, créer des notes), et ce qu'il sait de toi, que tu lis et corriges.
 - **Un îlot vivant** : musique en cours, minuteur, alerte avant chaque réunion, et en option sa préparation : qui sera là, vos derniers e-mails, les tâches de la fois d'avant. Après un pomodoro, une réunion ou une absence, « Ce que tu as manqué » résume les messages, e-mails et rappels arrivés pendant ce temps.
-- **Plein écran** (`Alt + Maj + Entrée`) : ta journée, la discussion et ce qui t'attend sur tout l'écran. La taille du texte se règle à part pour l'encoche et pour le plein écran (`Ctrl +`, `Ctrl −`, ou Ctrl + molette).
+- **Plein écran** (`Alt + Maj + Entrée`) : ta journée, la discussion et ce qui t'attend sur tout l'écran. L'agenda sur aujourd'hui ou les 7 prochains jours (météo comprise), les réunions et fichiers récents, l'appel en cours en grand, et une scène quand tu parles à Compi. `Ctrl K` cherche partout sur ton PC : une appli à ouvrir, un fichier de tes dossiers, une réunion, une discussion, un réglage. Les blocs se déplacent et se masquent (« Disposer »). La taille du texte se règle à part pour l'encoche et pour le plein écran (`Ctrl +`, `Ctrl −`, ou Ctrl + molette).
 
 <table>
   <tr>

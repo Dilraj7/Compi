@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { Check, ExternalLink, ListTodo, Plus } from 'lucide-react'
 import { dueLabel, localDay, taskBucket, type TaskBucket } from '@shared/tasks'
-import type { TaskItem, TasksInfo } from '@shared/types'
+import type { DayEvent, TaskItem, TasksInfo } from '@shared/types'
 import { useCompi } from '../store'
 import { Block, Empty } from './Day'
 import { cx, LedDots } from './ui'
@@ -165,13 +165,51 @@ function AddTask({ onError }: { onError: (e: string) => void }) {
   )
 }
 
-/** Bloc « Tâches » : en retard et aujourd'hui d'abord ; rien si les tâches Google ne sont pas connectées. */
-export function TasksBlock({ limit = 6 }: { limit?: number }) {
+/** Tâche lue chez un connecteur (CRM…) : affichée seulement, Compi n'écrit jamais seul chez lui. */
+function ConnectorTaskRow({ e }: { e: DayEvent }) {
+  const time = e.allDay ? 'aujourd’hui' : new Date(e.start).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const body = (
+    <>
+      <span className="mt-0.5 size-4 shrink-0 rounded-full border border-white/[0.2]" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[12.5px] text-fog-100">{e.title}</span>
+        <span className="block truncate text-[11px] text-fog-500">
+          {e.calendar ?? 'Connecteur'} · échéance {time}
+        </span>
+      </span>
+      {e.htmlLink && <ExternalLink size={12} className="mt-1 shrink-0 text-fog-700" />}
+    </>
+  )
+  const cls = 'flex w-full items-start gap-2.5 px-3.5 py-2 text-left border-t border-white/[0.05]'
+  return e.htmlLink ? (
+    <button onClick={() => void window.compi.openExternal(e.htmlLink!)} title="Ouvrir la tâche" className={cx(cls, 'transition-colors hover:bg-white/[0.04]')}>
+      {body}
+    </button>
+  ) : (
+    <div className={cls}>{body}</div>
+  )
+}
+
+/**
+ * Bloc « Tâches » : en retard et aujourd'hui d'abord ; rien si les tâches Google ne sont pas
+ * connectées. `extra` (plein écran) : les tâches du jour lues chez un connecteur, en lecture seule.
+ */
+export function TasksBlock({ limit = 6, extra = [] }: { limit?: number; extra?: DayEvent[] }) {
   const on = useCompi((s) => s.settings?.google.tasks === true)
   const { info, loading, patch } = useTasks(on)
   const [all, setAll] = useState(false)
   const [error, setError] = useState('')
-  if (!on) return null
+  if (!on && !extra.length) return null
+  if (!on)
+    return (
+      <Block icon={<ListTodo size={12} />} title="Tâches" extra={<span className="text-[11px] text-fog-500">{extra.length} pour aujourd’hui</span>}>
+        <div className="[&>*:first-child]:border-t-0">
+          {extra.map((e) => (
+            <ConnectorTaskRow key={`${e.id}${e.start}`} e={e} />
+          ))}
+        </div>
+      </Block>
+    )
   const today = localDay(new Date())
   const items = info?.items ?? []
   const shown = all ? items : items.slice(0, limit)
@@ -215,8 +253,11 @@ export function TasksBlock({ limit = 6 }: { limit?: number }) {
           )}
         </>
       ) : (
-        <Empty>{loading ? 'Chargement…' : 'Rien à faire : toutes tes tâches sont cochées.'}</Empty>
+        !extra.length && <Empty>{loading ? 'Chargement…' : 'Rien à faire : toutes tes tâches sont cochées.'}</Empty>
       )}
+      {extra.map((e) => (
+        <ConnectorTaskRow key={`${e.id}${e.start}`} e={e} />
+      ))}
       {error && <div className="border-t border-white/[0.05] px-3.5 py-2 text-[11.5px] text-led-amber">{error}</div>}
       {!info?.error && <AddTask onError={setError} />}
     </Block>
