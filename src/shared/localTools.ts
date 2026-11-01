@@ -144,6 +144,13 @@ export const COMPI_GROUPS: CompiGroup[] = [
     tools: ['tasks_list', 'tasks_create', 'tasks_complete', 'tasks_update'],
     keywords: ['tache', 'taches', 'todo', 'to-do', 'to do', 'a faire', 'google tasks', 'coche', 'cocher'],
     summary: 'lire, ajouter, cocher ou modifier une tâche Google'
+  },
+  {
+    id: 'reunions',
+    name: 'Réunions',
+    tools: ['meetings_list', 'meeting_read', 'meeting_save_note'],
+    keywords: ['reunion', 'reunions', 'appel', 'appels', 'transcription', 'transcrit', 'compte rendu', 'compte-rendu', 'obsidian', 'logseq', 'mes notes'],
+    summary: 'retrouver et lire les réunions enregistrées (résumé, transcription), les ajouter aux notes de l’utilisateur'
   }
 ]
 

@@ -550,8 +550,9 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
  * Version 6 : une partie des outils de Compi passe en groupes chargés à la demande.
  * Version 7 : avec une fenêtre d'au moins 32 000 jetons, tous les outils de Compi passent toujours.
  * Version 8 : outils d'écriture des fichiers texte (write_text_file, undo_text_edit) et leur consigne.
+ * Version 9 : outils des réunions (meetings_list, meeting_read, meeting_save_note) et leur consigne.
  */
-const WARM_VERSION = 8
+const WARM_VERSION = 9
 
 /** Dernière requête lue par le modèle local (début et empreintes des messages) : c'est ce qu'il a en cache. */
 let lastRead: (ReadState & { key: string }) | null = null

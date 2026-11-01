@@ -44,6 +44,7 @@ import type {
   Meeting,
   MeetingEvent,
   MeetingMeta,
+  FloatingState,
   MeetingSummary,
   TimerState,
   TodayInfo,
@@ -56,7 +57,7 @@ import type {
 import type { MissedInfo } from '@shared/missed'
 import { VOICE_MODELS } from '@shared/voice'
 import { addDictation, DEFAULT_DICTATION } from '@shared/dictation'
-import { DEFAULT_MEETINGS, defaultMeetingTitle, nameVoice } from '@shared/meetings'
+import { DEFAULT_MEETINGS, defaultMeetingTitle, moveLine, nameVoice } from '@shared/meetings'
 import { LEGACY_VOICES_PACK, SPEECH_PACKS } from '@shared/speechModels'
 import { DEFAULT_NATURAL_VOICE } from '@shared/naturalVoice'
 import type { OllamaFolder } from '@shared/ollamaFolder'
@@ -440,7 +441,11 @@ export function createMockApi(): CompiApi {
     voiceShortcutActive: true,
     dictation: { ...DEFAULT_DICTATION, enabled: params.get('dictation') === 'on' },
     dictationKeyActive: params.get('dictation') === 'on',
-    meetings: DEFAULT_MEETINGS,
+    // ?notes=demo : dossier de notes déjà choisi (coffre Obsidian).
+    meetings:
+      params.get('notes') === 'demo'
+        ? { ...DEFAULT_MEETINGS, notes: { ...DEFAULT_MEETINGS.notes, folder: 'C:\\Users\\demo\\Documents\\Coffre', openWith: 'obsidian' } }
+        : DEFAULT_MEETINGS,
     clipboardHistory: params.get('clip') === 'on',
     semantic: { enabled: params.get('semantic') === 'ready', model: 'qwen3-embedding:0.6b' },
     messages: {
@@ -473,7 +478,8 @@ export function createMockApi(): CompiApi {
     hasWebSearchKey: params.get('web') === 'ollama',
     zoom: { notch: 100, full: 100 },
     // ?week=demo : l'agenda du plein écran s'ouvre sur les 7 prochains jours.
-    full: { ...DEFAULT_FULL, agenda: params.get('week') === 'demo' ? 'week' : 'day' }
+    full: { ...DEFAULT_FULL, agenda: params.get('week') === 'demo' ? 'week' : 'day' },
+    hideFromCapture: true
   }
   // Taille du texte : la maquette garde le choix (le vrai zoom est celui de la fenêtre d'Electron).
   const zoomCh = channel<{ mode: 'notch' | 'full'; pct: number }>()
@@ -712,7 +718,39 @@ export function createMockApi(): CompiApi {
   // Réunions (scénario ?meetings=demo) : rien n'est enregistré ; un appel simulé à « Commencer ».
   const meetingCh = channel<MeetingEvent>()
   const meetingsCh = channel<MeetingMeta[]>()
-  const demoMeetings: Meeting[] = params.get('meetings') === 'demo' ? DEMO_MEETINGS() : []
+  const floatingCh = channel<FloatingState>()
+  const DEMO_LINES: Array<[string, string]> = [
+    ['s1', 'Bonjour à tous, on commence par la démo du nouveau tableau de bord.'],
+    ['me', 'Je partage mon écran, vous voyez bien la fenêtre ?'],
+    ['s2', 'Oui, c’est net. Le graphique des ventes se met à jour en direct ?'],
+    ['me', 'Toutes les cinq minutes, et on peut filtrer par région.'],
+    ['s1', 'Parfait. Il faudrait l’envoyer à l’équipe commerciale avant vendredi.'],
+    ['me', 'Je m’en occupe, je l’envoie jeudi.']
+  ]
+  let floatingDemo: FloatingState = {
+    compact: params.get('compact') === 'on',
+    opacity: 0.94,
+    call: {
+      id: 'demo-call',
+      startedAt: Date.now() - 754_000,
+      others: true,
+      choosePeople: true,
+      phase: 'recording',
+      lines: DEMO_LINES.slice(0, 3).map(([who, text], i) => ({ start: 5 + i * 9, end: 12 + i * 9, who, text }))
+    }
+  }
+  if (location.hash === '#transcript') {
+    let n = 3
+    const tick = setInterval(() => {
+      const c = floatingDemo.call
+      if (!c || n >= DEMO_LINES.length) return clearInterval(tick)
+      const [who, text] = DEMO_LINES[n]
+      floatingDemo = { ...floatingDemo, call: { ...c, lines: [...c.lines, { start: 5 + n * 9, end: 12 + n * 9, who, text }] } }
+      n++
+      floatingCh.emit(floatingDemo)
+    }, 2500)
+  }
+  const demoMeetings: Meeting[] = params.get('meetings') === 'demo' ? DEMO_MEETINGS(params.get('redo') === 'on') : []
   const metaOf = (m: Meeting): MeetingMeta => {
     const { lines: _l, names: _n, summary, ...meta } = m
     return { ...meta, hasSummary: Boolean(summary) }
@@ -848,7 +886,15 @@ export function createMockApi(): CompiApi {
     const allDay = (n: number): string => addDays(today, n)
     const work = settings.google.calendar
       ? [
-          { id: 'w1', title: 'Atelier CRM avec Nexa', start: on(1, 9, 30), end: on(1, 11), allDay: false, calendar: 'Travail', meetUrl: 'https://meet.google.com/xyz' },
+          {
+            id: 'w1',
+            title: 'Atelier CRM avec Nexa',
+            start: on(1, 9, 30),
+            end: on(1, 11),
+            allDay: false,
+            calendar: 'Travail',
+            meetUrl: 'https://meet.google.com/xyz'
+          },
           { id: 'w2', title: 'Déjeuner avec Paul', start: on(1, 12, 30), end: on(1, 13, 30), allDay: false, location: 'Le Bistrot' },
           { id: 'w3', title: 'Point équipe', start: on(3, 10), end: on(3, 10, 30), allDay: false, calendar: 'Travail', seriesId: 'serie-point-equipe' },
           { id: 'w4', title: 'Week-end à Rennes', start: allDay(4), end: allDay(6), allDay: true },
@@ -1487,7 +1533,13 @@ export function createMockApi(): CompiApi {
           .slice(0, 3)
           .map((m) => {
             const s = demoMeetings.find((x) => x.id === m.id)?.summary
-            return { id: m.id, title: m.title, startedAt: m.startedAt, durationMs: m.durationMs, ...(s ? { summary: s.summary.split('. ')[0] + '.', tasks: s.tasks.length } : { tasks: 0 }) }
+            return {
+              id: m.id,
+              title: m.title,
+              startedAt: m.startedAt,
+              durationMs: m.durationMs,
+              ...(s ? { summary: s.summary.split('. ')[0] + '.', tasks: s.tasks.length } : { tasks: 0 })
+            }
           }),
         files:
           params.get('recents') === 'demo'
@@ -1506,10 +1558,12 @@ export function createMockApi(): CompiApi {
       await new Promise((r) => setTimeout(r, 120))
       const q = query.trim()
       if (!q) return { apps: [], meetings: [], chats: [], reminders: [], tasks: [], memory: [] }
-      const apps = ['Excel', 'Word', 'Outlook', 'Spotify', 'Visual Studio Code', 'Paint', 'Calculatrice', 'Explorateur de fichiers', 'Microsoft Edge'].map((name) => ({
-        id: `demo!${name}`,
-        name
-      }))
+      const apps = ['Excel', 'Word', 'Outlook', 'Spotify', 'Visual Studio Code', 'Paint', 'Calculatrice', 'Explorateur de fichiers', 'Microsoft Edge'].map(
+        (name) => ({
+          id: `demo!${name}`,
+          name
+        })
+      )
       return {
         apps: rank(apps, (a) => matchScore(a.name, q), 6),
         meetings: rank(meetingList(), (m) => matchScore(m.title, q, demoMeetings.find((x) => x.id === m.id)?.summary?.summary ?? ''), 5).map((m) => ({
@@ -1816,6 +1870,28 @@ export function createMockApi(): CompiApi {
       meetingsCh.emit(meetingList())
       return metaOf(m)
     },
+    redoMeetingVoices: async (id) => {
+      const m = demoMeetings.find((x) => x.id === id)
+      if (!m) throw new Error('Réunion introuvable.')
+      await new Promise((r) => setTimeout(r, 1500))
+      m.names = {}
+      meetingsCh.emit(meetingList())
+      return metaOf(m)
+    },
+    moveMeetingLine: async (id, index, who) => {
+      const i = demoMeetings.findIndex((x) => x.id === id)
+      if (i < 0) return null
+      demoMeetings[i] = moveLine(demoMeetings[i], index, who)
+      return { ...demoMeetings[i] }
+    },
+    deleteMeetingAudio: async (id) => {
+      const m = demoMeetings.find((x) => x.id === id)
+      if (!m) return null
+      m.audio = false
+      delete m.audioUntil
+      meetingsCh.emit(meetingList())
+      return { ...m }
+    },
     summarizeMeeting: async (id) => {
       const m = demoMeetings.find((x) => x.id === id)
       if (!m) throw new Error('Réunion introuvable.')
@@ -1826,7 +1902,40 @@ export function createMockApi(): CompiApi {
       return { ...m }
     },
     exportMeeting: async () => true,
+    saveMeetingNote: async (id) => {
+      const m = demoMeetings.find((x) => x.id === id)
+      const n = settings.meetings.notes
+      if (!m) return { ok: false, error: 'Réunion introuvable.' }
+      if (!n.folder) return { ok: false, error: 'Aucun dossier de notes n’est choisi.', needsSetup: true }
+      await new Promise((r) => setTimeout(r, 400))
+      const day = new Date(m.startedAt).toISOString().slice(0, 10)
+      return { ok: true, path: `${n.folder}\\${day} ${m.title}.md`, editId: 'e7' }
+    },
+    openMeetingNote: async () => true,
+    pickNotesFolder: async () => {
+      const folder = 'C:\\Users\\demo\\Documents\\Coffre'
+      settings = {
+        ...settings,
+        folders: [...new Set([...settings.folders, folder])],
+        meetings: { ...settings.meetings, notes: { ...settings.meetings.notes, folder, openWith: 'obsidian' } }
+      }
+      settingsCh.emit(settings)
+      return settings
+    },
     onMeetings: meetingsCh.on,
+    // Aperçu de la transcription flottante : /#transcript (un appel simulé qui avance).
+    pushFloatingCall: () => undefined,
+    openFloating: async () => undefined,
+    floatingState: async () => floatingDemo,
+    floatingCommand: async (cmd) => {
+      if (cmd.type === 'compact') floatingDemo = { ...floatingDemo, compact: cmd.compact }
+      else if (cmd.type === 'opacity') floatingDemo = { ...floatingDemo, opacity: cmd.opacity }
+      else if (cmd.type === 'stop' && floatingDemo.call)
+        floatingDemo = { ...floatingDemo, call: { ...floatingDemo.call, phase: 'processing', step: 'Je termine la transcription…' } }
+      floatingCh.emit(floatingDemo)
+    },
+    onFloatingState: floatingCh.on,
+    onFloatingToIsland: () => () => undefined,
     onDictationCommand: () => () => undefined,
     dictationTranscribe: async () => '',
     dictationPrepare: () => undefined,
@@ -1872,7 +1981,15 @@ export function createMockApi(): CompiApi {
     },
     send: async (req) => {
       const conversationId = req.conversationId ?? uid()
-      const userMessage = { id: uid(), role: 'user' as const, text: req.text, attachments: req.attachments, createdAt: Date.now() }
+      const joined = req.meeting ? demoMeetings.find((x) => x.id === req.meeting) : undefined
+      const userMessage = {
+        id: uid(),
+        role: 'user' as const,
+        text: req.text,
+        attachments: req.attachments,
+        ...(joined ? { meeting: { id: joined.id, title: joined.title } } : {}),
+        createdAt: Date.now()
+      }
       const assistantMessageId = uid()
       if (!conversations.some((c) => c.id === conversationId)) {
         conversations.unshift({ id: conversationId, title: req.text.slice(0, 60), updatedAt: Date.now(), messages: [], brain: defaultBrain(settings) })
@@ -2242,8 +2359,10 @@ const DEMO_SUMMARY: MeetingSummary = {
 }
 
 /** Réunions de démonstration (persona Alex) : une résumée, une interrompue. */
-function DEMO_MEETINGS(): Meeting[] {
+/** `redo` : le son de l'appel est encore là (corriger les voix), avec une phrase à vérifier. */
+function DEMO_MEETINGS(redo = false): Meeting[] {
   const t0 = Date.now() - 3 * 3600_000
+  const later: Meeting['lines'] = redo ? [{ start: 31, end: 38, who: 's2', text: 'And the donation is in your pipeline, so you can see it.', doubt: true }] : []
   return [
     {
       id: '6f1c2a10-0000-4000-8000-000000000001',
@@ -2255,7 +2374,8 @@ function DEMO_MEETINGS(): Meeting[] {
       others: true,
       speakers: 2,
       hasSummary: true,
-      audio: false,
+      audio: redo,
+      ...(redo ? { audioUntil: t0 + 24 * 3600_000 } : {}),
       names: { s1: 'Léa' },
       summary: DEMO_SUMMARY,
       // La fois d'avant du « Point équipe » de démonstration (même série).
@@ -2272,7 +2392,8 @@ function DEMO_MEETINGS(): Meeting[] {
         { start: 12, end: 16, who: 's2', text: 'On garde la date du lundi 3 novembre ?' },
         { start: 17, end: 21, who: 's1', text: 'Oui, si les captures arrivent jeudi. Alex, tu me les envoies ?' },
         { start: 22, end: 25, who: 'me', text: 'Je m’en occupe demain matin.' },
-        { start: 26, end: 30, who: 's1', text: 'Super. Moi je relis le texte de la page d’ici vendredi.' }
+        { start: 26, end: 30, who: 's1', text: 'Super. Moi je relis le texte de la page d’ici vendredi.' },
+        ...later
       ]
     },
     {

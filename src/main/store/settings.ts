@@ -3,7 +3,9 @@ import { copyFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { app } from 'electron'
 import { DEFAULT_DICTATION, isDictationKey, isDictationStyle } from '../../shared/dictation'
-import { DEFAULT_MEETINGS } from '../../shared/meetings'
+import { cleanNotes, DEFAULT_MEETINGS } from '../../shared/meetings'
+import { cleanFloating } from '../../shared/floating'
+import { isMeetingLanguage } from '../../shared/meetingLanguage'
 import { DEFAULT_NATURAL_VOICE } from '../../shared/naturalVoice'
 import { DEFAULT_PRIVACY } from '../../shared/privacy'
 import { isSpeechModel } from '../../shared/speechModels'
@@ -48,8 +50,13 @@ export const DEFAULT_DENY_KEY = 'Alt+Shift+N'
  * v22 : « Ce que tu as manqué » (activé). Champ ajouté seulement.
  * v23 : raccourci de la zone d'écran (Alt+Maj+Z). Champ ajouté seulement.
  * v24 : plein écran, vue de l'agenda (jour ou 7 jours) et place des blocs. Champ ajouté seulement.
+ * v25 : notes de réunion (dossier, nom, modèle, ouverture), dans meetings. Champ ajouté seulement.
+ * v26 : transcription flottante (meetings.floating) et Compi masqué des partages d'écran
+ * (hideFromCapture, oui par défaut). Champs ajoutés seulement.
+ * v27 : réunions, langue attendue (automatique) et son gardé 24 h pour corriger les voix
+ * (meetings.language, meetings.redoAudio). Champs ajoutés seulement.
  */
-export const SETTINGS_VERSION = 24
+export const SETTINGS_VERSION = 27
 
 /** Modèle d'Ollama pour la recherche par le sens : multilingue, bon en français, ~640 Mo. */
 export const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b'
@@ -118,7 +125,8 @@ export const DEFAULT_SETTINGS: Settings = {
   monitor: { island: false, memoryAlert: true },
   webSearch: DEFAULT_WEB_SEARCH,
   zoom: DEFAULT_ZOOM,
-  full: DEFAULT_FULL
+  full: DEFAULT_FULL,
+  hideFromCapture: true
 }
 
 type Listener = (s: Settings) => void
@@ -157,7 +165,11 @@ function meetingsFrom(raw: Partial<MeetingSettings> | undefined): MeetingSetting
     engine: isSpeechModel(m.engine) ? m.engine : DEFAULT_MEETINGS.engine,
     voices: m.voices !== false,
     keepAudio: m.keepAudio === true,
-    autoSummary: m.autoSummary !== false
+    redoAudio: m.redoAudio !== false,
+    language: isMeetingLanguage(m.language) ? m.language : DEFAULT_MEETINGS.language,
+    autoSummary: m.autoSummary !== false,
+    notes: cleanNotes(m.notes),
+    floating: cleanFloating(m.floating)
   }
 }
 
@@ -204,7 +216,8 @@ class SettingsStore {
       monitor: { ...DEFAULT_SETTINGS.monitor, ...raw.monitor },
       webSearch: cleanWebSearch(raw.webSearch),
       zoom: cleanZoom(raw.zoom),
-      full: cleanFull(raw.full)
+      full: cleanFull(raw.full),
+      hideFromCapture: raw.hideFromCapture !== false
     }
     if ((raw.settingsVersion ?? 1) < SETTINGS_VERSION) {
       backupBeforeMigration(this.path, raw.settingsVersion ?? 1)
@@ -244,7 +257,8 @@ class SettingsStore {
       monitor: { ...this.data.monitor, ...patch.monitor },
       webSearch: cleanWebSearch({ ...this.data.webSearch, ...patch.webSearch }),
       zoom: cleanZoom({ ...this.data.zoom, ...patch.zoom }),
-      full: cleanFull({ ...this.data.full, ...patch.full })
+      full: cleanFull({ ...this.data.full, ...patch.full }),
+      hideFromCapture: (patch.hideFromCapture ?? this.data.hideFromCapture) !== false
     }
     this.save()
     for (const l of this.listeners) l(this.data)

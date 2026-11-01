@@ -212,7 +212,48 @@ export interface Settings {
   zoom: ZoomSettings
   /** Plein écran : vue de l'agenda et place des blocs. */
   full: FullSettings
+  /** Fenêtres de Compi absentes des captures et des partages d'écran (réglages v26, oui par défaut). */
+  hideFromCapture: boolean
 }
+
+/** Transcription flottante d'un appel, au-dessus de l'application de visio (réglages v26). */
+export interface FloatingSettings {
+  /** S'ouvre toute seule au début d'un enregistrement. */
+  auto: boolean
+  /** Seulement les dernières phrases, comme des sous-titres. */
+  compact: boolean
+  /** Opacité de la fenêtre (0,5 à 1). */
+  opacity: number
+  /** Dernière place et taille (pixels de l'écran, sans mise à l'échelle). */
+  bounds?: { x: number; y: number; width: number; height: number }
+}
+
+/** Appel en cours, tel que l'îlot le connaît (aussi envoyé à la transcription flottante). */
+export interface LiveCall {
+  id: string
+  startedAt: number
+  /** Le son de l'appel est capté (sinon : le micro seul). */
+  others: boolean
+  /** Les voix des autres seront séparées : le nombre de personnes en face se choisit jusqu'à l'arrêt. */
+  choosePeople: boolean
+  /** Une seule personne en face (1) ; absent : automatique. */
+  people?: number
+  phase: 'starting' | 'recording' | 'processing'
+  /** Dernières phrases transcrites (60 au plus). */
+  lines: MeetingLine[]
+  /** Étape de la mise au propre, après l'arrêt. */
+  step?: string
+}
+
+/** Ce que montre la transcription flottante. */
+export interface FloatingState {
+  call: LiveCall | null
+  compact: boolean
+  opacity: number
+}
+
+export type FloatingCommand =
+  { type: 'stop' } | { type: 'people'; people?: number } | { type: 'compact'; compact: boolean } | { type: 'opacity'; opacity: number } | { type: 'close' }
 
 export type FullBlockId = 'missed' | 'agenda' | 'reminders' | 'timer' | 'mail' | 'call' | 'tasks' | 'recents' | 'messages' | 'routines'
 export type FullColumn = 'left' | 'right'
@@ -398,6 +439,8 @@ export interface ChatMessage {
   text: string
   tools?: ToolActivity[]
   attachments?: string[]
+  /** Réunion jointe au message. */
+  meeting?: { id: string; title: string }
   error?: string
   /** La réponse annonce une action qu'aucun outil n'a faite (alerte ambre). */
   notice?: MessageNotice
@@ -454,6 +497,8 @@ export interface SendRequest {
   attachments?: string[]
   /** Le texte vient en partie d'autres personnes (résumé d'un appel) : les actions sortantes demanderont un OK. */
   external?: boolean
+  /** Réunion jointe (« Discuter de cette réunion ») : son résumé accompagne le message. */
+  meeting?: string
 }
 
 export interface SendResult {
@@ -1015,6 +1060,8 @@ export interface MeetingLine {
   /** `me`, `others` (voix non séparées), ou `s1`, `s2`… (pack des voix). */
   who: string
   text: string
+  /** Phrase restée douteuse après une seconde lecture (autre langue, mots manquants) : à vérifier. */
+  doubt?: true
 }
 
 export interface MeetingTask {
@@ -1095,6 +1142,8 @@ export interface MeetingMeta {
   hasSummary: boolean
   /** Le son est encore sur le PC (option « garder le son », ou transcription à reprendre). */
   audio: boolean
+  /** Son gardé seulement pour corriger les voix : effacé tout seul à cette heure (ms). */
+  audioUntil?: number
   /** Rendez-vous de l'agenda enregistré depuis sa préparation (pour retrouver « la fois d'avant »). */
   event?: MeetingEventLink
 }
@@ -1155,6 +1204,9 @@ export type MeetingEvent =
   /** Information qui n'arrête pas l'enregistrement. */
   | { type: 'notice'; id: string; message: string }
 
+/** Langue attendue d'une réunion ; automatique : celle de la plupart des phrases. */
+export type MeetingLanguage = 'auto' | 'fr' | 'en'
+
 export interface MeetingSettings {
   /** Langue des appels (modèle de reconnaissance). */
   engine: SpeechModelId
@@ -1162,9 +1214,32 @@ export interface MeetingSettings {
   voices: boolean
   /** Garder le son après la transcription (par défaut : effacé). */
   keepAudio: boolean
+  /** Sans « garder le son » : le son de l'appel reste 24 h pour refaire la séparation des voix (réglages v27). */
+  redoAudio: boolean
+  /** Langue des réunions : les phrases parties dans l'autre langue sont reprises (réglages v27). */
+  language: MeetingLanguage
   /** Résumer à la fin de l'appel quand le cerveau est sur le PC (ou autorisé en ligne). */
   autoSummary: boolean
+  /** Notes de réunion écrites dans le dossier choisi (réglages v25). */
+  notes: MeetingNotesSettings
+  /** Transcription flottante pendant l'appel (réglages v26). */
+  floating: FloatingSettings
 }
+
+/** Où et comment écrire les notes de réunion (un coffre Obsidian, Logseq ou un simple dossier). */
+export interface MeetingNotesSettings {
+  /** Dossier des notes, parmi les dossiers confiés (ou dedans) ; vide : pas encore choisi. */
+  folder: string
+  /** Nom du fichier, avec les variables du modèle ; peut commencer par un sous-dossier (« Réunions/{{date}} {{titre}} »). */
+  fileName: string
+  /** Modèle Markdown de la note ({{titre}}, {{resume}}, {{taches}}…). */
+  template: string
+  /** Ouvrir la note avec Obsidian, ou avec l'appli par défaut des fichiers .md. */
+  openWith: 'system' | 'obsidian'
+}
+
+/** Note de réunion écrite (bouton « Ajouter à mes notes »). */
+export type MeetingNoteResult = { ok: true; path: string; editId: string } | { ok: false; error: string; needsSetup?: boolean }
 
 // ─── Mémoire, routines, presse-papier, recherche par le sens ─────────────────
 

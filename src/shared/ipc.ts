@@ -181,7 +181,23 @@ export const IPC = {
   meetingRename: 'meetings:rename',
   meetingNameVoice: 'meetings:name-voice',
   meetingResume: 'meetings:resume',
+  meetingRedoVoices: 'meetings:redo-voices',
+  meetingMoveLine: 'meetings:move-line',
+  meetingDeleteAudio: 'meetings:delete-audio',
   meetingSummarize: 'meetings:summarize',
+  meetingSaveNote: 'meetings:save-note',
+  meetingOpenNote: 'meetings:open-note',
+  meetingPickNotesFolder: 'meetings:pick-notes-folder',
+  /** Îlot → principal : état de l'appel en cours, pour la transcription flottante. */
+  floatingCall: 'floating:call',
+  floatingOpen: 'floating:open',
+  floatingGet: 'floating:get',
+  /** Principal → transcription flottante. */
+  floatingState: 'floating:state',
+  /** Transcription flottante → principal (boutons). */
+  floatingCommand: 'floating:command',
+  /** Principal → îlot : « Arrêter » ou personnes en face, depuis la fenêtre flottante. */
+  floatingToIsland: 'floating:to-island',
   meetingExport: 'meetings:export',
   meetingsChanged: 'meetings:changed',
   // mémoire

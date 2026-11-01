@@ -6,6 +6,8 @@ import { recommend } from '../shared/recommend'
 import type {
   AgendaDraft,
   Brain,
+  FloatingCommand,
+  LiveCall,
   BrainQuizAnswers,
   ConnectorConfig,
   ApprovalKeysSettings,
@@ -134,11 +136,14 @@ import { cancelSpeechDownload, cleanPartialSpeechDownloads, deleteSpeechModel, d
 import { naturalSpeech, unloadNaturalSpeech } from './speech/tts'
 import { allowCallAudio, restrictPermissions } from './permissions'
 import {
+  deleteMeetingAudio,
   discardMeeting,
   hookMeetingsPower,
   meetingAudio,
+  purgeExpiredAudio,
   recordingId,
   recoverMeetings,
+  redoVoices,
   resumeMeeting,
   setMeetingPeople,
   startMeeting,
@@ -147,7 +152,9 @@ import {
 } from './meetings/recorder'
 import { deleteMeeting, getMeeting, isMeetingId, listMeetings, updateMeeting } from './meetings/store'
 import { summarizeMeeting } from './meetings/summary'
-import { meetingMarkdown, nameVoice, peopleChoice } from '../shared/meetings'
+import { isObsidianVault, openMeetingNote, saveMeetingNote } from './meetings/notes'
+import { applyFloatingCapture, floatingCommand, floatingState, onFloatingCommand, openFloating, setFloatingCall, setFloatingFullMode } from './floatingWindow'
+import { meetingMarkdown, moveLine, nameVoice, peopleChoice } from '../shared/meetings'
 import { cleanEventLink } from '../shared/meetingPrep'
 import { meetingPrep } from './day/prep'
 import { clearSent, listSent } from './privacy/log'
@@ -172,7 +179,19 @@ import type { PillId } from '../shared/pills'
 import { fullscreenNow, hookPerfPower, localBusy, perfWatch, refreshPerf, startMemoryAlert, stopPerf, unloadLocal } from './system/monitor'
 import { setCacheLimit } from './brains/ollamaCache'
 import { healthBook } from './store/modelHealth'
-import { createNotchWindow, isFullMode, onPanelOpen, registerIslandIpc, sendIslandCommand, setZoom, showOpenDialog, showSaveDialog } from './notchWindow'
+import {
+  createNotchWindow,
+  getNotchWindow,
+  isFullMode,
+  onFullModeChange,
+  onPanelOpen,
+  registerIslandIpc,
+  sendIslandCommand,
+  setNotchCaptureHidden,
+  setZoom,
+  showOpenDialog,
+  showSaveDialog
+} from './notchWindow'
 import { conversations } from './store/conversations'
 import { secrets } from './store/secrets'
 import { OLLAMA_URL, settings } from './store/settings'
@@ -931,7 +950,35 @@ function registerIpc(): void {
     return updateMeeting(meetingId(id), (m) => nameVoice(m, who, n))
   })
   ipcMain.handle(IPC.meetingResume, (_e, id: string) => resumeMeeting(meetingId(id)))
+  ipcMain.handle(IPC.meetingRedoVoices, (_e, id: string, people?: number) => redoVoices(meetingId(id), people))
+  ipcMain.handle(IPC.meetingMoveLine, (_e, id: string, index: number, who: string) =>
+    Number.isInteger(index) && typeof who === 'string' ? updateMeeting(meetingId(id), (m) => moveLine(m, index, who)) : null
+  )
+  ipcMain.handle(IPC.meetingDeleteAudio, (_e, id: string) => deleteMeetingAudio(meetingId(id)))
   ipcMain.handle(IPC.meetingSummarize, (_e, id: string) => summarizeMeeting(meetingId(id), true))
+  // Transcription flottante : l'îlot envoie l'état de l'appel ; la fenêtre renvoie ses boutons.
+  ipcMain.on(IPC.floatingCall, (_e, call: LiveCall | null) => setFloatingCall(call && typeof call === 'object' ? call : null))
+  ipcMain.handle(IPC.floatingOpen, () => openFloating())
+  ipcMain.handle(IPC.floatingGet, () => floatingState())
+  ipcMain.handle(IPC.floatingCommand, (_e, cmd: FloatingCommand) => {
+    if (cmd && typeof cmd === 'object' && typeof cmd.type === 'string') floatingCommand(cmd)
+  })
+  onFloatingCommand((cmd) => getNotchWindow()?.webContents.send(IPC.floatingToIsland, cmd))
+  onFullModeChange(setFloatingFullMode)
+  // « Ajouter à mes notes » : le clic vaut accord (comme lancer une appli depuis la recherche).
+  ipcMain.handle(IPC.meetingSaveNote, (_e, id: string) => saveMeetingNote(meetingId(id)))
+  ipcMain.handle(IPC.meetingOpenNote, (_e, path: string) => openMeetingNote(path))
+  ipcMain.handle(IPC.meetingPickNotesFolder, async () => {
+    const { canceled, filePaths } = await showOpenDialog({ title: 'Dossier de tes notes (un coffre Obsidian, par exemple)', properties: ['openDirectory'] })
+    const folder = filePaths[0]
+    if (canceled || !folder) return publicSettings()
+    const s = settings.get()
+    // Choisir ce dossier, c'est le confier : Compi y écrit les notes (toujours sous un nouveau nom).
+    const folders = insideAny(folder, allowedFolders()) ? s.folders : [...new Set([...s.folders, folder])]
+    const obsidian = isObsidianVault(folder)
+    settings.update({ folders, meetings: { ...s.meetings, notes: { ...s.meetings.notes, folder, ...(obsidian ? { openWith: 'obsidian' as const } : {}) } } })
+    return publicSettings()
+  })
   ipcMain.handle(IPC.meetingExport, async (_e, id: string) => {
     const m = getMeeting(meetingId(id))
     if (!m) throw new Error('Réunion introuvable.')
@@ -1070,6 +1117,9 @@ app.whenReady().then(async () => {
   restrictPermissions()
   allowCallAudio(takeDisplayCapture)
   recoverMeetings()
+  // Son gardé 24 h pour corriger les voix : effacé à l'heure dite, même si Compi reste ouvert.
+  purgeExpiredAudio()
+  setInterval(() => purgeExpiredAudio(), 3600_000).unref()
 
   setZoom(settings.get().zoom)
   const win = createNotchWindow()
@@ -1161,6 +1211,8 @@ app.whenReady().then(async () => {
     }
     applyDictationSettings(s.dictation)
     setZoom(s.zoom)
+    setNotchCaptureHidden(s.hideFromCapture)
+    applyFloatingCapture(s.hideFromCapture)
     emit(IPC.settingsChanged, publicSettings())
   }
   applySystemSettings(settings.get())

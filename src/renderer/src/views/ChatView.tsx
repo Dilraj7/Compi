@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ArrowUp, Check, CloudUpload, FileText, Globe, Loader2, Lock, Mic, Paperclip, Square, TriangleAlert, Volume2, X } from 'lucide-react'
+import { ArrowUp, AudioLines, Check, CloudUpload, FileText, Globe, Loader2, Lock, Mic, Paperclip, Square, TriangleAlert, Volume2, X } from 'lucide-react'
 import { CATEGORY_SENT_LABEL } from '@shared/privacy'
 import { followUpFor } from '@shared/claims'
 import { gbText, localPhase } from '@shared/perf'
@@ -16,6 +16,7 @@ import { StageCard } from '../components/Stage'
 import { BrainChip, BrainPicker, useBrainReady, WelcomeBrains } from '../components/BrainPicker'
 import { Button, LedDots, cx, prettyShortcut } from '../components/ui'
 import { useFull } from '../components/fullContext'
+import { openMeetingView } from '../lib/meetingNav'
 import { heroSuggestions, type HeroSuggestion } from '@shared/hero'
 
 const SUGGESTIONS = [
@@ -324,9 +325,17 @@ function Message({ m, streaming, last }: { m: ChatMessage; streaming: boolean; l
   if (m.role === 'user') {
     return (
       <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-end gap-1.5">
-        {m.attachments?.length ? (
+        {m.attachments?.length || m.meeting ? (
           <div className="flex flex-wrap justify-end gap-1.5">
-            {m.attachments.map((a) => (
+            {m.meeting && (
+              <button
+                onClick={() => m.meeting && openMeetingView(m.meeting.id)}
+                className="inline-flex items-center gap-1 rounded-lg bg-white/[0.05] px-2 py-1 text-[11px] text-fog-300 hover:text-fog-100"
+              >
+                <AudioLines size={11} className="text-led-violet" /> {m.meeting.title}
+              </button>
+            )}
+            {(m.attachments ?? []).map((a) => (
               <span key={a} className="inline-flex items-center gap-1 rounded-lg bg-white/[0.05] px-2 py-1 text-[11px] text-fog-300">
                 <FileText size={11} /> {a.split(/[\\/]/).pop()}
               </span>
@@ -477,6 +486,7 @@ function Composer() {
   const streaming = useCompi((s) => s.streamingId !== null)
   const focused = useCompi((s) => s.focused)
   const attachments = useCompi((s) => s.attachments)
+  const joinedMeeting = useCompi((s) => s.joinedMeeting)
   const removeAttachment = useCompi((s) => s.removeAttachment)
   const addAttachments = useCompi((s) => s.addAttachments)
   const brainHint = useCompi((s) => s.brainHint)
@@ -527,7 +537,7 @@ function Composer() {
 
   const submit = (): void => {
     if (streaming) return
-    if (!text.trim() && !attachments.length) return
+    if (!text.trim() && !attachments.length && !joinedMeeting) return
     void send(text)
     setText('')
   }
@@ -549,13 +559,26 @@ function Composer() {
       <DictationBar />
       <div className="rounded-[20px] bg-ink-850 ring-1 ring-inset ring-white/[0.08] transition-shadow focus-within:shadow-[0_0_0_1px_color-mix(in_oklab,var(--led)_45%,transparent),0_0_24px_-8px_var(--led)]">
         <AnimatePresence initial={false}>
-          {attachments.length > 0 && (
+          {(attachments.length > 0 || joinedMeeting) && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               className="flex flex-wrap gap-1.5 overflow-hidden px-3 pt-2.5"
             >
+              {joinedMeeting && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.06] py-1 pr-1 pl-2 text-[11.5px] text-fog-300" data-joined-meeting>
+                  <AudioLines size={12} className="text-led-violet" />
+                  Réunion : {joinedMeeting.title}
+                  <button
+                    onClick={() => useCompi.getState().setJoinedMeeting(null)}
+                    className="grid size-4 place-items-center rounded text-fog-500 hover:bg-white/10 hover:text-fog-100"
+                    aria-label="Retirer la réunion"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              )}
               {attachments.map((a) => (
                 <span key={a} className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.06] py-1 pr-1 pl-2 text-[11.5px] text-fog-300">
                   <FileText size={12} className="text-[var(--led)]" />
@@ -602,7 +625,7 @@ function Composer() {
                 submit()
               }
             }}
-            placeholder="Demande à Compi…"
+            placeholder={joinedMeeting ? `Une question sur « ${joinedMeeting.title} »…` : 'Demande à Compi…'}
             className="max-h-[120px] min-h-8 flex-1 resize-none bg-transparent py-1.5 text-[13.5px] leading-[1.45] text-fog-100 outline-none placeholder:text-fog-700 select-text"
           />
           <button
@@ -628,7 +651,7 @@ function Composer() {
           ) : (
             <button
               onClick={submit}
-              disabled={!text.trim() && !attachments.length}
+              disabled={!text.trim() && !attachments.length && !joinedMeeting}
               className="grid size-8 shrink-0 place-items-center rounded-xl bg-[var(--led)] text-black shadow-[0_0_16px_-4px_var(--led)] transition-all hover:brightness-110 active:scale-95 disabled:bg-white/[0.08] disabled:text-fog-700 disabled:shadow-none"
               aria-label="Envoyer"
               title="Envoyer (Entrée)"

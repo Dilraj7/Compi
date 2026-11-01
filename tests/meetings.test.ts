@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
+  cutAtPauses,
+  frameLevels,
+  quietestAt,
+  voiceFloor,
   clockAt,
   dropEchoes,
   flushSegmenter,
   formatDuration,
   meetingMarkdown,
   mergeVoices,
+  moveLine,
   nameVoice,
+  nextVoice,
   newSegmenter,
   oneVoice,
   parseSummary,
@@ -123,6 +129,23 @@ describe('découpage de la parole', () => {
     for (const s of spans) expect((s.to - s.from) / SAMPLE_RATE).toBeLessThanOrEqual(15.3)
   })
 
+  it('une phrase trop longue est coupée au moment le plus calme, pas au milieu d’un mot', () => {
+    // 9 s de voix, un souffle de 0,15 s (pas une vraie pause), puis 9 s : coupé au souffle (~10 s), pas à 15 s.
+    const spans = segment(
+      sound([
+        [1, 0],
+        [9, 0.2],
+        [0.15, 0.005],
+        [9, 0.2],
+        [1, 0]
+      ])
+    )
+    expect(spans).toHaveLength(2)
+    expect(spans[0].to / SAMPLE_RATE).toBeGreaterThan(9.9)
+    expect(spans[0].to / SAMPLE_RATE).toBeLessThan(10.2)
+    expect(spans[1].from).toBe(spans[0].to)
+  })
+
   it('un micro avec du souffle ne parle pas en continu', () => {
     const spans = segment(
       sound(
@@ -189,13 +212,33 @@ describe('voix des autres', () => {
     ])
   })
 
-  it('coupe un long tour de parole en morceaux de 20 s', () => {
-    const out = mergeVoices([{ start: 0, end: 45, speaker: 0 }])
-    expect(out.map((p) => [p.start, p.end])).toEqual([
-      [0, 20],
-      [20, 40],
-      [40, 45]
+  it('garde un long tour de parole entier (il est coupé ensuite, aux pauses)', () => {
+    expect(mergeVoices([{ start: 0, end: 45, speaker: 0 }])).toEqual([{ start: 0, end: 45, who: 's1' }])
+  })
+
+  it('automatique : une miette prise entre deux morceaux d’une autre voix lui revient', () => {
+    // Cas réel du 01/11 : « Personne 3 » pour deux mots au milieu de la phrase de quelqu'un d'autre.
+    const segs = [
+      { start: 0, end: 5, speaker: 0 },
+      { start: 5.2, end: 6, speaker: 1 },
+      { start: 6.3, end: 12, speaker: 0 },
+      { start: 13, end: 20, speaker: 1 }
+    ]
+    expect(mergeVoices(segs)).toEqual([
+      { start: 0, end: 12, who: 's1' },
+      { start: 13, end: 20, who: 's2' }
     ])
+    // Une vraie réponse courte entre deux voix différentes reste à sa place.
+    expect(
+      mergeVoices([
+        { start: 0, end: 5, speaker: 0 },
+        { start: 5.2, end: 6, speaker: 1 },
+        { start: 6.3, end: 12, speaker: 2 },
+        { start: 13, end: 20, speaker: 1 }
+      ]).map((p) => p.who)
+    ).toEqual(['s1', 's2', 's3', 's2'])
+    // Nombre de personnes choisi : rien n'est déplacé.
+    expect(mergeVoices(segs, false).map((p) => p.who)).toEqual(['s1', 's2', 's1', 's2'])
   })
 
   it('un moment où deux voix se chevauchent n’est transcrit qu’une fois', () => {
@@ -329,6 +372,117 @@ describe('voix des autres', () => {
     expect(merged.lines.map((l) => l.who)).toEqual(['s1', 's2', 's1', 'me'])
     expect(merged.speakers).toBe(2)
     expect(nameVoice(merged, 's2', '').names).toEqual({ s1: 'Léa' })
+  })
+
+  it('rattache une phrase à une autre voix, ou à une nouvelle personne', () => {
+    const m = {
+      names: {},
+      speakers: 2,
+      lines: [
+        { start: 0, end: 2, who: 's1', text: 'a' },
+        { start: 3, end: 4, who: 's2', text: 'b' },
+        { start: 5, end: 6, who: 's1', text: 'c' },
+        { start: 7, end: 8, who: 'me', text: 'd' }
+      ]
+    } as unknown as Meeting
+    expect(nextVoice(m.lines)).toBe('s3')
+    const moved = moveLine(m, 2, 's2')
+    expect(moved.lines.map((l) => l.who)).toEqual(['s1', 's2', 's2', 'me'])
+    const added = moveLine(moved, 0, 's3')
+    expect(added.lines.map((l) => l.who)).toEqual(['s3', 's2', 's2', 'me'])
+    expect(added.speakers).toBe(2)
+    // Le micro, une voix inventée ou une ligne absente : rien ne change.
+    expect(moveLine(m, 3, 's1')).toBe(m)
+    expect(moveLine(m, 0, 's9')).toBe(m)
+    expect(moveLine(m, 0, 'me')).toBe(m)
+    expect(moveLine(m, 12, 's2')).toBe(m)
+  })
+})
+
+describe('coupe aux pauses', () => {
+  /** Niveaux de tranches de 30 ms : `parts` = [secondes, niveau]. */
+  const levelsOf = (parts: [number, number][]): Float32Array => {
+    const out: number[] = []
+    for (const [seconds, level] of parts) for (let i = 0; i < Math.round(seconds / 0.03); i++) out.push(level)
+    return Float32Array.from(out)
+  }
+
+  it('coupe un tour de parole à une vraie pause', () => {
+    const levels = levelsOf([
+      [10, 0.2],
+      [1, 0.001],
+      [8, 0.2]
+    ])
+    const out = cutAtPauses([{ start: 0, end: 19, who: 's1' }], levels)
+    expect(out).toHaveLength(2)
+    expect(out[0].end).toBeCloseTo(10.15, 1)
+    expect(out[1].start).toBeCloseTo(10.8, 1)
+    expect(out.every((p) => p.who === 's1')).toBe(true)
+  })
+
+  it('une courte respiration ne coupe pas', () => {
+    const levels = levelsOf([
+      [5, 0.2],
+      [0.3, 0.001],
+      [5, 0.2]
+    ])
+    expect(cutAtPauses([{ start: 0, end: 10.3, who: 's1' }], levels)).toHaveLength(1)
+  })
+
+  it('un long tour sans pause est coupé au plus calme, en morceaux de 6 à 15 s', () => {
+    // 38 s de parole, avec deux creux (fins de phrase sans vraie pause) à 12 s et 24 s.
+    const levels = levelsOf([
+      [12, 0.2],
+      [0.15, 0.05],
+      [12, 0.2],
+      [0.15, 0.05],
+      [14, 0.2]
+    ])
+    const out = cutAtPauses([{ start: 0, end: 38.3, who: 's2' }], levels)
+    expect(out.map((p) => Math.round(p.end))).toEqual([12, 24, 38])
+    for (const p of out) {
+      expect(p.end - p.start).toBeLessThanOrEqual(15)
+      expect(p.end - p.start).toBeGreaterThanOrEqual(6)
+    }
+  })
+
+  it('sans niveaux (son illisible), coupe toutes les 15 s', () => {
+    expect(cutAtPauses([{ start: 0, end: 40, who: 's1' }], new Float32Array(0)).map((p) => [p.start, p.end])).toEqual([
+      [0, 15],
+      [15, 30],
+      [30, 40]
+    ])
+  })
+
+  it('niveaux et seuil d’une piste', () => {
+    const levels = frameLevels(
+      sound([
+        [1, 0],
+        [1, 0.2]
+      ])
+    )
+    expect(levels.length).toBe(Math.floor((2 * SAMPLE_RATE) / 480))
+    expect(levels[0]).toBe(0)
+    expect(levels.at(-1)).toBeGreaterThan(0.1)
+    expect(voiceFloor(levels)).toBe(0.012)
+    // Souffle du micro : 3 fois le bruit ; parole presque continue : 30 % du niveau habituel au plus.
+    expect(
+      voiceFloor(
+        levelsOf([
+          [2, 0.01],
+          [8, 0.2]
+        ])
+      )
+    ).toBeCloseTo(0.03)
+    expect(
+      voiceFloor(
+        levelsOf([
+          [0.2, 0.05],
+          [10, 0.1]
+        ])
+      )
+    ).toBeCloseTo(0.03)
+    expect(quietestAt(new Float32Array(0), 0, 10)).toBeNull()
   })
 })
 

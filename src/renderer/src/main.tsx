@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { StrictMode, lazy, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 import { App } from './App'
@@ -10,8 +10,17 @@ if (!('compi' in window)) {
   document.body.classList.add('web-preview')
 }
 
+// La transcription flottante d'un appel est une autre fenêtre, avec sa propre page.
+const TranscriptApp = lazy(() => import('./floating/TranscriptApp').then((m) => ({ default: m.TranscriptApp })))
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {location.hash === '#transcript' ? (
+      <Suspense fallback={null}>
+        <TranscriptApp />
+      </Suspense>
+    ) : (
+      <App />
+    )}
   </StrictMode>
 )

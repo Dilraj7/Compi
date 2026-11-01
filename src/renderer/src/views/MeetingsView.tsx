@@ -1,17 +1,19 @@
 // Historique › Réunions : lancer l'enregistrement d'un appel (avec le rappel
 // de prévenir les participants), la liste des appels enregistrés, et chaque
-// réunion : résumé, tâches, transcription, noms des voix, export.
+// réunion : résumé, tâches, transcription, noms des voix, export ; tant que le son
+// est là, refaire la séparation des voix ; une phrase se rattache à une autre voix.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { ArrowLeft, Check, Copy, Download, FileText, Mic, Phone, RotateCcw, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { ArrowLeft, AudioLines, Check, Copy, Download, FileText, Mic, Phone, RotateCcw, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { brainLabel, defaultBrain } from '@shared/brains'
-import { clockAt, CONSENT_SENTENCE, followUpPrompt, formatDuration, PEOPLE_CHOICES, speakerLabel, transcriptText } from '@shared/meetings'
+import { clockAt, CONSENT_SENTENCE, followUpPrompt, formatDuration, nextVoice, PEOPLE_CHOICES, speakerLabel, transcriptText } from '@shared/meetings'
 import { isOnline } from '@shared/privacy'
 import { SPEECH_MODELS } from '@shared/speechModels'
 import type { Meeting, MeetingEventLink, MeetingMeta, SpeechModelId, SpeechModelStatus } from '@shared/types'
 import { useCompi } from '../store'
 import { REC } from '../components/CallLive'
+import { DiscussButton, NoteButton } from '../components/MeetingActions'
 import { Badge, Button, cx, Segmented, TextInput, Toggle, timeAgo } from '../components/ui'
 
 const cleanError = (e: Error): string => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
@@ -234,6 +236,7 @@ function MeetingDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const [editing, setEditing] = useState(false)
   const [copied, setCopied] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [moving, setMoving] = useState<number | null>(null)
 
   // Réunion effacée ou illisible : retour à la liste, jamais une fiche vide sans issue.
   const reload = (): void => void window.compi.meeting(id).then((x) => (x ? setM(x) : onBack()))
@@ -349,6 +352,10 @@ function MeetingDetail({ id, onBack }: { id: string; onBack: () => void }) {
               <Sparkles size={13} /> Suite avec Compi
             </Button>
           )}
+          {m.status !== 'recording' && m.lines.length > 0 && !blocked && (
+            <DiscussButton m={m} onOpen={() => useCompi.getState().open('chat', { focus: true })} />
+          )}
+          {m.status !== 'recording' && m.lines.length > 0 && <NoteButton m={m} />}
           <Button size="sm" variant="ghost" onClick={() => void window.compi.exportMeeting(id)}>
             <Download size={13} /> Exporter
           </Button>
@@ -413,6 +420,8 @@ function MeetingDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
         )}
 
+        {m.status === 'done' && m.others && m.audio && <RedoVoices m={m} busy={Boolean(busy)} run={run} onChange={setM} />}
+
         <VoiceNames m={m} onChange={setM} />
 
         <div className="space-y-2 pb-2">
@@ -421,15 +430,130 @@ function MeetingDetail({ id, onBack }: { id: string; onBack: () => void }) {
             <div key={i} className="flex gap-2.5 text-[12.5px] leading-snug">
               <span className="w-11 shrink-0 pt-px text-right text-[10.5px] text-fog-700 tabular-nums">{clockAt(l.start)}</span>
               <div className="min-w-0">
-                <span className="mr-1.5 font-semibold" style={{ color: voiceColor(l.who) }}>
-                  {speakerLabel(l.who, m.names)}
-                </span>
+                {/^s\d+$/.test(l.who) && m.status === 'done' ? (
+                  <button
+                    className="mr-1.5 font-semibold hover:underline"
+                    style={{ color: voiceColor(l.who) }}
+                    title="Pas la bonne personne ? Rattacher cette phrase à une autre voix"
+                    onClick={() => setMoving(moving === i ? null : i)}
+                  >
+                    {speakerLabel(l.who, m.names)}
+                  </button>
+                ) : (
+                  <span className="mr-1.5 font-semibold" style={{ color: voiceColor(l.who) }}>
+                    {speakerLabel(l.who, m.names)}
+                  </span>
+                )}
                 <span className="text-fog-300">{l.text}</span>
+                {l.doubt && (
+                  <span
+                    className="ml-1.5 rounded px-1 text-[10px] text-led-amber ring-1 ring-led-amber/30 ring-inset"
+                    title="Phrase peut-être mal reconnue (écrite dans l’autre langue, ou des mots manquent), même après une seconde lecture"
+                  >
+                    à vérifier
+                  </span>
+                )}
+                {moving === i && (
+                  <MoveLine
+                    m={m}
+                    index={i}
+                    onDone={(x) => {
+                      setMoving(null)
+                      if (x) setM(x)
+                    }}
+                  />
+                )}
               </div>
             </div>
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+type RedoValue = 'auto' | '1' | '2' | '3' | '4' | '5' | '6'
+const REDO_PEOPLE: Array<{ value: RedoValue; label: string; hint: string }> = [
+  { value: 'auto', label: 'Auto', hint: 'Compi compte les voix lui-même' },
+  ...(['1', '2', '3', '4', '5', '6'] as const).map((n) => ({
+    value: n,
+    label: n,
+    hint: n === '1' ? 'Une seule personne : toutes ses phrases à la même voix' : `${n} personnes en face`
+  }))
+]
+
+/** Son de l'appel encore là : refaire la séparation des voix (nombre de personnes au choix), ou effacer le son. */
+function RedoVoices({
+  m,
+  busy,
+  run,
+  onChange
+}: {
+  m: Meeting
+  busy: boolean
+  run: (label: string, fn: () => Promise<unknown>) => Promise<void>
+  onChange: (m: Meeting) => void
+}) {
+  const [people, setPeople] = useState<RedoValue>('auto')
+  const until = m.audioUntil ? new Date(m.audioUntil).toLocaleString('fr-FR', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) : ''
+  return (
+    <div className="space-y-2 rounded-xl bg-white/[0.035] px-3 py-2.5 text-[12px] text-fog-300 ring-1 ring-white/[0.06] ring-inset">
+      <div className="flex items-start gap-2">
+        <AudioLines size={14} className="mt-px shrink-0 text-fog-500" />
+        <span>
+          Les voix sont mal séparées ? Le son de l’appel est encore sur ton PC{until ? ` (effacé ${until})` : ''} : refais la séparation en disant combien de
+          personnes parlaient. Les noms donnés aux voix seront à refaire.
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Segmented<RedoValue> id="redo-people" value={people} options={REDO_PEOPLE} onChange={setPeople} />
+        <Button
+          size="sm"
+          variant="subtle"
+          disabled={busy}
+          onClick={() =>
+            void run('Je refais la séparation des voix…', () => window.compi.redoMeetingVoices(m.id, people === 'auto' ? undefined : Number(people)))
+          }
+        >
+          <RotateCcw size={13} /> Refaire la séparation
+        </Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void window.compi.deleteMeetingAudio(m.id).then((x) => x && onChange(x))}>
+          <Trash2 size={13} /> Effacer le son
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** Choix de la voix d'une phrase : une voix de la réunion, ou une nouvelle personne. */
+function MoveLine({ m, index, onDone }: { m: Meeting; index: number; onDone: (m: Meeting | null) => void }) {
+  const current = m.lines[index].who
+  const voices = [...new Set(m.lines.map((l) => l.who).filter((w) => /^s\d+$/.test(w) && w !== current))]
+  const added = nextVoice(m.lines)
+  const pick = (who: string): void => void window.compi.moveMeetingLine(m.id, index, who).then(onDone)
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11.5px]">
+      <span className="text-fog-500">Cette phrase est de :</span>
+      {voices.map((who) => (
+        <button
+          key={who}
+          onClick={() => pick(who)}
+          className="rounded-full px-2 py-0.5 ring-1 ring-white/[0.08] ring-inset hover:bg-white/[0.06]"
+          style={{ color: voiceColor(who) }}
+        >
+          {speakerLabel(who, m.names)}
+        </button>
+      ))}
+      <button
+        onClick={() => pick(added)}
+        className="rounded-full px-2 py-0.5 ring-1 ring-white/[0.08] ring-inset hover:bg-white/[0.06]"
+        style={{ color: voiceColor(added) }}
+      >
+        Nouvelle personne
+      </button>
+      <button onClick={() => onDone(null)} className="rounded-full px-2 py-0.5 text-fog-500 hover:text-fog-100">
+        Annuler
+      </button>
     </div>
   )
 }

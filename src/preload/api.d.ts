@@ -46,6 +46,10 @@ import type {
   Meeting,
   MeetingEvent,
   MeetingMeta,
+  MeetingNoteResult,
+  FloatingCommand,
+  FloatingState,
+  LiveCall,
   MeetingStart,
   MeetingStartOptions,
   MeetingEventLink,
@@ -301,6 +305,14 @@ export interface CompiApi {
   /** Personnes en face pendant l'appel (1, `undefined` : automatique) ; faux si l'appel est déjà arrêté. */
   meetingPeople(id: string, people: number | undefined): Promise<boolean>
   onMeetingEvent(cb: (e: MeetingEvent) => void): Unsubscribe
+  /** Îlot : état de l'appel en cours, pour la transcription flottante. */
+  pushFloatingCall(call: LiveCall | null): void
+  openFloating(): Promise<void>
+  floatingState(): Promise<FloatingState>
+  floatingCommand(cmd: FloatingCommand): Promise<void>
+  onFloatingState(cb: (s: FloatingState) => void): Unsubscribe
+  /** Îlot : « Arrêter » ou personnes en face, demandés depuis la fenêtre flottante. */
+  onFloatingToIsland(cb: (cmd: FloatingCommand) => void): Unsubscribe
   meetings(): Promise<MeetingMeta[]>
   meeting(id: string): Promise<Meeting | null>
   deleteMeeting(id: string): Promise<MeetingMeta[]>
@@ -308,7 +320,18 @@ export interface CompiApi {
   /** Nom d'une voix (« s1 » → « Paul ») ; vide pour revenir à « Personne 1 ». */
   nameMeetingVoice(id: string, who: string, name: string): Promise<Meeting | null>
   resumeMeeting(id: string): Promise<MeetingMeta | null>
+  /** Refait la séparation des voix (son encore là) : `people` imposé, sinon automatique. */
+  redoMeetingVoices(id: string, people?: number): Promise<MeetingMeta>
+  /** Rattache une phrase à une autre voix (existante, ou la suivante). */
+  moveMeetingLine(id: string, index: number, who: string): Promise<Meeting | null>
+  /** Efface tout de suite le son gardé (la transcription reste). */
+  deleteMeetingAudio(id: string): Promise<Meeting | null>
   summarizeMeeting(id: string): Promise<Meeting>
+  /** Écrit la note de la réunion dans le dossier de notes (le clic vaut accord). */
+  saveMeetingNote(id: string): Promise<MeetingNoteResult>
+  openMeetingNote(path: string): Promise<boolean>
+  /** Choisit (et confie) le dossier des notes de réunion. */
+  pickNotesFolder(): Promise<PublicSettings>
   /** Enregistre la réunion en Markdown (fenêtre « Enregistrer sous »). */
   exportMeeting(id: string): Promise<boolean>
   onMeetings(cb: (list: MeetingMeta[]) => void): Unsubscribe

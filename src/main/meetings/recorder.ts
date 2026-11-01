@@ -3,25 +3,32 @@
 // arrivent ici en morceaux de 16 bits à 16 kHz. Chaque piste est
 // écrite dans le dossier de la réunion et découpée en phrases, transcrites au
 // fil de l'eau (sur le PC). À l'arrêt : dernières phrases, séparation des voix
-// des autres (pack des voix), doublons du micro retirés, puis le son est effacé
-// (sauf si l'utilisateur veut le garder). Jamais lancé sans un clic.
+// des autres (pack des voix), phrases douteuses reprises (autre langue, mots perdus),
+// doublons du micro retirés, puis le son est effacé (sauf si l'utilisateur veut
+// le garder ; par défaut, le son de l'appel reste 24 h pour pouvoir refaire la
+// séparation des voix). Jamais lancé sans un clic.
 
 import { randomUUID } from 'node:crypto'
 import { closeSync, existsSync, mkdirSync, openSync, readSync, statSync, writeSync } from 'node:fs'
 import { powerMonitor } from 'electron'
 import { IPC } from '../../shared/ipc'
+import { expectedLanguage, lineLanguage, sparseLines, wrongLanguageLines } from '../../shared/meetingLanguage'
 import {
   byTime,
   countVoices,
+  cutAtPauses,
   defaultMeetingTitle,
   dropEchoes,
   flushSegmenter,
+  frameLevels,
   MEETING_MAX_MS,
   mergeVoices,
   newSegmenter,
   oneVoice,
   peopleChoice,
+  quietestAt,
   SAMPLE_RATE,
+  SEGMENT,
   segmentChunk,
   type SegmenterState,
   type SpeechSpan
@@ -42,6 +49,10 @@ const SILENT_STOP_MS = 30_000
 const SAVE_EVERY_MS = 15_000
 /** Morceau envoyé par l'îlot : 2 s au plus. */
 const MAX_CHUNK = SAMPLE_RATE * 2
+/** Sans « garder le son » : le son de l'appel reste ce temps, pour refaire la séparation des voix. */
+export const REDO_AUDIO_MS = 24 * 3600_000
+/** Phrases reprises au plus (une réunion entière dans l'autre langue n'est pas un accident). */
+const MAX_LINE_FIXES = 120
 
 interface Track {
   fd: number
@@ -329,16 +340,96 @@ function spansOfTrack(id: string, track: MeetingTrack): SpeechSpan[] {
 async function separateVoices(m: Meeting): Promise<MeetingLine[] | null> {
   if (!m.others || m.people === 1 || !settings.get().meetings.voices || !voicesFiles() || !trackSamples(m.id, 'others')) return null
   try {
-    event({ type: 'processing', id: m.id, step: 'Je sépare les voix…' })
-    const seconds = trackSamples(m.id, 'others') / SAMPLE_RATE
-    const pieces = mergeVoices(await diarizeTrack(audioPath(m.id, 'others'), seconds, m.people), !m.people)
-    if (!pieces.length) return null
-    const spans = pieces.map((p) => ({ from: Math.floor(p.start * SAMPLE_RATE), to: Math.ceil(p.end * SAMPLE_RATE), who: p.who }))
-    return await transcribeTrack(m, 'others', spans, 'Je réécris chaque voix')
+    const voices = await voicesOf(m, m.people)
+    return voices.length ? voices : null
   } catch (e) {
     log('warn', `réunions : voix non séparées (${(e as Error).message})`)
     return null
   }
+}
+
+/** Sépare les voix du son de l'appel (`people` : nombre imposé, sinon automatique), puis réécrit chaque morceau. */
+async function voicesOf(m: Meeting, people?: number): Promise<MeetingLine[]> {
+  event({ type: 'processing', id: m.id, step: 'Je sépare les voix…' })
+  const seconds = trackSamples(m.id, 'others') / SAMPLE_RATE
+  // Les morceaux de chaque voix sont coupés aux pauses, jamais toutes les N secondes.
+  const pieces = cutAtPauses(mergeVoices(await diarizeTrack(audioPath(m.id, 'others'), seconds, people), !people), trackLevels(m.id, 'others'))
+  const spans = pieces.map((p) => ({ from: Math.floor(p.start * SAMPLE_RATE), to: Math.ceil(p.end * SAMPLE_RATE), who: p.who }))
+  return spans.length ? transcribeTrack(m, 'others', spans, 'Je réécris chaque voix') : []
+}
+
+/** Niveau de chaque tranche de 30 ms d'une piste enregistrée (lue par morceaux d'environ 10 s). */
+function trackLevels(id: string, track: MeetingTrack): Float32Array {
+  const total = trackSamples(id, track)
+  const out = new Float32Array(Math.floor(total / SEGMENT.frame))
+  if (!out.length) return out
+  const step = SEGMENT.frame * 333
+  const fd = openSync(audioPath(id, track), 'r')
+  try {
+    for (let pos = 0; pos < total; pos += step) out.set(frameLevels(readSamples(fd, { from: pos, to: Math.min(total, pos + step) })), pos / SEGMENT.frame)
+  } finally {
+    closeSync(fd)
+  }
+  return out
+}
+
+/**
+ * Phrases à reprendre : écrites dans l'autre langue (Parakeet la choisit seul, phrase par
+ * phrase), ou presque vides (la fin d'un long morceau perdue). Chacune est retranscrite en
+ * deux moitiés coupées au moment le plus calme (une courte, avec un peu plus de marge).
+ * Gardée si elle revient dans la langue attendue et ne perd pas de mots ; sinon marquée
+ * « à vérifier ». Seulement pour les pistes encore sur le PC (`tracks`).
+ */
+async function fixLines(m: Meeting, tracks: MeetingTrack[]): Promise<Meeting> {
+  const expected = expectedLanguage(m.lines, settings.get().meetings.language)
+  const other = expected === 'fr' ? 'en' : expected === 'en' ? 'fr' : null
+  const onTrack = (i: number): boolean => tracks.includes(m.lines[i].who === 'me' ? 'me' : 'others')
+  const todo = [...new Set([...wrongLanguageLines(m.lines, expected), ...sparseLines(m.lines)])].filter(onTrack).sort((a, b) => a - b)
+  if (!todo.length) return m
+  const lines = [...m.lines]
+  const levels: Partial<Record<MeetingTrack, Float32Array>> = {}
+  const fds: Partial<Record<MeetingTrack, number>> = {}
+  const count = (text: string): number => text.split(/\s+/).filter(Boolean).length
+  let fixed = 0
+  try {
+    for (const [n, i] of todo.entries()) {
+      const l = lines[i]
+      const track: MeetingTrack = l.who === 'me' ? 'me' : 'others'
+      if (n >= MAX_LINE_FIXES || !trackSamples(m.id, track)) {
+        lines[i] = { ...l, doubt: true }
+        continue
+      }
+      if (n % 5 === 0) event({ type: 'processing', id: m.id, step: `Je relis les phrases douteuses (${Math.round((n / todo.length) * 100)} %)` })
+      const trackLevel = (levels[track] ??= trackLevels(m.id, track))
+      const fd = (fds[track] ??= openSync(audioPath(m.id, track), 'r'))
+      const length = l.end - l.start
+      const cut = length >= 4 ? quietestAt(trackLevel, l.start + length * 0.35, l.start + length * 0.65) : null
+      const windows = cut
+        ? [
+            [l.start, cut],
+            [cut, l.end]
+          ]
+        : [[Math.max(0, l.start - 0.4), l.end + 0.3]]
+      const parts: string[] = []
+      for (const [a, b] of windows) {
+        const samples = readSamples(fd, { from: Math.floor(a * SAMPLE_RATE), to: Math.ceil(b * SAMPLE_RATE) })
+        parts.push((await transcribeSpeech(m.engine, samples, true)).replace(/\s+/g, ' ').trim())
+      }
+      const text = parts.filter(Boolean).join(' ')
+      const language = lineLanguage(text)
+      const wasWrong = Boolean(other) && lineLanguage(l.text) === other
+      const better = text && language !== other && (wasWrong ? language === expected : count(text) >= count(l.text) * 2) && count(text) >= count(l.text) * 0.7
+      if (better) {
+        lines[i] = { ...l, text }
+        fixed++
+      } else lines[i] = { ...l, doubt: true }
+    }
+  } finally {
+    for (const fd of Object.values(fds)) closeSync(fd)
+  }
+  // Jamais le texte dans le journal : seulement les nombres.
+  log('info', `réunions : ${todo.length} phrase(s) douteuse(s) (autre langue ou mots manquants), ${fixed} reprise(s), ${todo.length - fixed} à vérifier`)
+  return { ...m, lines }
 }
 
 /** `separated` : les voix ont déjà été traitées (reprise d'un enregistrement interrompu). */
@@ -347,9 +438,12 @@ async function finalize(meeting: Meeting, separated = false): Promise<MeetingMet
   const voices = separated ? null : await separateVoices(m)
   if (voices) m = { ...m, lines: [...m.lines.filter((l) => l.who === 'me'), ...voices], speakers: countVoices(voices) }
   else if (m.people === 1 && m.lines.some((l) => l.who === 'others')) m = { ...m, lines: oneVoice(m.lines), speakers: 1 }
-  const keep = settings.get().meetings.keepAudio
-  m = { ...m, lines: dropEchoes([...m.lines].sort(byTime)), status: 'done', audio: keep }
-  if (!keep) deleteAudio(m.id)
+  m = await fixLines({ ...m, lines: [...m.lines].sort(byTime) }, ['me', 'others'])
+  const { keepAudio: keep, redoAudio } = settings.get().meetings
+  // Son gardé 24 h pour refaire la séparation : seulement celui de l'appel (le micro est effacé).
+  const redo = !keep && redoAudio && m.others && trackSamples(m.id, 'others') > 0
+  m = { ...m, lines: dropEchoes(m.lines), status: 'done', audio: keep || redo, audioUntil: redo ? Date.now() + REDO_AUDIO_MS : undefined }
+  if (!keep) deleteAudio(m.id, redo ? ['me'] : undefined)
   saveMeeting(m)
   const meta = metaOf(m)
   event({ type: 'done', id: m.id, meta })
@@ -358,6 +452,67 @@ async function finalize(meeting: Meeting, separated = false): Promise<MeetingMet
     void summarizeMeeting(m.id, false).catch((e: Error) => log('info', `réunions : pas de résumé automatique (${e.message})`))
   }
   return meta
+}
+
+/**
+ * Refait la séparation des voix d'un appel dont le son est encore là, avec le nombre de
+ * personnes choisi (`undefined` : automatique ; 1 : une seule voix, sans tout réécrire).
+ * Les noms donnés aux voix sont retirés : les voix sont renumérotées.
+ */
+export async function redoVoices(id: string, people: unknown): Promise<MeetingMeta> {
+  const m = getMeeting(id)
+  if (!m || active?.meeting.id === id || redoing.has(id)) throw new Error('Cette réunion est déjà en cours de traitement.')
+  if (m.status !== 'done' || !m.others || !trackSamples(id, 'others'))
+    throw new Error('Le son de cet appel n’est plus sur ton PC : la séparation ne peut plus être refaite.')
+  const n = typeof people === 'number' && Number.isInteger(people) && people >= 1 && people <= 8 ? people : undefined
+  if (n !== 1 && !voicesFiles()) throw new Error('Télécharge d’abord le pack des voix : Réglages › Réunions.')
+  if (!speechModelFiles(m.engine)) throw new Error(`Télécharge d’abord le modèle ${SPEECH_MODELS[m.engine].label} : Réglages › Me parler.`)
+  redoing.add(id)
+  saveMeeting({ ...m, status: 'processing' })
+  try {
+    const others = n === 1 ? m.lines.filter((l) => l.who !== 'me').map((l) => ({ ...l, who: 's1' })) : await voicesOf(m, n)
+    if (!others.length) throw new Error('Aucune voix trouvée dans le son de l’appel.')
+    let next: Meeting = {
+      ...m,
+      status: 'done',
+      names: {},
+      lines: [...m.lines.filter((l) => l.who === 'me'), ...others].sort(byTime),
+      speakers: countVoices(others)
+    }
+    if (n !== 1) next = await fixLines(next, ['others'])
+    next = { ...next, lines: dropEchoes(next.lines) }
+    saveMeeting(next)
+    log('info', `réunions : séparation refaite (${n ? `${n} personne(s) imposée(s)` : 'automatique'}, ${next.speakers} voix)`)
+    const meta = metaOf(next)
+    event({ type: 'done', id, meta })
+    return meta
+  } catch (e) {
+    saveMeeting(m)
+    throw e
+  } finally {
+    redoing.delete(id)
+  }
+}
+
+const redoing = new Set<string>()
+
+/** Efface tout de suite le son d'une réunion terminée (la transcription reste). */
+export function deleteMeetingAudio(id: string): Meeting | null {
+  const m = getMeeting(id)
+  if (!m || active?.meeting.id === id || redoing.has(id) || m.status !== 'done') return m
+  deleteAudio(id)
+  const next: Meeting = { ...m, audio: false, audioUntil: undefined }
+  saveMeeting(next)
+  return next
+}
+
+/** Son gardé pour corriger les voix : effacé tout seul à l'heure dite (au démarrage, puis toutes les heures). */
+export function purgeExpiredAudio(now = Date.now()): void {
+  for (const meta of listMeetings()) {
+    if (!meta.audioUntil || meta.audioUntil > now || meta.status !== 'done' || redoing.has(meta.id)) continue
+    deleteMeetingAudio(meta.id)
+    log('info', 'réunions : son gardé 24 h effacé')
+  }
 }
 
 /** Au démarrage : un enregistrement coupé net (Compi fermé, PC éteint) devient « interrompu ». */

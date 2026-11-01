@@ -75,15 +75,17 @@ export const TOOL_CATEGORY: Record<string, PrivacyCategory> = {
   [compi('mail_read')]: 'mail',
   [compi('calendar_events')]: 'calendar',
   // Les tâches suivent le choix « Agenda ».
-  [compi('tasks_list')]: 'calendar'
+  [compi('tasks_list')]: 'calendar',
+  [compi('meetings_list')]: 'meetings',
+  [compi('meeting_read')]: 'meetings'
 }
 
 /**
- * Outils qui renvoient un contenu écrit par d'autres (e-mails, invitations, tâches
- * assignées) : il peut contenir des consignes piégées. Après eux, les outils « sortants »
+ * Outils qui renvoient un contenu écrit ou dit par d'autres (e-mails, invitations, tâches
+ * assignées, paroles d'une réunion) : il peut contenir des consignes piégées. Après eux, les outils « sortants »
  * demandent un OK.
  */
-export const EXTERNAL_CONTENT_TOOLS = [compi('mail_search'), compi('mail_read'), compi('calendar_events'), compi('tasks_list')]
+export const EXTERNAL_CONTENT_TOOLS = [compi('mail_search'), compi('mail_read'), compi('calendar_events'), compi('tasks_list'), compi('meeting_read')]
 
 /** Outils par lesquels des données peuvent quitter le PC, hors cerveau : pages web, liens, connecteurs, commandes. */
 export function isOutbound(toolName: string): boolean {

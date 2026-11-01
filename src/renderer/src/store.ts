@@ -11,7 +11,7 @@ import type {
   IslandNotice,
   MediaInfo,
   MeetingEvent,
-  MeetingLine,
+  LiveCall,
   MeetingStartOptions,
   ModelId,
   PanelView,
@@ -92,6 +92,8 @@ interface CompiState {
   phase: Phase
   outcome: 'done' | 'error' | null
   attachments: string[]
+  /** Réunion jointe au prochain message (« Discuter de cette réunion »). */
+  joinedMeeting: { id: string; title: string } | null
 
   approvals: ApprovalRequest[]
   questions: QuestionRequest[]
@@ -164,6 +166,9 @@ interface CompiState {
   send(text: string, opts?: { voice?: boolean; external?: boolean }): Promise<void>
   stop(): void
   addAttachments(paths: string[]): void
+  /** Nouvelle discussion avec la réunion jointe : la première question en parle. */
+  discussMeeting(meeting: { id: string; title: string }): void
+  setJoinedMeeting(meeting: { id: string; title: string } | null): void
   removeAttachment(path: string): void
   onAgentEvent(e: AgentEvent): void
 
@@ -210,22 +215,8 @@ interface CompiState {
   setPrepFocus(key: string | null): void
 }
 
-/** Enregistrement d'un appel, vu par l'îlot. */
-export interface CallState {
-  id: string
-  startedAt: number
-  /** Le son de l'appel est capté (sinon : le micro seul). */
-  others: boolean
-  /** Les voix des autres seront séparées : le nombre de personnes en face se choisit jusqu'à l'arrêt. */
-  choosePeople: boolean
-  /** Une seule personne en face (1) ; absent : automatique. */
-  people?: number
-  phase: 'starting' | 'recording' | 'processing'
-  /** Dernières phrases transcrites (60 au plus : le plein écran les fait défiler). */
-  lines: MeetingLine[]
-  /** Étape de la mise au propre, après l'arrêt. */
-  step?: string
-}
+/** Enregistrement d'un appel, vu par l'îlot (aussi envoyé à la transcription flottante). */
+export type CallState = LiveCall
 
 /** Dictée partout en cours : mode, touche, application visée (connue juste après le début). */
 export interface DictationEverywhere {
@@ -449,6 +440,7 @@ export const useCompi = create<CompiState>((set, get) => {
     phase: null,
     outcome: null,
     attachments: [],
+    joinedMeeting: null,
 
     approvals: [],
     questions: [],
@@ -576,8 +568,14 @@ export const useCompi = create<CompiState>((set, get) => {
 
     newConversation: () => {
       stopConverse()
-      set({ conversationId: null, conversationBrain: null, messages: [], streamingId: null, phase: null, view: 'chat' })
+      set({ conversationId: null, conversationBrain: null, messages: [], streamingId: null, phase: null, view: 'chat', joinedMeeting: null })
     },
+
+    discussMeeting: (meeting) => {
+      get().newConversation()
+      set({ joinedMeeting: meeting })
+    },
+    setJoinedMeeting: (joinedMeeting) => set({ joinedMeeting }),
 
     loadConversation: async (id) => {
       const conv = await api().getConversation(id)
@@ -585,7 +583,7 @@ export const useCompi = create<CompiState>((set, get) => {
       const s = get().settings
       // Les anciennes discussions, d'avant le choix du cerveau, étaient avec Claude.
       const brain = conv.brain ?? (s ? { provider: 'anthropic' as const, model: s.model } : null)
-      set({ conversationId: conv.id, conversationBrain: brain, messages: conv.messages, streamingId: null, phase: null, view: 'chat' })
+      set({ conversationId: conv.id, conversationBrain: brain, messages: conv.messages, streamingId: null, phase: null, view: 'chat', joinedMeeting: null })
     },
 
     pickBrain: async (brain, extra = {}) => {
@@ -619,16 +617,22 @@ export const useCompi = create<CompiState>((set, get) => {
 
     send: async (text, opts = {}) => {
       const trimmed = text.trim()
-      const { attachments } = get()
-      if (!trimmed && !attachments.length) return
-      const prompt = trimmed || 'Que peux-tu me dire sur ce fichier ?'
+      const { attachments, joinedMeeting } = get()
+      if (!trimmed && !attachments.length && !joinedMeeting) return
+      const prompt = trimmed || (joinedMeeting && !attachments.length ? 'Fais-moi le point sur cette réunion.' : 'Que peux-tu me dire sur ce fichier ?')
       stopSpeaking()
       liveSpeech = null
-      set({ attachments: [], spokenInput: opts.voice ?? false })
+      set({ attachments: [], joinedMeeting: null, spokenInput: opts.voice ?? false })
       // Question dite à voix haute : la conversation continue après la lecture de la réponse.
       if (opts.voice && converseOn()) stepConverse({ type: 'ask' })
       else stopConverse()
-      const res = await api().send({ conversationId: get().conversationId ?? undefined, text: prompt, attachments, external: opts.external })
+      const res = await api().send({
+        conversationId: get().conversationId ?? undefined,
+        text: prompt,
+        attachments,
+        external: opts.external,
+        ...(joinedMeeting ? { meeting: joinedMeeting.id } : {})
+      })
       const settings = get().settings
       set((s) => ({
         conversationId: res.conversationId,

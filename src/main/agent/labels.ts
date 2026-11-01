@@ -96,6 +96,12 @@ export function activityLabel(name: string, input: Input = {}): string {
         return `Annulation de la modification${str(input.path) ? ` de ${basename(str(input.path))}` : ''}`
       case 'open_folder':
         return `Ouverture du dossier ${basename(str(input.path))}`
+      case 'meetings_list':
+        return 'Liste des réunions'
+      case 'meeting_read':
+        return input.transcript ? 'Lecture de la transcription' : 'Lecture de la réunion'
+      case 'meeting_save_note':
+        return 'Note de réunion'
       case 'notify':
         return 'Notification'
       case 'memory_save':
@@ -366,6 +372,15 @@ export function approvalTitle(name: string, input: Input = {}): { title: string;
           title: 'Compi veut annuler sa dernière modification de fichier',
           detail: `${str(input.path) ? `${str(input.path)}\n\n` : ''}La version d’avant revient, seulement si le fichier n’a pas changé depuis.`
         }
+      case 'meetings_list':
+        return { title: 'Compi veut voir la liste de tes réunions', detail: 'Titres, dates et durées des réunions enregistrées.' }
+      case 'meeting_read':
+        return {
+          title: input.transcript ? 'Compi veut lire la transcription d’une réunion' : 'Compi veut lire le résumé d’une réunion',
+          detail: str(input.meeting) || 'La plus récente.'
+        }
+      case 'meeting_save_note':
+        return { title: 'Compi veut ajouter une réunion à tes notes', detail: str(input.meeting) || 'La plus récente.' }
       case 'read_document':
         return { title: 'Compi veut lire un document hors de tes dossiers', detail: str(input.path) }
       case 'fetch_page':

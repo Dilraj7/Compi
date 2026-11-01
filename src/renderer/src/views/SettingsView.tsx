@@ -350,6 +350,12 @@ export function SettingsView() {
                 Avec un cerveau local, rien ne quitte ton PC, sauf tes recherches web si tu les actives. Avec Claude ou un autre service en ligne, choisis ce
                 que je peux lui envoyer. Les IBAN, cartes bancaires, mots de passe et clés sont masqués automatiquement.
               </div>
+              <Row
+                label="Cacher Compi quand je partage mon écran"
+                hint="L’encoche, le plein écran et la transcription flottante restent visibles pour toi, mais pas dans un partage d’écran (Teams, Meet, Zoom…), un enregistrement ni une capture. Partager une seule fenêtre ne montre jamais Compi."
+              >
+                <Toggle checked={s.hideFromCapture} onChange={(hideFromCapture) => update({ hideFromCapture })} label="Cacher Compi des partages d’écran" />
+              </Row>
               {PRIVACY_CATEGORIES.map((c) => (
                 <Row key={c.id} label={c.label} hint={c.id === 'memory' ? `${c.what} (« Toujours » : je m’en sers à chaque message)` : c.what}>
                   <Segmented<PrivacyChoice>

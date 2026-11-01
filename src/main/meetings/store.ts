@@ -35,6 +35,7 @@ export const metaOf = (m: Meeting): MeetingMeta => ({
   speakers: m.speakers,
   hasSummary: Boolean(m.summary),
   audio: m.audio,
+  ...(m.audioUntil ? { audioUntil: m.audioUntil } : {}),
   ...(m.event ? { event: m.event } : {})
 })
 
@@ -66,9 +67,9 @@ export function deleteMeeting(id: string): MeetingMeta[] {
   return list
 }
 
-/** Efface le son (la transcription reste). */
-export function deleteAudio(id: string): void {
-  for (const t of ['me', 'others'] as const) rmSync(audioPath(id, t), { force: true })
+/** Efface le son (la transcription reste) : les deux pistes, ou celles indiquées. */
+export function deleteAudio(id: string, tracks: MeetingTrack[] = ['me', 'others']): void {
+  for (const t of tracks) rmSync(audioPath(id, t), { force: true })
 }
 
 export function updateMeeting(id: string, patch: (m: Meeting) => Meeting): Meeting | null {

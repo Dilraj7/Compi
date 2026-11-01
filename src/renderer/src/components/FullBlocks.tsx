@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { columnBlocks, moveBlock, shiftBlock, toggleBlock } from '@shared/fullBlocks'
 import type { FullBlockId, FullBlockPlace, FullColumn, RecentsInfo } from '@shared/types'
+import { openMeetingView } from '../lib/meetingNav'
 import { useCompi } from '../store'
 import { Block, Empty } from './Day'
 import { cx, IconButton, LedDots, timeAgo } from './ui'
@@ -57,12 +58,7 @@ function fileIcon(name: string): LucideIcon {
   return FileIcon
 }
 
-export function openMeetingView(id: string): void {
-  const s = useCompi.getState()
-  s.setHistoryTab('meetings')
-  s.openMeeting(id)
-  s.setView('history')
-}
+export { openMeetingView }
 
 /** Dernières réunions et fichiers modifiés cette semaine dans les dossiers confiés. */
 export function RecentsBlock() {

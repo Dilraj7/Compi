@@ -137,7 +137,16 @@ describe('garde-fou e-mails et agenda', () => {
     expect(privacyDecision('custom', 'mcp__compi__mail_read', { mail: 'never' } as never)).toBe('deny')
     expect(privacyDecision('anthropic', 'mcp__compi__calendar_events', undefined)).toBe('ask')
     expect(privacyDecision('local', 'mcp__compi__mail_search', { mail: 'never' } as never)).toBeNull()
-    expect(EXTERNAL_CONTENT_TOOLS).toEqual(['mcp__compi__mail_search', 'mcp__compi__mail_read', 'mcp__compi__calendar_events', 'mcp__compi__tasks_list'])
+    // Les paroles d'une réunion viennent aussi d'autres personnes.
+    expect(EXTERNAL_CONTENT_TOOLS).toEqual([
+      'mcp__compi__mail_search',
+      'mcp__compi__mail_read',
+      'mcp__compi__calendar_events',
+      'mcp__compi__tasks_list',
+      'mcp__compi__meeting_read'
+    ])
+    expect(privacyDecision('anthropic', 'mcp__compi__meeting_read', { meetings: 'never' } as never)).toBe('deny')
+    expect(privacyDecision('local', 'mcp__compi__meeting_read', { meetings: 'never' } as never)).toBeNull()
     // Les tâches suivent le choix « Agenda ».
     expect(privacyDecision('anthropic', 'mcp__compi__tasks_list', { calendar: 'never' } as never)).toBe('deny')
   })

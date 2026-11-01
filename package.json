@@ -1,7 +1,7 @@
 {
   "name": "compi",
   "productName": "Compi",
-  "version": "0.6.0",
+  "version": "0.6.3",
   "description": "Compi — ton compagnon IA, toujours là en haut de l'écran Windows.",
   "main": "./out/main/index.js",
   "author": "Raj.S",

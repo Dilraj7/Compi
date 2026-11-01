@@ -28,6 +28,7 @@ import { extractDocument, htmlToText, IMAGE_EXTENSIONS, paginate, UnsupportedDoc
 import { allowedFolders, insideAny } from './folders'
 import { folderTools, isNetworkPath } from './folderTools'
 import { textTools } from './textTools'
+import { meetingTools, MEETING_SAVE_NOTE } from './meetingTools'
 import { describeImage, transcribePdf, VISION_MAX_BYTES, VISION_MAX_PAGES } from './vision'
 import { redact } from '../privacy/redact'
 import { semanticSearch } from '../semantic'
@@ -94,7 +95,10 @@ export const SAFE_COMPI_TOOLS = [
   'calendar_events',
   'mail_search',
   'mail_read',
-  'tasks_list'
+  'tasks_list',
+  // Réunions enregistrées : libre en local ; en ligne, le garde-fou « Réunions » s'applique.
+  'meetings_list',
+  'meeting_read'
 ].map((t) => `mcp__${COMPI_SERVER}__${t}`)
 
 /**
@@ -108,7 +112,7 @@ export const FOLDER_ACTIONS = ['create_folders', 'move_items', 'undo_moves'].map
 
 /** Écriture des fichiers texte des dossiers confiés : une carte à chaque fois (avec les changements), jamais « Toujours ». */
 export const WRITE_TEXT_FILE = `mcp__${COMPI_SERVER}__write_text_file`
-export const TEXT_ACTIONS = [WRITE_TEXT_FILE, `mcp__${COMPI_SERVER}__undo_text_edit`]
+export const TEXT_ACTIONS = [WRITE_TEXT_FILE, `mcp__${COMPI_SERVER}__undo_text_edit`, MEETING_SAVE_NOTE]
 
 /** Tout ce qui demande un OK à chaque fois : actions sur Windows, rangement, fichiers texte, événements et brouillons Google, routines. */
 export const CONFIRM_EACH_TIME = [...WINDOWS_ACTIONS, ...FOLDER_ACTIONS, ...TEXT_ACTIONS, ...GOOGLE_ACTIONS, ...ROUTINE_ACTIONS]
@@ -129,6 +133,7 @@ export const HEADLESS_BLOCKED = [
   'undo_moves',
   'write_text_file',
   'undo_text_edit',
+  'meeting_save_note',
   'routine_create',
   'routine_delete',
   'messages_recent'
@@ -832,6 +837,7 @@ export function createCompiServer(sdk: SdkModule, ctx: CompiToolContext): Return
       ...liveTools(tool, { text, fail }),
       ...folderTools(tool, ctx, { text, fail, personal }),
       ...textTools(tool, ctx, { text, fail, personal }),
+      ...meetingTools(tool, ctx, { text, fail, personal }),
       // Aussi dans une routine (créer ou supprimer y est refusé) : la liste d'outils reste
       // celle des discussions, que le modèle local garde en cache.
       ...routineTools(tool, { text, fail })

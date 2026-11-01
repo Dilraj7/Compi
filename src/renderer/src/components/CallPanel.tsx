@@ -4,13 +4,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
-import { AudioLines, ExternalLink, Sparkles, Square, Users, X } from 'lucide-react'
+import { AudioLines, ExternalLink, PictureInPicture2, Sparkles, Square, Users, X } from 'lucide-react'
 import { defaultBrain } from '@shared/brains'
 import { clockAt, followUpPrompt, formatDuration, PEOPLE_CHOICES, speakerLabel } from '@shared/meetings'
 import { isOnline } from '@shared/privacy'
 import type { Meeting } from '@shared/types'
 import { useCompi } from '../store'
-import { REC } from './CallLive'
+import { FLOAT_LABEL, REC } from './CallLive'
+import { DiscussButton, NoteButton } from './MeetingActions'
 import { Block } from './Day'
 import { openMeetingView } from './FullBlocks'
 import { useNow } from './Live'
@@ -40,6 +41,15 @@ function Live() {
         </span>
         <span className="truncate text-fog-500">{call.others ? 'micro + son de l’appel' : 'micro seul'}</span>
         <span className="flex-1" />
+        {call.phase !== 'processing' && (
+          <button
+            onClick={() => void window.compi.openFloating()}
+            className="flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[11.5px] text-fog-300 hover:bg-white/[0.06]"
+            title={`${FLOAT_LABEL}. Elle prend le relais quand tu quittes le plein écran.`}
+          >
+            <PictureInPicture2 size={12} /> Fenêtre flottante
+          </button>
+        )}
         {recording && call.choosePeople && (
           <button
             onClick={() => useCompi.getState().setCallPeople(nextPeople(call.people))}
@@ -144,6 +154,8 @@ function Done({ id, onClose }: { id: string; onClose: () => void }) {
         <Button size="sm" variant="ghost" onClick={() => openMeetingView(m.id)}>
           <ExternalLink size={12} /> Ouvrir
         </Button>
+        {m.lines.length > 0 && <NoteButton m={m} />}
+        {m.lines.length > 0 && !blocked && <DiscussButton m={m} onOpen={() => useCompi.getState().setView('chat')} />}
         {m.summary && !blocked && (
           <Button size="sm" variant="subtle" onClick={followUp} title="Rappels, e-mail de suivi, rendez-vous : chaque action te sera proposée avant d’être faite">
             <Sparkles size={13} /> Suite avec Compi

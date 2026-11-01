@@ -164,7 +164,7 @@ describe('début stable pour tous les modèles locaux', () => {
 })
 
 describe('consignes gardées pour les derniers modèles', () => {
-  const warm = (model: string, v = 8) => ({ v, target: 'http://127.0.0.1:11434', model, system: [], tools: [] })
+  const warm = (model: string, v = 9) => ({ v, target: 'http://127.0.0.1:11434', model, system: [], tools: [] })
 
   it('lit l’ancien fichier (un seul modèle) et la liste', () => {
     expect(readWarmPrompts(warm('gemma4:12b-compi'))).toEqual([warm('gemma4:12b-compi')])
@@ -176,7 +176,9 @@ describe('consignes gardées pour les derniers modèles', () => {
     expect(readWarmPrompts(warm('qwen3:8b-compi', 6))).toEqual([])
     // Version 7 : sans les outils d'écriture des fichiers texte.
     expect(readWarmPrompts(warm('qwen3:8b-compi', 7))).toEqual([])
-    expect(readWarmPrompts({ prompts: [null, { v: 8 }, warm('a')] }).map((p) => p.model)).toEqual(['a'])
+    // Version 8 : sans les outils des réunions.
+    expect(readWarmPrompts(warm('qwen3:8b-compi', 8))).toEqual([])
+    expect(readWarmPrompts({ prompts: [null, { v: 9 }, warm('a')] }).map((p) => p.model)).toEqual(['a'])
     expect(readWarmPrompts(null)).toEqual([])
     expect(readWarmPrompts({ prompts: ['a', 'b', 'c', 'd', 'e'].map((m) => warm(m)) })).toHaveLength(4)
   })

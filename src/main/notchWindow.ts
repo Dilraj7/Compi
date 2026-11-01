@@ -19,6 +19,7 @@ import {
 } from 'electron'
 import { IPC } from '../shared/ipc'
 import type { IslandCommand, ZoomSettings } from '../shared/types'
+import { settings } from './store/settings'
 import { DEFAULT_ZOOM, zoomFactor } from '../shared/zoom'
 
 export const WIN_WIDTH = 760
@@ -91,6 +92,17 @@ export function setZoom(z: ZoomSettings): void {
 
 export const isFullMode = (): boolean => full
 
+const fullModeListeners = new Set<(on: boolean) => void>()
+/** Entrée et sortie du plein écran (la transcription flottante s'efface pendant). */
+export function onFullModeChange(cb: (on: boolean) => void): void {
+  fullModeListeners.add(cb)
+}
+
+/** Îlot absent des captures et des partages d'écran (réglage, oui par défaut). */
+export function setNotchCaptureHidden(hide: boolean): void {
+  if (win && !win.isDestroyed()) win.setContentProtection(hide)
+}
+
 /**
  * Entrer ou sortir du plein écran. En entrant, la fenêtre prend tout l'écran et le clavier
  * (l'interface rend déjà la souris active). En sortant, l'interface a d'abord rétréci
@@ -101,6 +113,7 @@ export function setFullMode(on: boolean): void {
   if (!win || win.isDestroyed() || on === full) return
   full = on
   applyBounds()
+  for (const l of fullModeListeners) l(on)
   if (!on) return
   setPanelActivatable(win, true)
   win.focus()
@@ -138,6 +151,7 @@ export function createNotchWindow(): BrowserWindow {
   // Niveau le plus haut : au-dessus de la barre des tâches et des fenêtres « toujours devant ».
   win.setAlwaysOnTop(true, 'screen-saver')
   win.setIgnoreMouseEvents(true, { forward: true })
+  win.setContentProtection(settings.get().hideFromCapture)
 
   win.once('ready-to-show', () => win?.showInactive())
   // Le zoom de la page se règle une fois la page chargée (et après un rechargement).

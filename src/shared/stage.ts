@@ -110,6 +110,8 @@ export function stageDetail(name: string, input: Input, result: string, opts: { 
   switch (tool) {
     case 'write_text_file':
       return /contient déjà exactement/.test(result) ? undefined : fileFrom(input, result, opts.card)
+    case 'meeting_save_note':
+      return fileFrom({ path: /^Note créée : (.+?) \(«/.exec(line)?.[1] ?? '' }, 'Fichier créé', opts.card)
     case 'move_items':
       return movesFrom(result)
     case 'calendar_create_event':

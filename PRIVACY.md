@@ -32,6 +32,8 @@ Tout est dans le dossier `%APPDATA%\Compi`.
 
 Sauf les deux lignes chiffrées, ces fichiers sont lisibles par ton compte Windows, comme tes documents. Le chiffrement de Windows ne protège pas contre un programme malveillant qui tourne déjà sous ton compte.
 
+**Partage d'écran.** Par défaut, les fenêtres de Compi (encoche, plein écran, transcription flottante) n'apparaissent ni dans un partage d'écran (Teams, Meet, Zoom…), ni dans un enregistrement, ni dans une capture : Windows les exclut, et ce qu'il y a derrière reste visible. Tu les vois normalement sur ton écran. Si tu partages une seule fenêtre, Compi n'y est de toute façon jamais. Réglages › Confidentialité › « Cacher Compi quand je partage mon écran ». Il faut Windows 10 (version 2004) ou plus récent. Cela ne protège évidemment pas d'une photo de l'écran.
+
 ## Ce qui peut quitter ton PC, seulement si tu le choisis
 
 **Le cerveau**
@@ -114,10 +116,14 @@ Rien ne commence sans ton clic (Historique › Réunions › Enregistrer un appe
 
 - **Prévenir les participants est obligatoire.** Compi te le rappelle avant chaque appel, avec une phrase à lire ou à envoyer. Un point rouge reste visible pendant tout l'enregistrement.
 - **Le son** : ton micro et, si tu le choisis, le son de l'ordinateur (ce que tu entends des autres participants), capté par Windows sur ta sortie audio. En secours seulement, Chromium le fournit, mais il exige aussi une image de l'écran : elle est arrêtée aussitôt, jamais lue ni gardée.
-- **Sur le disque** : le son est écrit dans `meetings\` le temps de l'appel et de sa mise au propre, puis effacé ; seul le texte reste. Sauf si tu coches « Garder le son », ou si l'enregistrement est interrompu : le son reste alors pour que tu puisses reprendre, jusqu'à ce que tu supprimes la réunion.
-- **La transcription et la séparation des voix** se font sur ton PC. Le son n'est jamais envoyé.
+- **Sur le disque** : le son est écrit dans `meetings\` le temps de l'appel et de sa mise au propre, puis effacé ; seul le texte reste. Par défaut, le son de l'appel (jamais ton micro) reste 24 h, pour que tu puisses refaire la séparation des voix ; il s'efface ensuite tout seul, ou tout de suite avec « Effacer le son » (réglage « Corriger les voix pendant 24 h »). Si tu coches « Garder le son », ou si l'enregistrement est interrompu, le son reste pour que tu puisses reprendre, jusqu'à ce que tu supprimes la réunion.
+- **La transcription et la séparation des voix** se font sur ton PC, comme la seconde lecture des phrases douteuses (écrites dans l'autre langue, ou avec des mots manquants). Le son n'est jamais envoyé, et le journal ne garde que des nombres, jamais le texte.
 - **Le résumé** est fait par ton cerveau. Sur ce PC, rien ne part. Avec un cerveau en ligne, la catégorie « Réunions » s'applique (Me demander par défaut) : seul le texte part, secrets masqués, et le résumé automatique n'a lieu qu'avec « Toujours ».
 - **« Suite avec Compi »** ouvre une discussion à partir de la transcription. Elle est traitée comme un contenu venu d'ailleurs : toute action vers l'extérieur demande ton accord.
+- **Compi lit tes réunions quand tu lui en parles** (« résume la dernière réunion ») : liste, résumé, puis la transcription seulement pour une question de détail. Sur ce PC, rien ne part. Avec un cerveau en ligne, la catégorie « Réunions » s'applique (une carte avec « Me demander », rien avec « Jamais »), secrets masqués. Les paroles lues viennent d'autres personnes : ensuite, toute action vers l'extérieur demande ton accord.
+- **La transcription flottante** est une petite fenêtre qui reste devant ton appli de visio pendant l'appel. Elle affiche ce que l'îlot transcrit déjà, sans rien enregistrer de plus, et la fermer n'arrête pas l'enregistrement.
+- **« Discuter »** ouvre une discussion avec la réunion jointe : son résumé accompagne ta première question. Ton clic vaut accord pour la confier au cerveau, sauf si tu as choisi « Jamais » pour les réunions avec un cerveau en ligne.
+- **Notes de réunion** : le dossier que tu choisis (un coffre Obsidian, par exemple) devient un dossier confié. « Ajouter à mes notes » y écrit une note Markdown d'après ton modèle, toujours sous un nouveau nom : aucune note existante n'est remplacée. Quand Compi le fait à ta demande, une carte te montre la note avant. « Annuler » la retire. Rien n'est envoyé à Obsidian ni ailleurs : c'est un fichier sur ton PC.
 - Aucune reconnaissance d'émotions.
 
 ## Préparer mes réunions

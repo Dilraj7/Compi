@@ -4,12 +4,15 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { Square, Users, X } from 'lucide-react'
+import { PictureInPicture2, Square, Users, X } from 'lucide-react'
 import { clockAt, PEOPLE_CHOICES, speakerLabel } from '@shared/meetings'
 import { useCompi, type CallState } from '../store'
 import { useNow } from './Live'
 
 export const REC = '#F87171'
+
+/** Bouton qui ouvre la transcription flottante (devant l'appli de visio). */
+export const FLOAT_LABEL = 'Transcription dans une fenêtre flottante, devant ton appel'
 
 function Dot({ pulse }: { pulse: boolean }) {
   return (
@@ -63,6 +66,20 @@ export function CallPeek({ eyes }: { eyes: ReactNode }) {
         </div>
         <div className="mt-0.5 truncate text-[12px] text-fog-300">{call.phase === 'processing' ? (call.step ?? 'Un instant…') : lastLineText(call)}</div>
       </div>
+      {call.phase !== 'processing' && (
+        <motion.button
+          whileTap={{ scale: 0.92 }}
+          aria-label={FLOAT_LABEL}
+          title={FLOAT_LABEL}
+          onClick={(e) => {
+            e.stopPropagation()
+            void window.compi.openFloating()
+          }}
+          className="grid size-8 shrink-0 place-items-center rounded-full text-fog-300 hover:bg-white/[0.08] hover:text-fog-100"
+        >
+          <PictureInPicture2 size={14} />
+        </motion.button>
+      )}
       {recording && (
         <motion.button
           whileTap={{ scale: 0.92 }}
@@ -117,6 +134,14 @@ export function CallBanner() {
               <Users size={12} /> {call.people ?? 'Auto'}
             </button>
           )}
+          <button
+            onClick={() => void window.compi.openFloating()}
+            className="grid size-6.5 shrink-0 place-items-center rounded-lg text-fog-300 transition-colors hover:bg-white/[0.06] hover:text-fog-100"
+            title={FLOAT_LABEL}
+            aria-label={FLOAT_LABEL}
+          >
+            <PictureInPicture2 size={13} />
+          </button>
           <button
             onClick={() => (confirm ? void useCompi.getState().discardCall() : setConfirm(true))}
             className="flex h-6.5 items-center gap-1 rounded-lg px-2 text-[11.5px] text-fog-300 transition-colors hover:bg-white/[0.06] hover:text-fog-100"

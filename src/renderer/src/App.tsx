@@ -103,6 +103,14 @@ function useBridge(): void {
       }),
       api.onDictationCommand((c) => void st().onDictationCommand(c)),
       api.onMeetingEvent((e) => st().onMeetingEvent(e)),
+      // Transcription flottante : elle suit l'appel de l'îlot, et ses boutons reviennent ici.
+      useCompi.subscribe((s, prev) => {
+        if (s.call !== prev.call) api.pushFloatingCall(s.call)
+      }),
+      api.onFloatingToIsland((cmd) => {
+        if (cmd.type === 'stop') void st().stopCall()
+        else if (cmd.type === 'people') st().setCallPeople(cmd.people)
+      }),
       api.onQuickOpen((sel) => st().openQuick(sel)),
       api.onQuickEvent((e) => st().onQuickEvent(e)),
       // Clic sur la notification d'une routine : sa discussion s'ouvre.
