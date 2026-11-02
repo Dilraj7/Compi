@@ -143,7 +143,8 @@ function ToolRow({ tool }: { tool: ToolActivity }) {
         )}
       </div>
       {undo.message && <div className={`mt-0.5 pl-6.5 ${undo.done ? 'text-led-green' : 'text-led-amber'}`}>{undo.message}</div>}
-      {wide && tool.detail && tool.status === 'done' && !undo.done && <StageCard detail={tool.detail} />}
+      {/* Une carte du chat montre déjà les données de l'étape (sources d'une recherche web…). */}
+      {wide && tool.detail && !tool.card && tool.status === 'done' && !undo.done && <StageCard detail={tool.detail} />}
     </motion.div>
   )
 }

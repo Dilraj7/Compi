@@ -5,7 +5,7 @@
 
 import { z } from 'zod'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import { agendaCard, remindersCard, tasksCard, weatherCard } from '../../shared/cards'
+import { agendaCard, mailsCard, remindersCard, tasksCard, weatherCard } from '../../shared/cards'
 import type { ReminderRepeat } from '../../shared/types'
 import { settings } from '../store/settings'
 import { createEvent, deleteEvent, eventDay, eventTime, formatEvents, updateEvent } from '../google/calendar'
@@ -254,6 +254,7 @@ export function dayTools(tool: ToolFn, ctx: CompiToolContext, h: ToolHelpers) {
             try {
               const r = await searchMail(query, max ?? 10)
               ctx.onExternalContent?.()
+              if (r.mails.length) ctx.onCard?.('mail_search', { query, max }, mailsCard(query, r))
               return h.personal(ctx, formatMails(r))
             } catch (e) {
               return h.fail(`Recherche dans les e-mails impossible : ${errorText(e)}`)

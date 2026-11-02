@@ -11,7 +11,7 @@ import { z } from 'zod'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { isPrivateHost } from '../../shared/brains'
 import { IPC } from '../../shared/ipc'
-import type { ChatCard } from '../../shared/cards'
+import { foundFilesCard, type ChatCard } from '../../shared/cards'
 import type { ProviderId } from '../../shared/types'
 import { approvals } from '../approvals'
 import { emit } from '../bus'
@@ -598,6 +598,7 @@ export function createCompiServer(sdk: SdkModule, ctx: CompiToolContext): Return
       async ({ query, kind, modified_within_days }) => {
         try {
           const hits = await searchFiles({ query, kind, modifiedWithinDays: modified_within_days, limit: 15 })
+          if (hits.length) ctx.onCard?.('search_files', { query, kind, modified_within_days }, foundFilesCard(query, hits))
           return hits.length
             ? text(`${hits.length} fichier(s), du plus récent au plus ancien :\n${formatHits(hits)}`)
             : text(`Aucun fichier trouvé pour « ${query} ».`)
@@ -837,7 +838,7 @@ export function createCompiServer(sdk: SdkModule, ctx: CompiToolContext): Return
       ...webTools,
       ...extensionTools,
       ...dayTools(tool, ctx, { text, fail, personal }),
-      ...liveTools(tool, { text, fail }),
+      ...liveTools(tool, { text, fail }, (name, input, card) => ctx.onCard?.(name, input, card)),
       ...folderTools(tool, ctx, { text, fail, personal }),
       ...textTools(tool, ctx, { text, fail, personal }),
       ...meetingTools(tool, ctx, { text, fail, personal }),

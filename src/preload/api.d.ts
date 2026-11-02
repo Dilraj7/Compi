@@ -226,6 +226,8 @@ export interface CompiApi {
   recents(): Promise<RecentsInfo>
   /** Ouvre un fichier d'un dossier confié ; un programme est seulement montré dans l'Explorateur. */
   openConfidedFile(file: string): Promise<'opened' | 'shown' | 'refused'>
+  /** Montre un fichier trouvé (carte du chat) dans l'Explorateur, sans l'ouvrir. */
+  revealFile(file: string): Promise<boolean>
   /** Recherche du plein écran : applis, réunions, discussions, rappels, tâches, souvenirs. */
   searchLocal(query: string): Promise<LocalSearch>
   /** Fichiers des dossiers confiés (index de Windows). */

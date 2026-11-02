@@ -4,6 +4,7 @@
 
 import { basename } from 'node:path'
 import { z } from 'zod'
+import { meetingCard, meetingsCard } from '../../shared/cards'
 import { findMeeting, meetingForBrain, meetingLine } from '../../shared/meetingNotes'
 import { log } from '../log'
 import { getMeeting, listMeetings } from '../meetings/store'
@@ -38,6 +39,7 @@ export function meetingTools(tool: ToolFn, ctx: CompiToolContext, h: ToolHelpers
           .filter((m) => m.status !== 'recording')
           .slice(0, limit ?? 10)
         if (!list.length) return h.text('Aucune réunion enregistrée pour l’instant.')
+        ctx.onCard?.('meetings_list', { limit }, meetingsCard(list))
         return h.personal(ctx, list.map(meetingLine).join('\n'))
       },
       { annotations: { readOnlyHint: true } }
@@ -55,6 +57,8 @@ export function meetingTools(tool: ToolFn, ctx: CompiToolContext, h: ToolHelpers
         const meta = findMeeting(listMeetings(), meeting)
         const m = meta ? getMeeting(meta.id) : null
         if (!m) return notFound(meeting)
+        // Une seule carte par réunion lue, même quand la transcription arrive en plusieurs parties.
+        if ((part ?? 1) === 1) ctx.onCard?.('meeting_read', { meeting, transcript, part }, meetingCard(m))
         return h.personal(ctx, meetingForBrain(m, { transcript, part }))
       },
       { annotations: { readOnlyHint: true } }

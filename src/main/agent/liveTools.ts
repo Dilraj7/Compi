@@ -5,12 +5,14 @@
 import { z } from 'zod'
 import { durationLabel, remainingMs, timerTitle, TIMER_MAX_MS, TIMER_MIN_MS } from '../../shared/timer'
 import { formatClock, mediaPosition } from '../../shared/media'
+import { timerCard } from '../../shared/cards'
 import type { MediaInfo } from '../../shared/types'
 import { getTimer, startPomodoro, startTimer, stopTimer } from '../day/timer'
 import { nowPlaying } from '../windows/media'
 import type { ToolHelpers } from './dayTools'
+import type { CompiToolContext } from './tools'
 
-type ToolFn = typeof import('@anthropic-ai/claude-agent-sdk')['tool']
+type ToolFn = (typeof import('@anthropic-ai/claude-agent-sdk'))['tool']
 
 /** « En lecture : Titre — Artiste (Spotify), 1:12 / 3:40. » */
 export function formatMedia(m: MediaInfo | null, now: number): string {
@@ -21,7 +23,7 @@ export function formatMedia(m: MediaInfo | null, now: number): string {
   return `${state} : ${m.title}${who ? ` — ${who}` : ''}${time}.`
 }
 
-export function liveTools(tool: ToolFn, h: Pick<ToolHelpers, 'text' | 'fail'>) {
+export function liveTools(tool: ToolFn, h: Pick<ToolHelpers, 'text' | 'fail'>, onCard?: CompiToolContext['onCard']) {
   return [
     tool(
       'timer_start',
@@ -35,6 +37,7 @@ export function liveTools(tool: ToolFn, h: Pick<ToolHelpers, 'text' | 'fail'>) {
         const ms = ((minutes ?? 0) * 60 + (seconds ?? 0)) * 1000
         if (ms < TIMER_MIN_MS || ms > TIMER_MAX_MS) return h.fail('Durée invalide : entre 5 secondes et 12 heures.')
         const t = startTimer(ms, label ?? '')
+        onCard?.('timer_start', { minutes, seconds, label }, timerCard(t, Date.now()))
         return h.text(`${timerTitle(t)} lancé : ${durationLabel(t.durationMs)}.`)
       }
     ),
@@ -50,6 +53,7 @@ export function liveTools(tool: ToolFn, h: Pick<ToolHelpers, 'text' | 'fail'>) {
       async ({ focus_minutes, break_minutes, rounds }) => {
         const t = startPomodoro({ focusMin: focus_minutes, breakMin: break_minutes, rounds })
         const p = t.pomodoro!
+        onCard?.('pomodoro_start', { focus_minutes, break_minutes, rounds }, timerCard(t, Date.now()))
         return h.text(`Pomodoro lancé : ${p.rounds} × ${p.focusMin} min de concentration, ${p.breakMin} min de pause entre chaque.`)
       }
     ),
@@ -61,6 +65,7 @@ export function liveTools(tool: ToolFn, h: Pick<ToolHelpers, 'text' | 'fail'>) {
       async () => {
         const t = getTimer()
         if (!t) return h.text('Aucun minuteur en cours.')
+        onCard?.('timer_status', {}, timerCard(t, Date.now()))
         return h.text(`${timerTitle(t)} : ${formatClock(remainingMs(t, Date.now()))} restant${t.endsAt === undefined ? ' (en pause)' : ''}.`)
       },
       { annotations: { readOnlyHint: true } }

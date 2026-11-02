@@ -552,8 +552,9 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
  * Version 8 : outils d'écriture des fichiers texte (write_text_file, undo_text_edit) et leur consigne.
  * Version 9 : outils des réunions (meetings_list, meeting_read, meeting_save_note) et leur consigne.
  * Version 10 : consigne des cartes du chat (météo, agenda, tâches, rappels déjà affichés).
+ * Version 11 : la même consigne pour les e-mails, fichiers, recherche web, réunions et minuteur.
  */
-const WARM_VERSION = 10
+const WARM_VERSION = 11
 
 /** Dernière requête lue par le modèle local (début et empreintes des messages) : c'est ce qu'il a en cache. */
 let lastRead: (ReadState & { key: string }) | null = null

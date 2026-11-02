@@ -35,7 +35,7 @@ import type {
   SentTo,
   ToolActivity
 } from '../../shared/types'
-import { cardKey, type ChatCard } from '../../shared/cards'
+import { cardKey, webCard, type ChatCard } from '../../shared/cards'
 import { stageDetail } from '../../shared/stage'
 import { withColdStart } from '../../shared/reread'
 import { approvals } from '../approvals'
@@ -247,7 +247,7 @@ Style :
 - Réponds dans la langue de l'utilisateur (français par défaut).
 - Sois concis : l'îlot est petit. Va droit au but, avec des listes courtes et du Markdown léger. Développe seulement si on te le demande.
 - Pas de formules creuses (« Bien sûr ! », « Excellente question ! »).
-- La météo (weather_forecast), l'agenda (calendar_events), les tâches (tasks_list) et les rappels (reminder_list) s'affichent déjà en carte sous ta réponse : ne recopie pas la liste, dis l'essentiel en une ou deux phrases (un conseil, ce qui compte).
+- La météo, l'agenda, les tâches, les rappels, les e-mails trouvés (mail_search), les fichiers (search_files, folder_inventory), les sources d'une recherche web, les réunions (meetings_list, meeting_read) et le minuteur s'affichent déjà en carte sous ta réponse : ne recopie pas la liste, dis l'essentiel en une ou deux phrases (un conseil, ce qui compte).
 
 Ce que tu peux faire :
 ${webAbilities(brain)}
@@ -949,7 +949,12 @@ async function runQuery(
           const detail = block.is_error
             ? undefined
             : stageDetail(t.name, toolInputs.get(t.id) ?? {}, result, { card: cards.get(t.id), structured: msg.tool_use_result })
-          const card = block.is_error ? undefined : takeChatCard(t.name, toolInputs.get(t.id) ?? {})
+          // Recherche web (Claude ou Compi) : la carte reprend les sources déjà extraites pour la scène.
+          const query = toolInputs.get(t.id)?.query
+          const card = block.is_error
+            ? undefined
+            : (takeChatCard(t.name, toolInputs.get(t.id) ?? {}) ??
+              (detail?.kind === 'sources' ? webCard(typeof query === 'string' ? query : '', detail.sources) : undefined))
           setTool({ ...t, status: block.is_error ? 'error' : 'done', ...(undo ? { undo } : {}), ...(detail ? { detail } : {}), ...(card ? { card } : {}) })
         }
         break

@@ -123,6 +123,7 @@ export const IPC = {
   weekGet: 'day:week',
   recentsGet: 'full:recents',
   fullOpenFile: 'full:open-file',
+  revealFile: 'cards:reveal-file',
   searchLocal: 'search:local',
   searchFiles: 'search:files',
   searchLaunchApp: 'search:launch-app',

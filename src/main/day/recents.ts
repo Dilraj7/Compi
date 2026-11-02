@@ -2,6 +2,8 @@
 // modifiés cette semaine dans les dossiers confiés (index de Windows Search, ou lecture
 // directe des dossiers qu'il n'indexe pas ; jamais ailleurs). Rien n'est envoyé à un cerveau.
 
+import { stat } from 'node:fs/promises'
+import { isAbsolute } from 'node:path'
 import { shell } from 'electron'
 import type { RecentFile, RecentMeeting, RecentsInfo } from '../../shared/types'
 import { launchesProgram } from '../agent/folderTools'
@@ -69,6 +71,22 @@ export async function recents(): Promise<RecentsInfo> {
  * Ouvre un fichier choisi dans le plein écran (récents, recherche) : seulement dans les
  * dossiers confiés. Un programme n'est jamais lancé : il est montré dans l'Explorateur.
  */
+/**
+ * Fichier trouvé par la recherche de Windows (tout le PC) : montré dans l'Explorateur, jamais
+ * ouvert ni lancé. Ouvrir passe par openConfidedFile (dossiers confiés seulement).
+ */
+export async function revealFile(file: string): Promise<boolean> {
+  const f = String(file ?? '')
+  if (!isAbsolute(f) || /^\\\\/.test(f)) return false
+  try {
+    await stat(f)
+  } catch {
+    return false
+  }
+  shell.showItemInFolder(f)
+  return true
+}
+
 export async function openConfidedFile(file: string): Promise<'opened' | 'shown' | 'refused'> {
   const f = String(file ?? '')
   if (!insideAny(f, allowedFolders())) return 'refused'

@@ -6,6 +6,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { extname, join } from 'node:path'
 import { app, shell } from 'electron'
 import { z } from 'zod'
+import { folderCard } from '../../shared/cards'
 import { formatInventory, isLauncher } from '../../shared/folderPlan'
 import { log } from '../log'
 import type { CompiToolContext } from './tools'
@@ -76,6 +77,7 @@ export function folderTools(tool: ToolFn, ctx: CompiToolContext, h: ToolHelpers)
           const real = await insideScope(dir, scope)
           const isDesktop = Boolean(real && real.toLowerCase() === (await insideScope(desktop, scope))?.toLowerCase())
           const items = await inventory(dir, scope, { withPublic: isDesktop })
+          ctx.onCard?.('folder_inventory', { path }, folderCard(real ?? dir, items))
           return h.personal(ctx, formatInventory(real ?? dir, items))
         } catch (e) {
           return h.fail(`Inventaire impossible : ${(e as Error).message}`)

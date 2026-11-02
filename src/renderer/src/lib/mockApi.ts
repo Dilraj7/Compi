@@ -7,7 +7,19 @@ import { defaultBrain } from '@shared/brains'
 import { CATALOG } from '@shared/catalog'
 import { recommend } from '@shared/recommend'
 import { stageDetail } from '@shared/stage'
-import { agendaCard, remindersCard, tasksCard, weatherCard } from '@shared/cards'
+import {
+  agendaCard,
+  folderCard,
+  foundFilesCard,
+  mailsCard,
+  meetingCard,
+  meetingsCard,
+  remindersCard,
+  tasksCard,
+  timerCard,
+  weatherCard,
+  webCard
+} from '@shared/cards'
 import { cleanFull, DEFAULT_FULL } from '@shared/fullBlocks'
 import { groupWeek } from '@shared/week'
 import { matchScore, rank, snippet } from '@shared/search'
@@ -285,6 +297,144 @@ function demoCardsConversation(): Conversation {
         text: 'La cantine est en retard depuis hier : c’est la priorité. Ton prochain rappel sonne dans 45 minutes.',
         tools: [tool('tasks_list', 'Coup d’œil aux tâches', tasks), tool('reminder_list', 'Coup d’œil aux rappels', reminders)],
         createdAt: now - 2 * 60_000
+      },
+      asked('Des nouvelles de Claire ? Et retrouve la facture de septembre.', 1.5),
+      {
+        id: uid(),
+        role: 'assistant',
+        text: 'Claire attend ta relecture avant 17 h. La facture est dans tes Documents.',
+        tools: [
+          tool(
+            'mail_search',
+            'Recherche dans tes e-mails',
+            mailsCard('from:claire', {
+              total: 12,
+              mails: [
+                {
+                  id: 'm9a8b7c6',
+                  from: 'Claire Martin <claire@exemple.fr>',
+                  subject: 'Compte rendu à relire avant 17 h',
+                  snippet: 'Salut, tu peux jeter un œil au compte rendu avant ce soir ? J’ai surtout besoin de ton avis sur la partie budget.',
+                  date: new Date(now - 40 * 60_000).toISOString(),
+                  unread: true,
+                  important: true
+                },
+                {
+                  id: 'm8b7c6d5',
+                  from: 'Claire Martin <claire@exemple.fr>',
+                  subject: 'Re: Planning de novembre',
+                  snippet: 'Parfait pour moi, on garde le jeudi.',
+                  date: new Date(now - 3 * 86_400_000).toISOString(),
+                  unread: false,
+                  important: false
+                }
+              ]
+            })
+          ),
+          tool(
+            'search_files',
+            'Recherche de fichiers',
+            foundFilesCard('facture septembre', [
+              {
+                path: 'C:\\Users\\demo\\Documents\\Factures\\Facture-2026-09.pdf',
+                name: 'Facture-2026-09.pdf',
+                modified: new Date(now - 33 * 86_400_000).toISOString(),
+                size: 182_000
+              },
+              {
+                path: 'C:\\Users\\demo\\Documents\\Compta\\Récap septembre.xlsx',
+                name: 'Récap septembre.xlsx',
+                modified: new Date(now - 30 * 86_400_000).toISOString(),
+                size: 48_000
+              }
+            ])
+          )
+        ],
+        createdAt: now - 1.5 * 60_000
+      },
+      asked('Range mon bureau, et cherche les horaires de la piscine.', 1),
+      {
+        id: uid(),
+        role: 'assistant',
+        text: 'Ton bureau a surtout des captures d’écran à regrouper. La piscine ouvre à 7 h en semaine.',
+        tools: [
+          tool(
+            'folder_inventory',
+            'Inventaire du Bureau',
+            folderCard('C:\\Users\\demo\\Desktop', [
+              { name: 'Projets', path: 'C:\\Users\\demo\\Desktop\\Projets', kind: 'folder', modified: now - 86_400_000, flags: [] },
+              {
+                name: 'Capture 2026-10-30.png',
+                path: 'C:\\Users\\demo\\Desktop\\Capture 2026-10-30.png',
+                kind: 'file',
+                size: 820_000,
+                modified: now - 3 * 86_400_000,
+                flags: []
+              },
+              {
+                name: 'Notes réunion.docx',
+                path: 'C:\\Users\\demo\\Desktop\\Notes réunion.docx',
+                kind: 'file',
+                size: 24_000,
+                modified: now - 5 * 86_400_000,
+                flags: []
+              },
+              { name: 'Spotify.lnk', path: 'C:\\Users\\demo\\Desktop\\Spotify.lnk', kind: 'shortcut', size: 2_000, modified: now - 40 * 86_400_000, flags: [] },
+              { name: 'desktop.ini', path: 'C:\\Users\\demo\\Desktop\\desktop.ini', kind: 'file', size: 300, modified: now, flags: ['system'] }
+            ])
+          ),
+          tool(
+            'web_search',
+            'Recherche web',
+            webCard('horaires piscine lyon', [
+              { title: 'Piscines municipales : horaires et tarifs', url: 'https://www.ville-exemple.fr/piscines' },
+              { title: 'Centre nautique — ouverture au public', url: 'https://centre-nautique.example.com/horaires' },
+              { title: 'Horaires des piscines de la métropole', url: 'https://metropole.example.org/sport/piscines' }
+            ])
+          )
+        ],
+        createdAt: now - 60_000
+      },
+      asked('Résume ma dernière réunion et lance un minuteur pour les pâtes.', 0.5),
+      {
+        id: uid(),
+        role: 'assistant',
+        text: 'La démo est fixée à jeudi : à toi le support. Minuteur lancé.',
+        tools: [
+          tool(
+            'meetings_list',
+            'Réunions enregistrées',
+            meetingsCard([
+              { id: 'demo-1', title: 'Point équipe produit', startedAt: now - 26 * 3_600_000, durationMs: 34 * 60_000, hasSummary: true },
+              { id: 'demo-2', title: 'Appel avec le client', startedAt: now - 3 * 86_400_000, durationMs: 72 * 60_000, hasSummary: false }
+            ])
+          ),
+          tool(
+            'meeting_read',
+            'Lecture d’une réunion',
+            meetingCard({
+              id: 'demo-1',
+              title: 'Point équipe produit',
+              startedAt: now - 26 * 3_600_000,
+              durationMs: 34 * 60_000,
+              hasSummary: true,
+              summary: {
+                title: 'Point équipe produit',
+                summary:
+                  'L’équipe fixe la démo client à jeudi et garde le périmètre actuel. Le budget du trimestre est validé, la refonte du site attend décembre.',
+                points: ['Démo client jeudi à 14 h', 'Périmètre inchangé', 'Refonte du site repoussée à décembre'],
+                tasks: [
+                  { text: 'Préparer le support de démo', owner: 'Alex', due: 'mercredi soir' },
+                  { text: 'Envoyer le budget validé à la direction', owner: 'Claire' }
+                ],
+                brain: 'gemma4:12b',
+                at: now - 25 * 3_600_000
+              }
+            })
+          ),
+          tool('timer_start', 'Minuteur', timerCard(newTimer(12 * 60_000 + 34_000, 'Pâtes', now), now))
+        ],
+        createdAt: now - 30_000
       }
     ]
   }
@@ -1662,6 +1812,7 @@ export function createMockApi(): CompiApi {
       }
     },
     openConfidedFile: async () => 'opened',
+    revealFile: async () => true,
     // Recherche du plein écran : quelques applis, et les données de la démo.
     searchLocal: async (query) => {
       await new Promise((r) => setTimeout(r, 120))

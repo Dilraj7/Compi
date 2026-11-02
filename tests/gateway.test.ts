@@ -164,7 +164,7 @@ describe('début stable pour tous les modèles locaux', () => {
 })
 
 describe('consignes gardées pour les derniers modèles', () => {
-  const warm = (model: string, v = 10) => ({ v, target: 'http://127.0.0.1:11434', model, system: [], tools: [] })
+  const warm = (model: string, v = 11) => ({ v, target: 'http://127.0.0.1:11434', model, system: [], tools: [] })
 
   it('lit l’ancien fichier (un seul modèle) et la liste', () => {
     expect(readWarmPrompts(warm('gemma4:12b-compi'))).toEqual([warm('gemma4:12b-compi')])
@@ -180,7 +180,9 @@ describe('consignes gardées pour les derniers modèles', () => {
     expect(readWarmPrompts(warm('qwen3:8b-compi', 8))).toEqual([])
     // Version 9 : sans la consigne des cartes du chat.
     expect(readWarmPrompts(warm('qwen3:8b-compi', 9))).toEqual([])
-    expect(readWarmPrompts({ prompts: [null, { v: 10 }, warm('a')] }).map((p) => p.model)).toEqual(['a'])
+    // Version 10 : consigne des cartes limitée à la météo, l'agenda, les tâches et les rappels.
+    expect(readWarmPrompts(warm('qwen3:8b-compi', 10))).toEqual([])
+    expect(readWarmPrompts({ prompts: [null, { v: 11 }, warm('a')] }).map((p) => p.model)).toEqual(['a'])
     expect(readWarmPrompts(null)).toEqual([])
     expect(readWarmPrompts({ prompts: ['a', 'b', 'c', 'd', 'e'].map((m) => warm(m)) })).toHaveLength(4)
   })

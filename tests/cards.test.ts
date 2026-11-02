@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { agendaCard, cardKey, CARD_MAX_EVENTS, CARD_MAX_TASKS, keyHours, remindersCard, tasksCard, weatherCard } from '../src/shared/cards'
+import {
+  agendaCard,
+  cardKey,
+  CARD_MAX_EVENTS,
+  CARD_MAX_FILES,
+  CARD_MAX_MAILS,
+  CARD_MAX_TASKS,
+  folderCard,
+  foundFilesCard,
+  keyHours,
+  mailsCard,
+  meetingCard,
+  meetingsCard,
+  remindersCard,
+  tasksCard,
+  timerCard,
+  weatherCard,
+  webCard
+} from '../src/shared/cards'
 import type { DayEvent, Reminder, TaskItem } from '../src/shared/types'
 
 const event = (over: Partial<DayEvent> = {}): DayEvent => ({
@@ -138,5 +156,105 @@ describe('carte rappels', () => {
       ],
       more: 0
     })
+  })
+})
+
+describe('carte e-mails', () => {
+  const mail = (i: number) => ({
+    id: `m${i}`,
+    from: 'Claire Martin <claire@example.com>',
+    subject: `Facture ${i}`,
+    snippet: 'Bonjour, voici la facture du mois. '.repeat(10),
+    date: '2026-11-02T08:00:00Z',
+    unread: i === 0,
+    important: false
+  })
+  it('le nom de l’expéditeur seulement, un extrait court, et le total', () => {
+    const card = mailsCard('from:claire facture', { total: 40, mails: Array.from({ length: CARD_MAX_MAILS + 2 }, (_, i) => mail(i)) })
+    if (card.kind !== 'mails') throw new Error()
+    expect(card.items).toHaveLength(CARD_MAX_MAILS)
+    expect(card.total).toBe(40)
+    expect(card.items[0]).toMatchObject({ id: 'm0', from: 'Claire Martin', subject: 'Facture 0', unread: true })
+    expect(card.items[0].snippet!.length).toBeLessThanOrEqual(120)
+    expect(JSON.stringify(card)).not.toContain('claire@example.com')
+  })
+})
+
+describe('cartes fichiers et dossier', () => {
+  it('fichiers trouvés : date ISO lue, taille gardée, reste compté', () => {
+    const hits = Array.from({ length: CARD_MAX_FILES + 1 }, (_, i) => ({
+      path: `C:/Docs/f${i}.pdf`,
+      name: `f${i}.pdf`,
+      modified: '2026-11-01T10:00:00Z',
+      size: 2048
+    }))
+    const card = foundFilesCard('facture', [...hits, { path: 'C:/x', name: 'x', modified: 'n’importe quoi', size: null }])
+    if (card.kind !== 'files') throw new Error()
+    expect(card.items[0]).toEqual({ name: 'f0.pdf', path: 'C:/Docs/f0.pdf', kind: 'file', size: 2048, modified: Date.parse('2026-11-01T10:00:00Z') })
+    expect(card.more).toBe(2)
+    expect(card.query).toBe('facture')
+  })
+  it('dossier : sous-dossiers d’abord, puis le plus récent, sans fichiers système', () => {
+    const card = folderCard('C:/Bureau', [
+      { name: 'vieux.txt', path: 'C:/Bureau/vieux.txt', kind: 'file', size: 10, modified: 1, flags: [] },
+      { name: 'desktop.ini', path: 'C:/Bureau/desktop.ini', kind: 'file', size: 1, modified: 9, flags: ['system'] },
+      { name: 'récent.pdf', path: 'C:/Bureau/récent.pdf', kind: 'file', size: 10, modified: 5, flags: [] },
+      { name: 'Projets', path: 'C:/Bureau/Projets', kind: 'folder', size: 999, modified: 2, flags: [] }
+    ])
+    if (card.kind !== 'files') throw new Error()
+    expect(card.path).toBe('C:/Bureau')
+    expect(card.items.map((i) => i.name)).toEqual(['Projets', 'récent.pdf', 'vieux.txt'])
+    expect(card.items[0].size).toBeUndefined()
+  })
+})
+
+describe('carte recherche web', () => {
+  it('liens http(s) seulement ; rien sans source', () => {
+    const card = webCard('météo lyon', [
+      { title: 'Prévisions', url: 'https://meteo.example.com/lyon' },
+      { title: 'Piège', url: 'javascript:alert(1)' }
+    ])
+    expect(card).toEqual({ kind: 'web', query: 'météo lyon', sources: [{ title: 'Prévisions', url: 'https://meteo.example.com/lyon' }] })
+    expect(webCard('x', [{ title: 'a', url: 'file:///C:/a' }])).toBeUndefined()
+  })
+})
+
+describe('cartes réunions', () => {
+  const meta = { id: 'r1', title: 'Point équipe', startedAt: 1, durationMs: 1_800_000, hasSummary: true }
+  it('liste : seulement ce qui s’affiche', () => {
+    const card = meetingsCard([{ ...meta, status: 'done', engine: 'parakeet', others: true, audio: false } as never])
+    expect(card).toEqual({ kind: 'meetings', items: [meta], more: 0 })
+  })
+  it('réunion lue : résumé, 5 points et 6 tâches au plus, jamais la transcription', () => {
+    const card = meetingCard({
+      ...meta,
+      summary: {
+        title: 'Point équipe',
+        summary: 'On lance la version 2.',
+        points: Array.from({ length: 8 }, (_, i) => `Point ${i}`),
+        tasks: Array.from({ length: 9 }, (_, i) => ({ text: `Tâche ${i}`, owner: 'Paul' })),
+        brain: 'local',
+        at: 2
+      },
+      lines: [{ who: 's1', start: 0, end: 1, text: 'phrase secrète' }]
+    } as never)
+    if (card.kind !== 'meeting') throw new Error()
+    expect(card.summary).toBe('On lance la version 2.')
+    expect(card.points).toHaveLength(5)
+    expect(card.tasks).toHaveLength(6)
+    expect(card.tasks[0]).toEqual({ text: 'Tâche 0', owner: 'Paul' })
+    expect(JSON.stringify(card)).not.toContain('phrase secrète')
+  })
+  it('sans résumé : la carte le dit (pas de points ni de tâches)', () => {
+    const card = meetingCard({ ...meta, hasSummary: false })
+    expect(card).toMatchObject({ kind: 'meeting', points: [], tasks: [] })
+    expect('summary' in card).toBe(false)
+  })
+})
+
+describe('carte minuteur', () => {
+  it('garde l’état du moment', () => {
+    const t = { kind: 'timer' as const, label: 'Pâtes', durationMs: 600_000, endsAt: 1_600_000 }
+    expect(timerCard(t, 1_000_000)).toEqual({ kind: 'timer', timer: t, at: 1_000_000 })
   })
 })

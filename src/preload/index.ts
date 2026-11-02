@@ -118,6 +118,7 @@ const api: CompiApi = {
   week: () => ipcRenderer.invoke(IPC.weekGet),
   recents: () => ipcRenderer.invoke(IPC.recentsGet),
   openConfidedFile: (file) => ipcRenderer.invoke(IPC.fullOpenFile, file),
+  revealFile: (file) => ipcRenderer.invoke(IPC.revealFile, file),
   searchLocal: (query) => ipcRenderer.invoke(IPC.searchLocal, query),
   searchFiles: (query) => ipcRenderer.invoke(IPC.searchFiles, query),
   launchStartApp: (id) => ipcRenderer.invoke(IPC.searchLaunchApp, id),

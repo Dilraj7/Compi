@@ -39,7 +39,7 @@ import { dismissMissed, getMissed, startMissed } from './day/missed'
 import { getTimer, pauseTimer, restoreTimer, resumeTimer, startPomodoro, startTimer, stopTimer, stopTimers } from './day/timer'
 import { buildToday, startMorning } from './day/today'
 import { buildWeek } from './day/week'
-import { openConfidedFile, recents } from './day/recents'
+import { openConfidedFile, recents, revealFile } from './day/recents'
 import { launchStartApp, searchConfidedFiles, searchLocal } from './search/universal'
 import { addSource, agendaTools, calendarChoices, previewSource, removeSource, setGoogleCalendars, updateSource } from './day/agenda'
 import { findCity } from './day/weather'
@@ -827,6 +827,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.weekGet, () => buildWeek())
   ipcMain.handle(IPC.recentsGet, () => recents())
   ipcMain.handle(IPC.fullOpenFile, (_e, file: unknown) => openConfidedFile(String(file ?? '')))
+  ipcMain.handle(IPC.revealFile, (_e, file: unknown) => revealFile(String(file ?? '')))
   ipcMain.handle(IPC.searchLocal, (_e, query: unknown) => searchLocal(query))
   ipcMain.handle(IPC.searchFiles, (_e, query: unknown) => searchConfidedFiles(query))
   ipcMain.handle(IPC.searchLaunchApp, (_e, id: unknown) => launchStartApp(id))
