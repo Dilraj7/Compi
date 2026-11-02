@@ -23,7 +23,7 @@ Compi vit dans un « îlot » noir collé en haut de l'écran, à la manière du
 
 ## Ce qu'il sait faire
 
-- **Ta journée en une question** : agenda (Google, lien `.ics` ou connecteur), e-mails Gmail, tâches Google, météo, rappels.
+- **Ta journée en une question** : agenda (Google, lien `.ics` ou connecteur), e-mails Gmail, tâches Google, météo, rappels. Les réponses s'affichent en **cartes** : la météo heure par heure, les rendez-vous avec « Rejoindre », les tâches à cocher d'un clic.
 - **Actions rapides** sur n'importe quel texte sélectionné, dans toutes tes applis : corriger, reformuler, traduire, résumer. Ou sur une **zone de l'écran** (`Alt + Maj + Z`) : son texte est lu sur ton PC, même dans une image, et « Expliquer » peut regarder un graphique.
 - **Il agit, avec ton OK** : déplacer un rendez-vous, ranger un dossier, régler le son, ouvrir une appli. Une carte avant chaque action.
 - **Parle-lui** : ta voix est transcrite sur ton PC, jamais envoyée. Il peut aussi te répondre à voix haute, avec la voix de Windows ou une voix naturelle calculée sur ton PC, puis t'écouter pour la suite, sans toucher au clavier (conversation vocale, en option).

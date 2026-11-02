@@ -61,7 +61,20 @@ function keepDone(prev: TaskItem[], next: TaskItem[]): TaskItem[] {
   return out
 }
 
-function TaskRow({ t, today, showList, onChange }: { t: TaskItem; today: string; showList: boolean; onChange: (t: TaskItem, error?: string) => void }) {
+/** Ce qu'une ligne affiche : une tâche lue à l'instant, ou celle d'une carte du chat. */
+type RowTask = Pick<TaskItem, 'id' | 'listId' | 'list' | 'title' | 'due' | 'done' | 'link' | 'notes'>
+
+export function TaskRow<T extends RowTask>({
+  t,
+  today,
+  showList,
+  onChange
+}: {
+  t: T
+  today: string
+  showList: boolean
+  onChange: (t: T, error?: string) => void
+}) {
   const [busy, setBusy] = useState(false)
   const bucket = taskBucket(t, today)
   const toggle = async (): Promise<void> => {

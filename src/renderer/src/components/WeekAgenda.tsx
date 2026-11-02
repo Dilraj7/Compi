@@ -19,9 +19,22 @@ const WEATHER_ICON: Record<WeatherKind, LucideIcon> = {
   storm: CloudLightning
 }
 
-export function WeatherIcon({ code, size = 14 }: { code?: number; size?: number }) {
-  const Icon = WEATHER_ICON[weatherKind(code)]
-  return <Icon size={size} className="shrink-0 text-[#FDBA74]" />
+/** Couleur de l'icône selon le temps (cartes du chat) : soleil orangé, pluie bleue… */
+const WEATHER_COLOR: Record<WeatherKind, string> = {
+  sun: '#FDBA74',
+  partly: '#FDE68A',
+  cloud: '#CBD5E1',
+  fog: '#CBD5E1',
+  drizzle: '#7FB0FF',
+  rain: '#7FB0FF',
+  snow: '#A5F3FC',
+  storm: '#C4B5FD'
+}
+
+export function WeatherIcon({ code, size = 14, tinted }: { code?: number; size?: number; tinted?: boolean }) {
+  const kind = weatherKind(code)
+  const Icon = WEATHER_ICON[kind]
+  return <Icon size={size} className="shrink-0" color={tinted ? WEATHER_COLOR[kind] : '#FDBA74'} />
 }
 
 /** Lecture des 7 jours, rafraîchie toutes les 5 min tant que la vue est affichée. */

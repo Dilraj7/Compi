@@ -7,6 +7,7 @@ import { defaultBrain } from '@shared/brains'
 import { CATALOG } from '@shared/catalog'
 import { recommend } from '@shared/recommend'
 import { stageDetail } from '@shared/stage'
+import { agendaCard, remindersCard, tasksCard, weatherCard } from '@shared/cards'
 import { cleanFull, DEFAULT_FULL } from '@shared/fullBlocks'
 import { groupWeek } from '@shared/week'
 import { matchScore, rank, snippet } from '@shared/search'
@@ -20,6 +21,7 @@ import type {
   ClaudeSession,
   ClipItem,
   Conversation,
+  ToolActivity,
   DictationStatRow,
   HardwareInfo,
   IslandCommand,
@@ -182,6 +184,110 @@ function demoCompiUsage(): CompiUsageRow[] {
     if (d % 2 === 0) out.push({ day: key, brain: 'Sur ce PC · gemma4:12b', provider: 'local', replies: 2 + (d % 3), costUsd: 0, input: 20_000, output: 2_000 })
   }
   return out
+}
+
+/** Discussion de démonstration des cartes du chat (?cards=demo) : météo, agenda, tâches, rappels. */
+function demoCardsConversation(): Conversation {
+  const now = Date.now()
+  const today = localDay(new Date(now))
+  const at = (day: number, h: number, m = 0): string => {
+    const d = new Date(now)
+    d.setDate(d.getDate() + day)
+    d.setHours(h, m, 0, 0)
+    return d.toISOString()
+  }
+  const dayOf = (n: number): string => addDays(today, n)
+  const weather = weatherCard([
+    {
+      city: 'Lyon',
+      label: 'Averses',
+      code: 80,
+      min: 6,
+      max: 12,
+      rain: 70,
+      date: dayOf(1),
+      hours: [
+        { hour: 9, temp: 7, code: 3, rain: 20 },
+        { hour: 12, temp: 11, code: 80, rain: 60 },
+        { hour: 15, temp: 12, code: 80, rain: 70 },
+        { hour: 18, temp: 9, code: 2, rain: 30 }
+      ]
+    },
+    { city: 'Lyon', label: 'Ensoleillé', code: 0, min: 4, max: 13, rain: 5, date: dayOf(2) },
+    { city: 'Lyon', label: 'Partiellement nuageux', code: 2, min: 5, max: 14, rain: 10, date: dayOf(3) },
+    { city: 'Lyon', label: 'Pluie', code: 63, min: 8, max: 11, rain: 90, date: dayOf(4) }
+  ])!
+  const agenda = agendaCard(today, 2, [
+    {
+      id: 'a1',
+      title: 'Point équipe',
+      start: at(0, 9, 30),
+      end: at(0, 10),
+      allDay: false,
+      calendar: 'Travail',
+      meetUrl: 'https://meet.google.com/abc-defg-hij'
+    },
+    { id: 'a2', title: 'Déjeuner avec Claire', start: at(0, 12, 30), end: at(0, 14), allDay: false, location: 'Café des Arts' },
+    { id: 'a3', title: 'Revue de projet', start: at(0, 16), end: at(0, 17), allDay: false, calendar: 'Travail', meetUrl: 'https://meet.google.com/xyz' },
+    { id: 'a4', title: 'Anniversaire de Paul', start: dayOf(1), end: dayOf(2), allDay: true },
+    { id: 'a5', title: 'Dentiste', start: at(1, 18), end: at(1, 18, 45), allDay: false, location: '12 rue Victor-Hugo' }
+  ])
+  const tasks = tasksCard(
+    [
+      { id: 'tk2', listId: 'maison', list: 'Maison', title: 'Payer la cantine', due: addDays(today, -1), done: false, link: 'https://tasks.google.com/' },
+      { id: 't2', listId: 'l1', list: 'Mes tâches', title: 'Appeler la banque', due: today, done: false },
+      { id: 't3', listId: 'l2', list: 'Maison', title: 'Racheter du café', done: false },
+      { id: 't4', listId: 'l1', list: 'Mes tâches', title: 'Relire le compte rendu', due: addDays(today, 2), done: false }
+    ],
+    today
+  )
+  const reminders = remindersCard(
+    [
+      { id: 'r1', message: 'Prendre les billets de train', dueAt: now + 45 * 60_000 },
+      { id: 'r2', message: 'Sortir les poubelles', dueAt: new Date(at(1, 19)).getTime(), repeat: { every: 'week', days: [2], time: '19:00' } }
+    ],
+    (r) => (r.repeat ? 'chaque mardi à 19 h' : undefined)
+  )
+  const tool = (name: string, label: string, card: ToolActivity['card']): ToolActivity => ({
+    id: uid(),
+    name: `mcp__compi__${name}`,
+    label,
+    status: 'done',
+    card
+  })
+  const asked = (text: string, minutesAgo: number) => ({ id: uid(), role: 'user' as const, text, createdAt: now - minutesAgo * 60_000 })
+  return {
+    id: 'c-cards',
+    title: 'Ma journée et la météo',
+    updatedAt: now,
+    brain: { provider: 'local', model: 'gemma4:12b' },
+    messages: [
+      asked('Quel temps fera-t-il demain ?', 9),
+      {
+        id: uid(),
+        role: 'assistant',
+        text: 'Prends un parapluie demain : les averses arrivent vers midi, puis ça se dégage en soirée.',
+        tools: [tool('weather_forecast', 'Météo', weather)],
+        createdAt: now - 9 * 60_000
+      },
+      asked('Qu’est-ce que j’ai aujourd’hui et demain ?', 6),
+      {
+        id: uid(),
+        role: 'assistant',
+        text: 'Trois rendez-vous aujourd’hui, dont deux en visio. Demain, n’oublie pas l’anniversaire de Paul.',
+        tools: [tool('calendar_events', 'Coup d’œil à l’agenda', agenda)],
+        createdAt: now - 6 * 60_000
+      },
+      asked('Mes tâches et mes rappels ?', 2),
+      {
+        id: uid(),
+        role: 'assistant',
+        text: 'La cantine est en retard depuis hier : c’est la priorité. Ton prochain rappel sonne dans 45 minutes.',
+        tools: [tool('tasks_list', 'Coup d’œil aux tâches', tasks), tool('reminder_list', 'Coup d’œil aux rappels', reminders)],
+        createdAt: now - 2 * 60_000
+      }
+    ]
+  }
 }
 
 /** Carte « Ce que tu as manqué » de démonstration : la réunion d'Alex vient de finir. */
@@ -925,6 +1031,7 @@ export function createMockApi(): CompiApi {
   let approvals: ApprovalRequest[] = []
   let questions: QuestionRequest[] = []
   const conversations: Conversation[] = [
+    ...(params.get('cards') === 'demo' ? [demoCardsConversation()] : []),
     {
       id: 'c-old',
       title: 'Idées de cadeaux pour la fête des pères',
@@ -1286,6 +1393,8 @@ export function createMockApi(): CompiApi {
   const clipsCh = channel<ClipItem[]>()
   const semanticCh = channel<SemanticStatus>()
   const openConvCh = channel<string>()
+  // ?cards=demo : la discussion des cartes s'ouvre d'elle-même.
+  if (params.get('cards') === 'demo') setTimeout(() => openConvCh.emit('c-cards'), 400)
   const day = 86_400_000
   let memory: MemoryItem[] = [
     { id: 'm1', fact: 'Préfère qu’on le tutoie', createdAt: Date.now() - 12 * day, source: 'chat', conversation: 'Présentations' },

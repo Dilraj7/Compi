@@ -35,6 +35,7 @@ import type {
   SentTo,
   ToolActivity
 } from '../../shared/types'
+import { cardKey, type ChatCard } from '../../shared/cards'
 import { stageDetail } from '../../shared/stage'
 import { withColdStart } from '../../shared/reread'
 import { approvals } from '../approvals'
@@ -246,6 +247,7 @@ Style :
 - Réponds dans la langue de l'utilisateur (français par défaut).
 - Sois concis : l'îlot est petit. Va droit au but, avec des listes courtes et du Markdown léger. Développe seulement si on te le demande.
 - Pas de formules creuses (« Bien sûr ! », « Excellente question ! »).
+- La météo (weather_forecast), l'agenda (calendar_events), les tâches (tasks_list) et les rappels (reminder_list) s'affichent déjà en carte sous ta réponse : ne recopie pas la liste, dis l'essentiel en une ou deux phrases (un conseil, ce qui compte).
 
 Ce que tu peux faire :
 ${webAbilities(brain)}
@@ -747,6 +749,16 @@ async function runQuery(
   // Pour la scène : ce que chaque outil a reçu, et le détail des cartes acceptées.
   const toolInputs = new Map<string, Record<string, unknown>>()
   const cards = new Map<string, string>()
+  // Cartes visuelles des outils de lecture, en attendant le résultat de leur étape (même clé des deux côtés).
+  const chatCards = new Map<string, ChatCard[]>()
+  const takeChatCard = (name: string, input: Record<string, unknown>): ChatCard | undefined => {
+    const exact = chatCards.get(cardKey(name, input))
+    if (exact?.length) return exact.shift()
+    // Paramètres en trop envoyés par le modèle (l'outil les ignore) : la plus ancienne carte du même outil.
+    const tool = cardKey(name, {}).split('|')[0]
+    for (const [key, list] of chatCards) if (key.startsWith(`${tool}|`) && list.length) return list.shift()
+    return undefined
+  }
   const streamedMessageIds = new Set<string>()
   let currentApiMessageId = ''
 
@@ -937,7 +949,8 @@ async function runQuery(
           const detail = block.is_error
             ? undefined
             : stageDetail(t.name, toolInputs.get(t.id) ?? {}, result, { card: cards.get(t.id), structured: msg.tool_use_result })
-          setTool({ ...t, status: block.is_error ? 'error' : 'done', ...(undo ? { undo } : {}), ...(detail ? { detail } : {}) })
+          const card = block.is_error ? undefined : takeChatCard(t.name, toolInputs.get(t.id) ?? {})
+          setTool({ ...t, status: block.is_error ? 'error' : 'done', ...(undo ? { undo } : {}), ...(detail ? { detail } : {}), ...(card ? { card } : {}) })
         }
         break
       }
@@ -1072,6 +1085,10 @@ async function runQuery(
       onMasked: (n) => (masked += n),
       onCloudShared: () => (cloudHelped = true),
       onExternalContent: () => conversations.markExternal(conversationId),
+      onCard: (tool, input, card) => {
+        const key = cardKey(tool, input)
+        chatCards.set(key, [...(chatCards.get(key) ?? []), card])
+      },
       conversationTitle: conv?.title,
       headless,
       routineServer

@@ -2,6 +2,7 @@
 
 import type { MessageNotice } from './claims'
 import type { PrivacyCategory, PrivacySettings } from './privacy'
+import type { ChatCard } from './cards'
 import type { StageDetail } from './stage'
 
 export type ModelId = 'claude-opus-5-5' | 'claude-sonnet-5-5' | 'claude-haiku-5-5'
@@ -389,6 +390,8 @@ export interface ToolActivity {
   undo?: string
   /** Ce que l'étape a changé (fichier, rangement, agenda…), montré par la scène du plein écran. */
   detail?: StageDetail
+  /** Données lues par l'étape (météo, agenda, tâches, rappels), montrées en carte dans le chat (Lot W). */
+  card?: ChatCard
 }
 
 /** Vitesse mesurée d'une réponse (cerveaux local et « Autre », via la passerelle). */

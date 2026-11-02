@@ -5,6 +5,7 @@
 
 import { z } from 'zod'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import { agendaCard, remindersCard, tasksCard, weatherCard } from '../../shared/cards'
 import type { ReminderRepeat } from '../../shared/types'
 import { settings } from '../store/settings'
 import { createEvent, deleteEvent, eventDay, eventTime, formatEvents, updateEvent } from '../google/calendar'
@@ -90,9 +91,22 @@ export function dayTools(tool: ToolFn, ctx: CompiToolContext, h: ToolHelpers) {
       }
     ),
 
-    tool('reminder_list', 'Liste les rappels programmés (avec leur identifiant).', {}, async () => h.text(formatReminders(listReminders())), {
-      annotations: { readOnlyHint: true }
-    }),
+    tool(
+      'reminder_list',
+      'Liste les rappels programmés (avec leur identifiant).',
+      {},
+      async () => {
+        const list = listReminders()
+        if (list.length)
+          ctx.onCard?.(
+            'reminder_list',
+            {},
+            remindersCard(list, (r) => (r.repeat ? repeatLabel(r.repeat) : undefined))
+          )
+        return h.text(formatReminders(list))
+      },
+      { annotations: { readOnlyHint: true } }
+    ),
 
     tool(
       'reminder_cancel',
@@ -106,9 +120,10 @@ export function dayTools(tool: ToolFn, ctx: CompiToolContext, h: ToolHelpers) {
       'Prévisions météo (Open-Meteo), jusqu’à 7 jours. Sans ville, celle réglée par l’utilisateur.',
       {
         city: z.string().optional().describe('Ville, si ce n’est pas celle de l’utilisateur'),
-        days: z.number().int().min(1).max(7).optional().describe('Nombre de jours, aujourd’hui compris (2 pour demain)')
+        from_day: z.number().int().min(0).max(6).optional().describe('Premier jour : 0 aujourd’hui (par défaut), 1 demain'),
+        days: z.number().int().min(1).max(7).optional().describe('Nombre de jours à partir du premier (1 par défaut)')
       },
-      async ({ city, days }) => {
+      async ({ city, from_day, days }) => {
         try {
           const s = settings.get().day
           const place = city?.trim()
@@ -117,7 +132,12 @@ export function dayTools(tool: ToolFn, ctx: CompiToolContext, h: ToolHelpers) {
               ? { label: s.city, lat: s.cityLat, lon: s.cityLon }
               : null
           if (!place) return h.fail(city ? `Ville introuvable : « ${city} ».` : 'Aucune ville réglée : demande-la, ou propose Réglages › Ta journée.')
-          return h.text(formatForecast(await forecast(place, days ?? 1)))
+          // Une seule lecture (en cache) pour toute la semaine, puis les jours demandés.
+          const first = from_day ?? 0
+          const found = (await forecast(place, Math.min(7, first + (days ?? 1)))).slice(first)
+          const card = weatherCard(found)
+          if (card) ctx.onCard?.('weather_forecast', { city, from_day, days }, card)
+          return h.text(formatForecast(found))
         } catch (e) {
           return h.fail(`Météo indisponible : ${errorText(e)}`)
         }
@@ -148,6 +168,7 @@ export function dayTools(tool: ToolFn, ctx: CompiToolContext, h: ToolHelpers) {
             const r = await agendaEvents({ from: start, to: end, query })
             if (!r.events.length && r.errors.length) return h.fail(`Agenda indisponible : ${r.errors.join(' ; ')}`)
             ctx.onExternalContent?.()
+            ctx.onCard?.('calendar_events', { from, days, query }, agendaCard(localDay(start), days ?? 1, r.events))
             const missing = r.errors.length ? `\n\n(Non lu : ${r.errors.join(' ; ')})` : ''
             const text = formatEvents(r.events, g.calendar ? rememberEvent : undefined)
             return r.events.length ? h.personal(ctx, text + missing) : h.text(`Aucun rendez-vous sur cette période.${missing}`)
@@ -316,6 +337,7 @@ export function dayTools(tool: ToolFn, ctx: CompiToolContext, h: ToolHelpers) {
                         : true)
               )
               ctx.onExternalContent?.()
+              if (items.length) ctx.onCard?.('tasks_list', { due, query }, tasksCard(items, today))
               return items.length ? h.personal(ctx, formatTasks(items, today, rememberTask)) : h.text('Aucune tâche à faire pour cette recherche.')
             } catch (e) {
               return h.fail(`Tâches indisponibles : ${errorText(e)}`)

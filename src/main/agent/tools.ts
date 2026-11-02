@@ -11,6 +11,7 @@ import { z } from 'zod'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { isPrivateHost } from '../../shared/brains'
 import { IPC } from '../../shared/ipc'
+import type { ChatCard } from '../../shared/cards'
 import type { ProviderId } from '../../shared/types'
 import { approvals } from '../approvals'
 import { emit } from '../bus'
@@ -159,6 +160,8 @@ export interface CompiToolContext {
   headless?: boolean
   /** Routine : connecteurs utilisables (un outil sur « Toujours », ou recherche web permise à la routine). */
   routineServer?: (key: string) => boolean
+  /** Un outil de lecture a des données à montrer en carte (météo, agenda…) : rattachée à son étape par `cardKey`. */
+  onCard?: (tool: string, input: Record<string, unknown>, card: ChatCard) => void
 }
 
 const text = (t: string): CallToolResult => ({ content: [{ type: 'text', text: t }] })

@@ -2,6 +2,7 @@
 // de la ville choisie par l'utilisateur lui sont envoyées.
 
 import { net } from 'electron'
+import { keyHours, type WeatherHour } from '../../shared/cards'
 import type { DayWeather } from '../../shared/types'
 
 /** Codes météo de l'OMM → libellé (pur, testé). */
@@ -60,23 +61,35 @@ interface Daily {
   precipitation_probability_max?: (number | null)[]
 }
 
-const cache = new Map<string, { at: number; days: DayWeather[] }>()
+interface Hourly {
+  time: string[]
+  temperature_2m: number[]
+  weather_code: number[]
+  precipitation_probability?: (number | null)[]
+}
 
-/** Prévisions jour par jour (aujourd'hui compris), 7 jours au plus. */
-export async function forecast(place: { label: string; lat: number; lon: number }, days = 1): Promise<(DayWeather & { date: string })[]> {
+/** Prévision d'un jour, avec ses heures clés (carte météo du chat). */
+export type DayForecast = DayWeather & { date: string; hours?: WeatherHour[] }
+
+const cache = new Map<string, { at: number; days: DayForecast[] }>()
+
+/** Prévisions jour par jour (aujourd'hui compris), 7 jours au plus, avec les heures clés de chaque jour. */
+export async function forecast(place: { label: string; lat: number; lon: number }, days = 1): Promise<DayForecast[]> {
   const n = Math.min(Math.max(days, 1), 7)
   const key = `${place.lat.toFixed(2)},${place.lon.toFixed(2)},${n}`
   const hit = cache.get(key)
-  if (hit && Date.now() - hit.at < 30 * 60_000) return hit.days as (DayWeather & { date: string })[]
+  if (hit && Date.now() - hit.at < 30 * 60_000) return hit.days
   const params = new URLSearchParams({
     latitude: String(place.lat),
     longitude: String(place.lon),
     daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+    hourly: 'temperature_2m,weather_code,precipitation_probability',
     timezone: 'auto',
     forecast_days: String(n)
   })
-  const r = await getJson<{ daily?: Daily }>(`https://api.open-meteo.com/v1/forecast?${params}`)
+  const r = await getJson<{ daily?: Daily; hourly?: Hourly }>(`https://api.open-meteo.com/v1/forecast?${params}`)
   const d = r.daily
+  const h = r.hourly
   if (!d?.time?.length) throw new Error('Open-Meteo n’a pas renvoyé de prévisions.')
   const out = d.time.map((date, i) => ({
     date,
@@ -85,17 +98,23 @@ export async function forecast(place: { label: string; lat: number; lon: number 
     code: d.weather_code[i],
     min: Math.round(d.temperature_2m_min[i]),
     max: Math.round(d.temperature_2m_max[i]),
-    rain: d.precipitation_probability_max?.[i] ?? undefined
+    rain: d.precipitation_probability_max?.[i] ?? undefined,
+    hours: h?.time ? keyHours(date, h.time, h.temperature_2m, h.weather_code, h.precipitation_probability) : undefined
   }))
   cache.set(key, { at: Date.now(), days: out })
   return out
 }
 
-/** « mardi 14 : Averses, 9 à 15 °C, pluie 70 % ». */
-export function formatForecast(days: (DayWeather & { date: string })[]): string {
+/** « mardi 14 : Averses, 9 à 15 °C, pluie 70 % (9 h 10°, 12 h 14° pluie 60 %…) ». */
+export function formatForecast(days: DayForecast[]): string {
   const fmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric' })
   return [
     `Météo à ${days[0]?.city ?? '?'} (Open-Meteo) :`,
-    ...days.map((d) => `- ${fmt.format(new Date(`${d.date}T12:00:00`))} : ${d.label}, ${d.min} à ${d.max} °C${d.rain != null ? `, pluie ${d.rain} %` : ''}`)
+    ...days.map(
+      (d) =>
+        `- ${fmt.format(new Date(`${d.date}T12:00:00`))} : ${d.label}, ${d.min} à ${d.max} °C${d.rain != null ? `, pluie ${d.rain} %` : ''}${
+          d.hours?.length ? ` (${d.hours.map((x) => `${x.hour} h ${x.temp}°${x.rain ? ` pluie ${x.rain} %` : ''}`).join(', ')})` : ''
+        }`
+    )
   ].join('\n')
 }

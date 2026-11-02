@@ -123,7 +123,7 @@ export function EventRow({ e, now }: { e: DayEvent; now: number }) {
   )
 }
 
-function EventLine({
+export function EventLine({
   e,
   past,
   live,
@@ -132,7 +132,8 @@ function EventLine({
   end,
   children
 }: {
-  e: DayEvent
+  /** Un rendez-vous lu à l'instant, ou celui d'une carte du chat (mêmes champs affichés). */
+  e: Pick<DayEvent, 'title' | 'start' | 'end' | 'allDay' | 'location' | 'calendar' | 'meetUrl'>
   past: boolean
   live: boolean
   soon: boolean

@@ -13,6 +13,7 @@ import { RobotHead } from '../mascot/RobotHead'
 import { Markdown } from '../components/Markdown'
 import { PendingRequests } from '../components/Cards'
 import { StageCard } from '../components/Stage'
+import { ChatCards } from '../components/ChatCards'
 import { BrainChip, BrainPicker, useBrainReady, WelcomeBrains } from '../components/BrainPicker'
 import { Button, LedDots, cx, prettyShortcut } from '../components/ui'
 import { useFull } from '../components/fullContext'
@@ -35,7 +36,10 @@ function Hero() {
   // Plein écran : les propositions du moment passent devant les suggestions habituelles.
   const full = useFull()
   const moment: HeroSuggestion[] = full?.hero ? heroSuggestions(full.hero) : []
-  const items: Array<HeroSuggestion & { now?: boolean }> = [...moment.map((m) => ({ ...m, now: true })), ...SUGGESTIONS.map((s) => ({ id: s.label, ...s }))].slice(0, 4)
+  const items: Array<HeroSuggestion & { now?: boolean }> = [
+    ...moment.map((m) => ({ ...m, now: true })),
+    ...SUGGESTIONS.map((s) => ({ id: s.label, ...s }))
+  ].slice(0, 4)
   const pick = (s: HeroSuggestion): void => {
     if (s.action === 'prep' && s.prepKey) useCompi.getState().setPrepFocus(s.prepKey)
     if (s.action === 'missed') full?.showMissed()
@@ -360,6 +364,7 @@ function Message({ m, streaming, last }: { m: ChatMessage; streaming: boolean; l
           ))}
         </div>
       ) : null}
+      {m.tools?.length ? <ChatCards tools={m.tools} /> : null}
       {local && <LocalWait />}
       {waitingFirstToken && !local && (
         <div className="flex items-center gap-2 text-[12px] text-fog-500">
