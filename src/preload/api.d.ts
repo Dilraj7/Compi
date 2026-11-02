@@ -403,4 +403,6 @@ declare global {
   interface Window {
     compi: CompiApi
   }
+  /** Version de package.json, posée au moment du build (electron.vite.config.ts). */
+  const __APP_VERSION__: string
 }

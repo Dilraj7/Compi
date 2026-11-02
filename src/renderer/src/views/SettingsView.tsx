@@ -404,7 +404,7 @@ export function SettingsView() {
 
         <div className="flex items-center justify-between px-1 pt-1 text-[11.5px] text-fog-700">
           <span>
-            <span className="led-text text-fog-500">Compi</span> v0.4.0 · fait avec Claude
+            <span className="led-text text-fog-500">Compi</span> v{__APP_VERSION__} · fait avec Claude
           </span>
           <Button size="sm" variant="ghost" onClick={() => window.compi.quit()}>
             <Power size={13} /> Quitter

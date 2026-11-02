@@ -2,6 +2,7 @@
 // l'Agent SDK, et test de connexion (liste des outils exposés).
 
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk'
+import { app } from 'electron'
 import type { ConnectorAuthState, ConnectorConfig, ConnectorTestResult } from '../../shared/types'
 import { hostEnv } from '../brains/brain'
 import { secrets } from '../store/secrets'
@@ -94,7 +95,7 @@ export async function withConnector<T>(id: string, fn: (client: McpClient, timeo
   const c = settings.get().connectors.find((x) => x.id === id)
   if (!c) throw new ConnectorError('Connecteur introuvable.')
   const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-  const client = new Client({ name: 'compi', version: '0.4.0' })
+  const client = new Client({ name: 'compi', version: app.getVersion() })
   let timer: NodeJS.Timeout | undefined
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new ConnectorError(`Délai dépassé (${Math.round(ms / 1000)} s).`)), ms)
