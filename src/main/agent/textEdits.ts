@@ -5,7 +5,7 @@
 
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { insideScope } from './folderOps'
 
@@ -210,7 +210,9 @@ export function undoTextEdit(
 ): Promise<{ path: string } | { error: string }> {
   return serial(async () => {
     const journal = await readJournal(dir)
-    const same = (p: string): boolean => resolve(p).toLowerCase() === resolve(which.path ?? '').toLowerCase()
+    // Le journal garde le vrai chemin : « RUNNER~1 », une autre casse ou un lien mènent au même fichier.
+    const wanted = which.path ? await realpath(which.path).catch(() => resolve(which.path!)) : ''
+    const same = (p: string): boolean => resolve(p).toLowerCase() === resolve(wanted).toLowerCase()
     const edit = which.id ? journal.find((e) => e.id === which.id) : [...journal].reverse().find((e) => !e.undone && (which.path ? same(e.path) : true))
     if (!edit) return { error: 'Aucune modification de fichier à annuler.' }
     if (edit.undone) return { error: 'Cette modification a déjà été annulée.' }

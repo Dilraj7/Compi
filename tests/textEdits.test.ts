@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -80,7 +80,8 @@ describe('carte : ce qui change', () => {
     const f = join(notes, 'Essai.md')
     writeFileSync(f, '# Essai\n\n## Idée\n- \n\n## Pourquoi\n- \n')
     const text = describeTextEdit(await plan(f, '# Essai\n\n## Idée\n- Un assistant Windows\n\n## Pourquoi\n- Il agit vraiment\n'))
-    expect(text).toContain(f)
+    // La carte montre le vrai chemin (le dossier temporaire peut être écrit en nom court 8.3).
+    expect(text).toContain(realpathSync.native(f))
     expect(text).toMatch(/Contenu remplacé · 8 → 8 ligne\(s\)/)
     expect(text).toMatch(/^- - $/m)
     expect(text).toMatch(/^\+ - Un assistant Windows$/m)

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -51,10 +51,12 @@ beforeEach(() => {
 describe('écrire une note de réunion', () => {
   it('crée la note d’après le modèle, puis « (2) » sans écraser la première', async () => {
     const a = await saveMeetingNote('m1')
-    expect(a).toMatchObject({ ok: true, path: join(vault, '2026-10-27 Point Nexa.md') })
+    // Le chemin rendu est le vrai (le dossier temporaire peut être écrit en nom court 8.3).
+    const real = realpathSync.native(vault)
+    expect(a).toMatchObject({ ok: true, path: join(real, '2026-10-27 Point Nexa.md') })
     expect(readFileSync(join(vault, '2026-10-27 Point Nexa.md'), 'utf8')).toContain('- [ ] Envoyer le devis')
     const b = await saveMeetingNote('m1')
-    expect(b).toMatchObject({ ok: true, path: join(vault, '2026-10-27 Point Nexa (2).md') })
+    expect(b).toMatchObject({ ok: true, path: join(real, '2026-10-27 Point Nexa (2).md') })
   })
 
   it('crée le sous-dossier du nom de fichier', async () => {
