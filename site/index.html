@@ -104,6 +104,19 @@
         </div>
       </section>
 
+      <section class="news" id="nouveautes" aria-labelledby="nouveautes-titre">
+        <div class="news-box">
+          <p class="kicker dot">Version 0.7.1</p>
+          <h2 id="nouveautes-titre">Nouveautés de la 0.7</h2>
+          <ul>
+            <li><b>Des cartes dans le chat</b> : météo, agenda, tâches, rappels, e-mails, fichiers, sources web, réunions et minuteur.</li>
+            <li><b>Le plein écran sur 7 jours</b>, avec la météo de chaque jour, et <kbd>Ctrl</kbd> + <kbd>K</kbd> qui cherche partout sur ton PC.</li>
+            <li><b>Des notes de réunion</b> écrites dans Obsidian ou le dossier de ton choix, et une transcription flottante invisible quand tu partages ton écran.</li>
+          </ul>
+          <p class="more">Tout le détail, version par version : <a href="https://github.com/Dilraj7/Compi/blob/main/CHANGELOG.md">ce qui a changé</a>.</p>
+        </div>
+      </section>
+
       <section class="film" id="film" aria-labelledby="film-titre">
         <div class="head">
           <p class="kicker dot">Le film</p>
@@ -114,7 +127,7 @@
             <source src="media/compi-0.5.mp4" type="video/mp4" />
             Ton navigateur ne lit pas cette vidéo : <a href="media/compi-0.5.mp4">télécharge-la</a>.
           </video>
-          <figcaption>Avec le son. Toutes les données sont fictives (Alex, alex@example.com).</figcaption>
+          <figcaption>Film de la 0.5, avec le son. Toutes les données sont fictives (Alex, alex@example.com).</figcaption>
         </figure>
       </section>
 
@@ -128,7 +141,7 @@
         <ul class="grid-12">
           <li class="c-cyan">
             <h3>Ta journée en une question</h3>
-            <p>Agenda (Google, lien .ics ou connecteur), e-mails Gmail, tâches Google, météo, rappels.</p>
+            <p>Agenda (Google, lien .ics ou connecteur), e-mails Gmail, tâches Google, météo, rappels. Les réponses s’affichent en cartes.</p>
           </li>
           <li class="c-violet">
             <h3>Actions rapides</h3>
@@ -181,8 +194,28 @@
           <li class="c-violet">
             <h3>Plein écran</h3>
             <p>
-              <kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>Entrée</kbd> : l’îlot devient un poste de pilotage. Ta journée, chaque étape de son travail, ce qui t’attend.
+              <kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>Entrée</kbd> : l’îlot devient un poste de pilotage. Ta journée ou les 7 prochains jours, chaque étape de son
+              travail, ce qui t’attend. Les blocs se déplacent et se masquent.
             </p>
+          </li>
+          <li class="c-amber">
+            <h3>Des cartes dans le chat</h3>
+            <p>La météo heure par heure, les rendez-vous avec « Rejoindre », les tâches à cocher, les e-mails, les fichiers, les sources web et le minuteur.</p>
+          </li>
+          <li class="c-green">
+            <h3>Cherche partout</h3>
+            <p>
+              En plein écran, <kbd>Ctrl</kbd> + <kbd>K</kbd> : une appli à ouvrir, un fichier de tes dossiers confiés, une réunion, une discussion, un réglage. Tout
+              reste sur ton PC.
+            </p>
+          </li>
+          <li class="c-pink">
+            <h3>Notes de réunion</h3>
+            <p>« Résume la dernière réunion et ajoute-la dans Obsidian » : la note suit ton modèle, dans ton coffre ou le dossier de ton choix, avec ton OK.</p>
+          </li>
+          <li class="c-cyan">
+            <h3>Transcription flottante</h3>
+            <p>Pendant l’appel, la transcription reste devant ton appli de visio. Comme tout Compi, elle est invisible quand tu partages ton écran.</p>
           </li>
         </ul>
 
@@ -314,6 +347,48 @@
             </a>
             <figcaption><b>Plein écran</b> <kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>Entrée</kbd>, et tu vois tout ce qu’il fait.</figcaption>
           </figure>
+          <figure>
+            <a class="shot" href="images/plein-ecran-semaine@2x.jpg" data-zoom>
+              <img
+                src="images/plein-ecran-semaine.jpg"
+                srcset="images/plein-ecran-semaine.jpg 880w, images/plein-ecran-semaine@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="Le plein écran avec l’agenda des 7 prochains jours et la météo de chaque jour, les tâches et les fichiers récents"
+              />
+            </a>
+            <figcaption><b>Ta semaine</b> Les 7 prochains jours, météo comprise.</figcaption>
+          </figure>
+          <figure>
+            <a class="shot" href="images/recherche@2x.jpg" data-zoom>
+              <img
+                src="images/recherche.jpg"
+                srcset="images/recherche.jpg 880w, images/recherche@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="La recherche Ctrl+K du plein écran : des applis, une discussion, des vues, des actions et des réglages"
+              />
+            </a>
+            <figcaption><b>Cherche partout</b> <kbd>Ctrl</kbd> + <kbd>K</kbd>, tape deux lettres.</figcaption>
+          </figure>
+          <figure>
+            <a class="shot" href="images/cartes@2x.jpg" data-zoom>
+              <img
+                src="images/cartes.jpg"
+                srcset="images/cartes.jpg 880w, images/cartes@2x.jpg 1760w"
+                sizes="(min-width: 981px) 362px, (min-width: 761px) 50vw, 100vw"
+                width="880"
+                height="720"
+                loading="lazy"
+                alt="Une discussion avec une carte météo heure par heure et une carte agenda avec le bouton Rejoindre"
+              />
+            </a>
+            <figcaption><b>Des cartes dans le chat</b> La météo et l’agenda, d’un coup d’œil.</figcaption>
+          </figure>
         </div>
       </section>
 
@@ -433,7 +508,9 @@ npm install
 npm run build:win</code></pre>
           </div>
           <ol class="after">
-            <li>Lance <code>dist/Compi-Setup-0.5.0.exe</code>. L’installateur n’est pas signé : SmartScreen affiche un avertissement, clique sur <b>Informations complémentaires</b>, puis <b>Exécuter quand même</b>.</li>
+            <li>
+              Aucun installateur tout prêt n’est proposé au téléchargement : ces commandes le construisent sur ton PC. Lance ensuite
+              <code>dist/Compi-Setup-0.7.1.exe</code>. L’installateur n’est pas signé : SmartScreen affiche un avertissement, clique sur <b>Informations complémentaires</b>, puis <b>Exécuter quand même</b>.</li>
             <li>Clique sur l’îlot et choisis ton cerveau, ou laisse Compi te conseiller en 4 questions. Tu pourras en changer à tout moment.</li>
             <li>Avec Claude, colle ta clé API créée sur <a href="https://console.anthropic.com/settings/keys">console.anthropic.com</a>.</li>
           </ol>

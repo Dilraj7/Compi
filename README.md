@@ -21,6 +21,8 @@
 
 Compi vit dans un « îlot » noir collé en haut de l'écran, à la manière du Dynamic Island, avec le visage d'un petit robot aux yeux LED. Au repos, c'est une pastille. Un clic ou un raccourci, et il s'ouvre.
 
+> **Nouveautés de la 0.7** : les réponses s'affichent en cartes visuelles (météo, agenda, tâches, rappels, e-mails, fichiers, sources web, réunions, minuteur). Depuis la 0.6 : le plein écran sur 7 jours avec la recherche `Ctrl K`, les notes de réunion dans Obsidian, la transcription flottante invisible quand tu partages ton écran. Tout le détail, version par version, est dans [CHANGELOG.md](CHANGELOG.md).
+
 ## Ce qu'il sait faire
 
 - **Ta journée en une question** : agenda (Google, lien `.ics` ou connecteur), e-mails Gmail, tâches Google, météo, rappels. Les réponses s'affichent en **cartes** : la météo heure par heure, les rendez-vous avec « Rejoindre », les tâches à cocher d'un clic, les e-mails, les fichiers, les sources d'une recherche web, les réunions et le minuteur qui défile.
@@ -46,6 +48,10 @@ Compi vit dans un « îlot » noir collé en haut de l'écran, à la manière du
   <tr>
     <td><img src="docs/images/claude-code.jpg" alt="Claude Code demande d'exécuter une commande"><br><b>Claude Code</b><br><sub>Autorise ou refuse sans quitter ton éditeur.</sub></td>
     <td><img src="docs/images/connecteurs.jpg" alt="Connecteurs Notion, Todoist, Linear…"><br><b>Connecteurs</b><br><sub>Tu te connectes avec ton compte, sans clé à copier.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/cartes.jpg" alt="Une discussion avec une carte météo heure par heure et une carte agenda"><br><b>Cartes dans le chat</b><br><sub>La météo et l'agenda, d'un coup d'œil.</sub></td>
+    <td><img src="docs/images/plein-ecran-semaine.jpg" alt="Le plein écran avec l'agenda des 7 prochains jours"><br><b>Plein écran</b><br><sub>Ta semaine, tes tâches et tes fichiers récents.</sub></td>
   </tr>
 </table>
 
@@ -83,7 +89,7 @@ npm install
 npm run build:win
 ```
 
-Lance ensuite `dist/Compi-Setup-0.4.0.exe`. L'installateur n'est pas signé : SmartScreen affiche un avertissement, clique sur **Informations complémentaires**, puis **Exécuter quand même**.
+Aucun installateur tout prêt n'est proposé au téléchargement pour l'instant : tu le construis toi-même avec ces commandes. Lance ensuite `dist/Compi-Setup-<version>.exe` (par exemple `Compi-Setup-0.7.1.exe`). L'installateur n'est pas signé : SmartScreen affiche un avertissement, clique sur **Informations complémentaires**, puis **Exécuter quand même**.
 
 **Au premier lancement**, clique sur l'îlot et choisis ton cerveau, ou laisse Compi te conseiller en 4 questions. Avec Claude, colle ta clé API créée sur [console.anthropic.com](https://console.anthropic.com/settings/keys).
 
